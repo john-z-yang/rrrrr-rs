@@ -19,16 +19,16 @@ fn introduce(sexpr: &SExpr) -> SExpr {
 pub fn expand(sexpr: &SExpr, bindings: &Bindings) -> Option<SExpr> {
     match_sexpr!(
         sexpr,
-        ? SExpr::Id(id) => {
+        SExpr::Id(id) => {
             return expand_id(id, bindings);
         };
-        (? SExpr::Id(id), ..rest) => {
+        (SExpr::Id(_), ..) => {
             return expand_id_application(sexpr, bindings);
         };
         (..) => {
             return expand_application(sexpr, bindings);
         };
-        ? SExpr::Symbol(_) | SExpr::Nil => {
+        SExpr::Symbol(_) | SExpr::Nil => {
             return None;
         };
         _ => {

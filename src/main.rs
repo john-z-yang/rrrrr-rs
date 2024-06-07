@@ -31,21 +31,21 @@ fn main() {
 
     match_sexpr! {
         fn_defn,
-        (def, ?SExpr::Symbol(var_name), =expr) => {
+        ('define, SExpr::Symbol(var_name), expr) => {
             println!("pattern 1:");
             println!("  setting symbol `{}` to be {}", var_name, expr);
         };
-        (def, ?SExpr::Symbol(var_name), (?SExpr::Symbol(_), (=first, ?SExpr::Symbol(second)), ..body)) => {
+        ('define, SExpr::Symbol(var_name), (SExpr::Symbol(_), (first, SExpr::Symbol(second)), ..body)) => {
             println!("pattern 2:");
             println!("  assigning symbol {} to a function", var_name);
             println!("  function has args `{}` and `{}` with body {}", first, second, body);
         };
-        (def, =var_name, (lam, (?SExpr::Symbol(first), =second), _, _, =last)) => {
+        ('define, var_name, ('lambda, (SExpr::Symbol(first), second), _, _, last)) => {
             println!("pattern 3:");
             println!("  assigning symbol {} to a function", var_name);
             println!("  function has args `{}` and `{}` with last line in body {}", first, second, last);
         };
-        (def, =_var_name, (lam, (?SExpr::Num(_num), =_second), .._body)) => {
+        ('define, _var_name, ('lambda, (SExpr::Num(_num), _second), .._body)) => {
             println!("pattern 4:");
             panic!("    this should not be matched because the parameters should be all symbols");
         };

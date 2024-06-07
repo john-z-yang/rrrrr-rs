@@ -12,8 +12,8 @@ macro_rules! sexpr {
 }
 
 #[macro_export]
-#[recursion_limit = "256"]
 macro_rules! match_sexpr {
+    // No branches remaining, we must have gotten here via a list, verify that the target is a Nil
     (
         @
         $targ:expr,
@@ -33,56 +33,7 @@ macro_rules! match_sexpr {
             $($tail)*
         };
     };
-    (
-        @
-        $targ:expr,
-        (..) => $handler:expr;
-        $($tail:tt)*
-    ) => {
-        if let SExpr::Cons(_) = $targ {
-            $handler
-        };
-        match_sexpr! {
-            @
-            $targ,
-            $($tail)*
-        };
-    };
-    (
-        @
-        $targ:expr,
-        (.. $id:ident) => $handler:expr;
-        $($tail:tt)*
-    ) => {
-        if let SExpr::Cons(_) = $targ {
-            let $id = &$targ;
-            $handler
-        };
-        match_sexpr! {
-            @
-            $targ,
-            $($tail)*
-        };
-    };
-    (
-        @
-        $targ:expr,
-        (_ $(, $($rest:tt)*)?) => $handler:expr;
-        $($tail:tt)*
-    ) => {
-        if let SExpr::Cons(ref cons) = $targ {
-            match_sexpr! {
-                @
-                cons.cdr,
-                ($($($rest)*)?) => $handler;
-            }
-        };
-        match_sexpr! {
-            @
-            $targ,
-            $($tail)*
-        };
-    };
+    // Handles nested lists i.e. `(('a, 'b, 'c))``
     (
         @
         $targ:expr,
@@ -108,10 +59,109 @@ macro_rules! match_sexpr {
             $($tail)*
         };
     };
+    // Matches any list
     (
         @
         $targ:expr,
-        (? $pat:pat $(, $($rest:tt)*)?) => $handler:expr;
+        (..) => $handler:expr;
+        $($tail:tt)*
+    ) => {
+        if let SExpr::Cons(_) = $targ {
+            $handler
+        };
+        match_sexpr! {
+            @
+            $targ,
+            $($tail)*
+        };
+    };
+    // Matches any list, assign the list to an identifier
+    (
+        @
+        $targ:expr,
+        (.. $id:ident) => $handler:expr;
+        $($tail:tt)*
+    ) => {
+        if let SExpr::Cons(_) = $targ {
+            let $id = &$targ;
+            $handler
+        };
+        match_sexpr! {
+            @
+            $targ,
+            $($tail)*
+        };
+    };
+    // Wildcard pattern `_` for first element in a list
+    (
+        @
+        $targ:expr,
+        (_ $(, $($rest:tt)*)?) => $handler:expr;
+        $($tail:tt)*
+    ) => {
+        if let SExpr::Cons(ref cons) = $targ {
+            match_sexpr! {
+                @
+                cons.cdr,
+                ($($($rest)*)?) => $handler;
+            }
+        };
+        match_sexpr! {
+            @
+            $targ,
+            $($tail)*
+        };
+    };
+    // Compare if the first element is an exact symbol i.e. `('lambda, ...)`
+    (
+        @
+        $targ:expr,
+        ($symbol:lifetime $(, $($rest:tt)*)?) => $handler:expr;
+        $($tail:tt)*
+    ) => {
+        if let SExpr::Cons(ref cons) = $targ {
+            let mut symbol = stringify!($symbol).chars();
+            symbol.next();
+            if cons.car == SExpr::new_symbol(symbol.as_str()) {
+                match_sexpr! {
+                    @
+                    cons.cdr,
+                    ($($($rest)*)?) => $handler;
+                }
+            }
+        };
+        match_sexpr! {
+            @
+            $targ,
+            $($tail)*
+        };
+    };
+    // Binds an identifier to the first element in a list i.e. `(my_var, 'b, 'c)``
+    (
+        @
+        $targ:expr,
+        ($id:ident $(, $($rest:tt)*)?) => $handler:expr;
+        $($tail:tt)*
+    ) => {
+        if let SExpr::Cons(ref cons) = $targ {
+            let $id = &cons.car;
+            match_sexpr! {
+                @
+                cons.cdr,
+                ($($($rest)*)?) => $handler;
+            }
+        };
+        match_sexpr! {
+            @
+            $targ,
+            $($tail)*
+        };
+    };
+    // Match a structual pattern for first element in a list i.e. `(Symbol(var_name), 'b, 'c)`
+    (
+        @
+        $targ:expr,
+        ($pat:pat $(, $($rest:tt)*)?) => $handler:expr;
         $($tail:tt)*
     ) => {
         if let SExpr::Cons(ref cons) = $targ {
@@ -129,47 +179,7 @@ macro_rules! match_sexpr {
             $($tail)*
         };
     };
-    (
-        @
-        $targ:expr,
-        (= $id:ident $(, $($rest:tt)*)?) => $handler:expr;
-        $($tail:tt)*
-    ) => {
-        if let SExpr::Cons(ref cons) = $targ {
-            let $id = &cons.car;
-            match_sexpr! {
-                @
-                cons.cdr,
-                ($($($rest)*)?) => $handler;
-            }
-        };
-        match_sexpr! {
-            @
-            $targ,
-            $($tail)*
-        };
-    };
-    (
-        @
-        $targ:expr,
-        ($expr:expr $(, $($rest:tt)*)?) => $handler:expr;
-        $($tail:tt)*
-    ) => {
-        if let SExpr::Cons(ref cons) = $targ {
-            if cons.car == $expr {
-                match_sexpr! {
-                    @
-                    cons.cdr,
-                    ($($($rest)*)?) => $handler;
-                }
-            }
-        };
-        match_sexpr! {
-            @
-            $targ,
-            $($tail)*
-        };
-    };
+    // Wildcard for any single entity
     (
         @
         $targ:expr,
@@ -183,10 +193,11 @@ macro_rules! match_sexpr {
             $($tail)*
         };
     };
+    // Match a structual pattern for any single entity
     (
         @
         $targ:expr,
-        ?$pat:pat => $handler:expr;
+        $pat:pat => $handler:expr;
         $($tail:tt)*
     ) => {
         if let $pat = $targ {
@@ -198,14 +209,7 @@ macro_rules! match_sexpr {
             $($tail)*
         };
     };
-    (
-        @
-        ?$expr:expr => $handler:expr;
-    ) => {
-        if $expr == $targ {
-            $handler;
-        }
-    };
+    // Main entry point
     (
         $($tt:tt)*
     ) => {
