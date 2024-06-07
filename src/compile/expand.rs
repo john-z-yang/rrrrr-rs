@@ -1,22 +1,15 @@
-use crate::match_sexpr;
-
 use super::{
     bindings::Bindings,
-    syntax::{Id, SExpr, Symbol},
+    syntax::{Id, SExpr},
+    util::{first, map},
 };
-
-fn first(sexpr: &SExpr) -> Option<SExpr> {
-    match sexpr {
-        SExpr::Cons(cons) => Some(cons.car.clone()),
-        _ => None,
-    }
-}
+use crate::{compile::util::for_each, match_sexpr, sexpr};
 
 fn introduce(sexpr: &SExpr) -> SExpr {
     sexpr.coerce_to_syntax().add_scope(Bindings::CORE_SCOPE)
 }
 
-pub fn expand(sexpr: &SExpr, bindings: &Bindings) -> Option<SExpr> {
+pub fn expand(sexpr: &SExpr, bindings: &mut Bindings) -> SExpr {
     match_sexpr!(
         sexpr,
         SExpr::Id(id) => {
@@ -29,49 +22,64 @@ pub fn expand(sexpr: &SExpr, bindings: &Bindings) -> Option<SExpr> {
             return expand_application(sexpr, bindings);
         };
         SExpr::Symbol(_) | SExpr::Nil => {
-            return None;
+            panic!("Bad syntax")
         };
         _ => {
-            return Some(sexpr.clone());
+            return sexpr.clone();
         };
     );
 }
 
-fn expand_id(id: &Id, bindings: &Bindings) -> Option<SExpr> {
-    bindings.resolve(id).map(|id| SExpr::Id(id))
+fn expand_id(id: &Id, bindings: &mut Bindings) -> SExpr {
+    bindings.resolve(id).map(SExpr::Id).unwrap();
+    SExpr::Id(id.clone())
 }
 
-fn expand_id_application(sexpr: &SExpr, bindings: &Bindings) -> Option<SExpr> {
-    let binding = match first(sexpr)? {
-        SExpr::Id(id) => bindings.resolve(&id),
+fn expand_id_application(sexpr: &SExpr, bindings: &mut Bindings) -> SExpr {
+    let binding = match first(sexpr) {
+        SExpr::Id(id) => bindings.resolve(&id).unwrap(),
         _ => unreachable!(),
-    }?;
-    match binding {
-        Id {
-            symbol: Symbol(symbol),
-            scopes: _,
-        } => match symbol.as_str() {
-            "lambda" => expand_lambda(sexpr, bindings),
-            "let-syntax" => expand_let_syntax(sexpr, bindings),
-            "quote" | "quote-syntax" => Some(sexpr.clone()),
-            _ => {
-                // TODO: check if this is a macro via some table, if so, apply the macro and expand the result
-                expand_application(sexpr, bindings)
-            }
-        },
     };
-    None
+
+    match binding.symbol.0.as_str() {
+        "quote" | "quote-syntax" => sexpr.clone(),
+        "let-syntax" => expand_let_syntax(sexpr, bindings),
+        "lambda" => expand_lambda(sexpr, bindings),
+        _ => {
+            // TODO: check if this is a macro via some table, if so, apply the macro and expand the result
+            expand_application(sexpr, bindings)
+        }
+    }
 }
 
-fn expand_application(sexpr: &SExpr, bindings: &Bindings) -> Option<SExpr> {
-    todo!()
+fn expand_application(sexpr: &SExpr, bindings: &mut Bindings) -> SExpr {
+    map(|sub_sexpr| expand(sub_sexpr, bindings), sexpr)
 }
 
-fn expand_lambda(sexpr: &SExpr, bindings: &Bindings) -> Option<SExpr> {
-    todo!()
+fn expand_lambda(sexpr: &SExpr, bindings: &mut Bindings) -> SExpr {
+    match_sexpr!(
+        sexpr,
+        (lambda, (..args), ..body) => {
+            let scope_id = bindings.new_scope_id();
+            let args = args.add_scope(scope_id);
+
+            for_each(|arg| {
+                if let SExpr::Id(id) = arg{
+                    let binding = bindings.gen_sym();
+                    bindings.add_binding(id, &binding);
+                } else {
+                    unreachable!("Expected identifiers in function parameters");
+                }
+            }, &args);
+
+            let body = map(|sexpr| expand(&sexpr.add_scope(scope_id), bindings), body);
+            return sexpr!(lambda.clone(), args, ..body);
+        };
+        _ => unreachable!("Invalid use of lambda form: {}", sexpr);
+    );
 }
 
-fn expand_let_syntax(sexpr: &SExpr, bindings: &Bindings) -> Option<SExpr> {
+fn expand_let_syntax(_sexpr: &SExpr, _bindings: &mut Bindings) -> SExpr {
     todo!()
 }
 
@@ -101,30 +109,70 @@ mod tests {
 
     #[test]
     fn test_expand_lambda() {
-        let bindings = Bindings::new();
+        let mut bindings = Bindings::new();
         let lambda_expr = sexpr!(
-            SExpr::new_symbol("lambda"),
-            (SExpr::new_symbol("x"), SExpr::new_symbol("y")),
+            'lambda,
+            ('x, 'y),
+            ('cons, 'x, 'y),
+        );
+        let left = expand(&introduce(&lambda_expr.coerce_to_syntax()), &mut bindings);
+        let right = sexpr!(
+            SExpr::new_id_with_scope("lambda", [Bindings::CORE_SCOPE]),
             (
-                SExpr::new_symbol("+"),
-                SExpr::new_symbol("x"),
-                SExpr::new_symbol("y")
+                SExpr::new_id_with_scope("x", [Bindings::CORE_SCOPE, 1]),
+                SExpr::new_id_with_scope("y", [Bindings::CORE_SCOPE, 1])
+            ),
+            (
+                SExpr::new_id_with_scope("cons", [Bindings::CORE_SCOPE, 1]),
+                SExpr::new_id_with_scope("x", [Bindings::CORE_SCOPE, 1]),
+                SExpr::new_id_with_scope("y", [Bindings::CORE_SCOPE, 1])
             ),
         );
+        assert_eq!(left, right);
+    }
+
+    #[test]
+    fn test_expand_lambda_recursive() {
+        let mut bindings = Bindings::new();
+        let lambda_expr = sexpr!(
+            'lambda,
+            ('x),
+            (
+                'lambda,
+                ('y),
+                ('cons, 'x, 'y)
+            ),
+            ('cons, 'x, 'x)
+        );
+        let left = expand(&introduce(&lambda_expr.coerce_to_syntax()), &mut bindings);
+        let right = sexpr!(
+            SExpr::new_id_with_scope("lambda", [Bindings::CORE_SCOPE]),
+            (SExpr::new_id_with_scope("x", [Bindings::CORE_SCOPE, 1])),
+            (
+                SExpr::new_id_with_scope("lambda", [Bindings::CORE_SCOPE, 1]),
+                (SExpr::new_id_with_scope("y", [Bindings::CORE_SCOPE, 1, 2]),),
+                (
+                    SExpr::new_id_with_scope("cons", [Bindings::CORE_SCOPE, 1, 2]),
+                    SExpr::new_id_with_scope("x", [Bindings::CORE_SCOPE, 1, 2]),
+                    SExpr::new_id_with_scope("y", [Bindings::CORE_SCOPE, 1, 2]),
+                )
+            ),
+            (
+                SExpr::new_id_with_scope("cons", [Bindings::CORE_SCOPE, 1]),
+                SExpr::new_id_with_scope("x", [Bindings::CORE_SCOPE, 1]),
+                SExpr::new_id_with_scope("x", [Bindings::CORE_SCOPE, 1]),
+            )
+        );
+        assert_eq!(left, right);
+    }
+
+    #[test]
+    fn test_expand_atoms() {
+        let mut bindings = Bindings::new();
+        let lambda_expr = sexpr!(SExpr::new_bool(false));
         assert_eq!(
-            expand(&introduce(&lambda_expr.coerce_to_syntax()), &bindings),
-            Some(sexpr!(
-                SExpr::new_id_with_scope("lambda", [Bindings::CORE_SCOPE]),
-                (
-                    SExpr::new_id_with_scope("x", [Bindings::CORE_SCOPE, 1]),
-                    SExpr::new_id_with_scope("y", [Bindings::CORE_SCOPE, 1])
-                ),
-                (
-                    SExpr::new_id_with_scope("+", [Bindings::CORE_SCOPE]),
-                    SExpr::new_id_with_scope("x", [Bindings::CORE_SCOPE, 1]),
-                    SExpr::new_id_with_scope("y", [Bindings::CORE_SCOPE, 1])
-                ),
-            ))
+            expand(&introduce(&lambda_expr.coerce_to_syntax()), &mut bindings),
+            sexpr!(SExpr::new_bool(false))
         );
     }
 }

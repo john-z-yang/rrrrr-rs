@@ -1,11 +1,21 @@
+use super::syntax::SExpr;
+
 #[macro_export]
 macro_rules! sexpr {
     () => {
         SExpr::Nil
     };
+    (..$expr:expr) => {
+        $expr
+    };
     (($($inner:tt)*) $(, $($rest:tt)*)?) => {
         SExpr::new_cons(sexpr!($($inner)*), sexpr!($($($rest)*)?))
     };
+    ($first:lifetime $(, $($rest:tt)*)?) => {{
+        let mut symbol = stringify!($first).chars();
+        symbol.next();
+        SExpr::new_cons(SExpr::new_symbol(symbol.as_str()), sexpr!($($($rest)*)?))
+    }};
     ($first:expr $(, $($rest:tt)*)?) => {
         SExpr::new_cons($first, sexpr!($($($rest)*)?))
     };
@@ -112,7 +122,7 @@ macro_rules! match_sexpr {
             $($tail)*
         };
     };
-    // Compare if the first element is an exact symbol i.e. `('lambda, ...)`
+    // Compare if the first element is an exact symbol or id i.e. `('lambda, ...)`
     (
         @
         $targ:expr,
@@ -122,13 +132,24 @@ macro_rules! match_sexpr {
         if let SExpr::Cons(ref cons) = $targ {
             let mut symbol = stringify!($symbol).chars();
             symbol.next();
-            if cons.car == SExpr::new_symbol(symbol.as_str()) {
-                match_sexpr! {
-                    @
-                    cons.cdr,
-                    ($($($rest)*)?) => $handler;
+            let symbol = Symbol::new(symbol.as_str());
+            if let SExpr::Symbol(ref sym) = &cons.car {
+                if *sym == symbol {
+                    match_sexpr! {
+                        @
+                        cons.cdr,
+                        ($($($rest)*)?) => $handler;
+                    }
                 }
-            }
+            } else if let SExpr::Id(ref id) = &cons.car {
+                if id.symbol == symbol {
+                    match_sexpr! {
+                        @
+                        cons.cdr,
+                        ($($($rest)*)?) => $handler;
+                    }
+                }
+            };
         };
         match_sexpr! {
             @
@@ -218,4 +239,39 @@ macro_rules! match_sexpr {
             $($tt)*
         }
     };
+}
+
+pub fn first(sexpr: &SExpr) -> SExpr {
+    match sexpr {
+        SExpr::Cons(cons) => cons.car.clone(),
+        _ => sexpr.clone(),
+    }
+}
+
+pub fn last(sexpr: &SExpr) -> SExpr {
+    match sexpr {
+        SExpr::Cons(cons) => last(&cons.cdr),
+        _ => sexpr.clone(),
+    }
+}
+
+pub fn for_each<F>(mut op: F, sexpr: &SExpr)
+where
+    F: FnMut(&SExpr),
+{
+    if let SExpr::Cons(cons) = sexpr {
+        op(&cons.car);
+        for_each(op, &cons.cdr);
+    }
+}
+
+pub fn map<F>(mut op: F, sexpr: &SExpr) -> SExpr
+where
+    F: FnMut(&SExpr) -> SExpr,
+{
+    match sexpr {
+        SExpr::Nil => SExpr::Nil,
+        SExpr::Cons(cons) => SExpr::new_cons(op(&cons.car), map(op, &cons.cdr)),
+        _ => op(sexpr),
+    }
 }

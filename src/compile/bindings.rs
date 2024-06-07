@@ -6,7 +6,8 @@ pub type Scopes = BTreeSet<ScopeId>;
 
 pub struct Bindings {
     symbols: HashMap<Symbol, Vec<(Scopes, Symbol)>>,
-    cur_scope: ScopeId,
+    scope_counter: ScopeId,
+    gen_sym_counter: u64,
 }
 
 impl Bindings {
@@ -15,39 +16,49 @@ impl Bindings {
     pub fn new() -> Self {
         let mut bindings = Bindings {
             symbols: HashMap::new(),
-            cur_scope: Self::CORE_SCOPE,
+            scope_counter: Self::CORE_SCOPE,
+            gen_sym_counter: 0,
         };
         for symbol in ["lambda", "list", "cons", "first", "second", "rest"] {
             bindings.add_binding(
-                &Id::with_scope(&symbol, [Self::CORE_SCOPE]),
+                &Id::with_scope(symbol, [Self::CORE_SCOPE]),
                 &Symbol::new(symbol),
             )
         }
         bindings
     }
 
+    pub fn new_scope_id(&mut self) -> ScopeId {
+        self.scope_counter += 1;
+        self.scope_counter
+    }
+
+    pub fn gen_sym(&mut self) -> Symbol {
+        self.gen_sym_counter += 1;
+        Symbol(format!("gensym:{0}", self.gen_sym_counter))
+    }
+
     pub fn add_binding(&mut self, id: &Id, symbol: &Symbol) {
-        let binding = self.symbols.entry(id.symbol.clone()).or_insert(vec![]);
+        let binding = self.symbols.entry(id.symbol.clone()).or_default();
         binding.push((id.scopes.clone(), symbol.clone()));
     }
 
     pub fn resolve(&self, id: &Id) -> Option<Id> {
         self.symbols
             .get_key_value(&id.symbol)
-            .map(|(_, candidates)| {
+            .and_then(|(_, candidates)| {
                 candidates
-                    .into_iter()
+                    .iter()
                     .filter(|(scopes, _)| {
-                        for scope in &id.scopes {
-                            if !scopes.contains(scope) {
+                        for scope in scopes {
+                            if !id.scopes.contains(scope) {
                                 return false;
                             }
                         }
-                        return id.scopes.len() >= scopes.len();
+                        id.scopes.len() >= scopes.len()
                     })
                     .max_by(|(lhs, _), (rhs, _)| lhs.len().cmp(&rhs.len()))
             })
-            .flatten()
             .map(|(scopes, symbol)| Id {
                 scopes: scopes.clone(),
                 symbol: symbol.clone(),
@@ -91,7 +102,7 @@ mod tests {
         bindings.add_binding(&Id::with_scope("a", [1, 2, 3]), &Symbol::new("inner"));
         bindings.add_binding(&Id::with_scope("a", [1]), &Symbol::new("outer"));
         assert_eq!(
-            bindings.resolve(&Id::with_scope("a", [1, 2])),
+            bindings.resolve(&Id::with_scope("a", [1, 2, 4])),
             Some(Id::with_scope("middle", [1, 2]))
         );
         assert_eq!(
@@ -108,7 +119,10 @@ mod tests {
         bindings.add_binding(&Id::with_scope("a", [3]), &Symbol::new("3"));
         bindings.add_binding(&Id::with_scope("a", [2]), &Symbol::new("2"));
         bindings.add_binding(&Id::with_scope("a", [1]), &Symbol::new("1"));
-        assert_eq!(bindings.resolve(&Id::with_scope("a", [1, 2])), None);
+        assert_eq!(
+            bindings.resolve(&Id::with_scope("a", [1, 2])),
+            Some(Id::with_scope("1", [1]))
+        );
         assert_eq!(
             bindings.resolve(&Id::with_scope("a", [1])),
             Some(Id::with_scope("1", [1]))
@@ -118,5 +132,14 @@ mod tests {
             Some(Id::with_scope("2", [2]))
         );
         assert_eq!(bindings.resolve(&Id::new("a")), None);
+    }
+
+    #[test]
+    fn test_resolve_with_core_bindings() {
+        let bindings = Bindings::new();
+        assert_eq!(
+            bindings.resolve(&Id::with_scope("lambda", [Bindings::CORE_SCOPE])),
+            Some(Id::with_scope("lambda", [Bindings::CORE_SCOPE]))
+        );
     }
 }
