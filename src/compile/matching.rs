@@ -12,6 +12,7 @@ macro_rules! sexpr {
 }
 
 #[macro_export]
+#[recursion_limit = "256"]
 macro_rules! match_sexpr {
     (
         @
@@ -53,7 +54,8 @@ macro_rules! match_sexpr {
         (.. $id:ident) => $handler:expr;
         $($tail:tt)*
     ) => {
-        if let SExpr::Cons(ref $id) = $targ {
+        if let SExpr::Cons(_) = $targ {
+            let $id = &$targ;
             $handler
         };
         match_sexpr! {
@@ -169,14 +171,47 @@ macro_rules! match_sexpr {
         };
     };
     (
+        @
+        $targ:expr,
+        _ => $handler:expr;
+        $($tail:tt)*
+    ) => {
+        $handler;
+        match_sexpr! {
+            @
+            $targ,
+            $($tail)*
+        };
+    };
+    (
+        @
+        $targ:expr,
+        ?$pat:pat => $handler:expr;
+        $($tail:tt)*
+    ) => {
+        if let $pat = $targ {
+            $handler;
+        }
+        match_sexpr! {
+            @
+            $targ,
+            $($tail)*
+        };
+    };
+    (
+        @
+        ?$expr:expr => $handler:expr;
+    ) => {
+        if $expr == $targ {
+            $handler;
+        }
+    };
+    (
         $($tt:tt)*
     ) => {
-        loop {
-            match_sexpr! {
-                @
-                $($tt)*
-            }
-            break;
+        match_sexpr! {
+            @
+            $($tt)*
         }
     };
 }

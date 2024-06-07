@@ -26,7 +26,7 @@ pub struct Cons {
 }
 
 #[derive(Debug, PartialEq, Eq, Clone, Hash)]
-pub struct Symbol(String);
+pub struct Symbol(pub String);
 
 #[derive(Debug, PartialEq, Clone)]
 pub struct Bool(bool);

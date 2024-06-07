@@ -31,7 +31,7 @@ impl Bindings {
         binding.push((id.scopes.clone(), symbol.clone()));
     }
 
-    pub fn resolve(&self, id: &Id) -> Option<Symbol> {
+    pub fn resolve(&self, id: &Id) -> Option<Id> {
         self.symbols
             .get_key_value(&id.symbol)
             .map(|(_, candidates)| {
@@ -48,7 +48,10 @@ impl Bindings {
                     .max_by(|(lhs, _), (rhs, _)| lhs.len().cmp(&rhs.len()))
             })
             .flatten()
-            .map(|(_, symbol)| symbol.clone())
+            .map(|(scopes, symbol)| Id {
+                scopes: scopes.clone(),
+                symbol: symbol.clone(),
+            })
     }
 }
 
@@ -74,7 +77,10 @@ mod tests {
     fn test_resolve_with_single_bindings() {
         let mut bindings = Bindings::new();
         bindings.add_binding(&Id::new("a"), &Symbol::new("1"));
-        assert_eq!(bindings.resolve(&Id::new("a")), Some(Symbol::new("1")));
+        assert_eq!(
+            bindings.resolve(&Id::new("a")),
+            Some(Id::with_scope("1", []))
+        );
         assert_eq!(bindings.resolve(&Id::new("b")), None);
     }
 
@@ -86,11 +92,11 @@ mod tests {
         bindings.add_binding(&Id::with_scope("a", [1]), &Symbol::new("outer"));
         assert_eq!(
             bindings.resolve(&Id::with_scope("a", [1, 2])),
-            Some(Symbol::new("middle"))
+            Some(Id::with_scope("middle", [1, 2]))
         );
         assert_eq!(
             bindings.resolve(&Id::with_scope("a", [1])),
-            Some(Symbol::new("outer"))
+            Some(Id::with_scope("outer", [1]))
         );
         assert_eq!(bindings.resolve(&Id::with_scope("a", [2])), None);
         assert_eq!(bindings.resolve(&Id::new("a")), None);
@@ -105,11 +111,11 @@ mod tests {
         assert_eq!(bindings.resolve(&Id::with_scope("a", [1, 2])), None);
         assert_eq!(
             bindings.resolve(&Id::with_scope("a", [1])),
-            Some(Symbol::new("1"))
+            Some(Id::with_scope("1", [1]))
         );
         assert_eq!(
             bindings.resolve(&Id::with_scope("a", [2])),
-            Some(Symbol::new("2"))
+            Some(Id::with_scope("2", [2]))
         );
         assert_eq!(bindings.resolve(&Id::new("a")), None);
     }

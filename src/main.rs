@@ -39,7 +39,6 @@ fn main() {
             println!("pattern 2:");
             println!("  assigning symbol {} to a function", var_name);
             println!("  function has args `{}` and `{}` with body {}", first, second, body);
-            break;
         };
         (def, =var_name, (lam, (?SExpr::Symbol(first), =second), _, _, =last)) => {
             println!("pattern 3:");
