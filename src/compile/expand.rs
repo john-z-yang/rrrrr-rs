@@ -10,24 +10,19 @@ fn introduce(sexpr: &SExpr) -> SExpr {
 }
 
 pub fn expand(sexpr: &SExpr, bindings: &mut Bindings) -> SExpr {
-    match_sexpr!(
-        sexpr,
-        SExpr::Id(id) => {
-            return expand_id(id, bindings);
-        };
-        (SExpr::Id(_), ..) => {
-            return expand_id_application(sexpr, bindings);
-        };
-        (..) => {
-            return expand_application(sexpr, bindings);
-        };
-        SExpr::Symbol(_) | SExpr::Nil => {
-            panic!("Bad syntax")
-        };
-        _ => {
-            return sexpr.clone();
-        };
-    );
+    if let SExpr::Symbol(_) | SExpr::Nil = sexpr {
+        panic!("Bad syntax");
+    };
+    if let SExpr::Id(id) = sexpr {
+        return expand_id(id, bindings);
+    }
+    match_sexpr! {(SExpr::Id(_), ..) = sexpr =>
+        return expand_id_application(sexpr, bindings);
+    };
+    match_sexpr! {(..) = sexpr =>
+        return expand_application(sexpr, bindings);
+    };
+    sexpr.clone()
 }
 
 fn expand_id(id: &Id, bindings: &mut Bindings) -> SExpr {
@@ -57,26 +52,23 @@ fn expand_application(sexpr: &SExpr, bindings: &mut Bindings) -> SExpr {
 }
 
 fn expand_lambda(sexpr: &SExpr, bindings: &mut Bindings) -> SExpr {
-    match_sexpr!(
-        sexpr,
-        (lambda, (..args), ..body) => {
-            let scope_id = bindings.new_scope_id();
-            let args = args.add_scope(scope_id);
+    match_sexpr! {(lambda, (args @ ..), body @ ..) = sexpr =>
+        let scope_id = bindings.new_scope_id();
+        let args = args.add_scope(scope_id);
 
-            for_each(|arg| {
-                if let SExpr::Id(id) = arg{
-                    let binding = bindings.gen_sym();
-                    bindings.add_binding(id, &binding);
-                } else {
-                    unreachable!("Expected identifiers in function parameters");
-                }
-            }, &args);
+        for_each(|arg| {
+            if let SExpr::Id(id) = arg{
+                let binding = bindings.gen_sym();
+                bindings.add_binding(id, &binding);
+            } else {
+                unreachable!("Expected identifiers in function parameters");
+            }
+        }, &args);
 
-            let body = map(|sexpr| expand(&sexpr.add_scope(scope_id), bindings), body);
-            return sexpr!(lambda.clone(), args, ..body);
-        };
-        _ => unreachable!("Invalid use of lambda form: {}", sexpr);
-    );
+        let body = map(|sexpr| expand(&sexpr.add_scope(scope_id), bindings), body);
+        return sexpr!(lambda.clone(), args, ..body);
+    };
+    unreachable!("Invalid use of lambda form: {}", sexpr);
 }
 
 fn expand_let_syntax(_sexpr: &SExpr, _bindings: &mut Bindings) -> SExpr {
