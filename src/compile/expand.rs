@@ -102,11 +102,7 @@ mod tests {
     #[test]
     fn test_expand_lambda() {
         let mut bindings = Bindings::new();
-        let lambda_expr = sexpr!(
-            'lambda,
-            ('x, 'y),
-            ('cons, 'x, 'y),
-        );
+        let lambda_expr = sexpr!(S(lambda), (S(x), S(y)), (S(cons), S(x), S(y)),);
         let left = expand(&introduce(&lambda_expr.coerce_to_syntax()), &mut bindings);
         let right = sexpr!(
             SExpr::new_id_with_scope("lambda", [Bindings::CORE_SCOPE]),
@@ -127,14 +123,10 @@ mod tests {
     fn test_expand_lambda_recursive() {
         let mut bindings = Bindings::new();
         let lambda_expr = sexpr!(
-            'lambda,
-            ('x),
-            (
-                'lambda,
-                ('y),
-                ('cons, 'x, 'y)
-            ),
-            ('cons, 'x, 'x)
+            S(lambda),
+            (S(x)),
+            (S(lambda), (S(y)), (S(cons), S(x), S(y))),
+            (S(cons), S(x), S(x))
         );
         let left = expand(&introduce(&lambda_expr.coerce_to_syntax()), &mut bindings);
         let right = sexpr!(

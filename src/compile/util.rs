@@ -14,9 +14,8 @@ macro_rules! sexpr {
             sexpr!($($($rest)*)?)
         )
     };
-    ($first:lifetime $(, $($rest:tt)*)?) => {{
-        let mut symbol = stringify!($first).chars();
-        symbol.next();
+    (S($($symbol:tt)*) $(, $($rest:tt)*)?) => {{
+        let symbol = stringify!($($symbol)*).chars();
         $crate::compile::syntax::SExpr::new_cons(
             $crate::compile::syntax::SExpr::new_symbol(symbol.as_str()),
             sexpr!($($($rest)*)?)
@@ -67,7 +66,10 @@ macro_rules! match_sexpr {
         if let $crate::compile::syntax::SExpr::Cons(_) = $targ {
             let $id = &$targ;
             $($handler)*
-        };
+        } else if let $crate::compile::syntax::SExpr::Nil = $targ {
+            let $id = &$targ;
+            $($handler)*
+        }
     };
 
     // Wildcard pattern `_` for first element in a list
@@ -83,11 +85,10 @@ macro_rules! match_sexpr {
 
     // Compare if the first element is an exact symbol or id i.e. `('lambda, ...)`
     (
-        ($symbol:lifetime $(, $($rest:tt)*)?) = $targ:expr => $($handler:tt)*
+        (S($($symbol:tt)*) $(, $($rest:tt)*)?) = $targ:expr => $($handler:tt)*
     ) => {
         if let $crate::compile::syntax::SExpr::Cons(ref cons) = $targ {
-            let mut symbol = stringify!($symbol).chars();
-            symbol.next();
+            let symbol = stringify!($($symbol)*).chars();
             let symbol = $crate::compile::syntax::Symbol::new(symbol.as_str());
             if let $crate::compile::syntax::SExpr::Symbol(ref sym) = &cons.car {
                 if *sym == symbol {
