@@ -33,7 +33,7 @@ fn expand_id(id: &Id, bindings: &mut Bindings) -> SExpr {
 fn expand_id_application(sexpr: &SExpr, bindings: &mut Bindings) -> SExpr {
     let binding = match first(sexpr) {
         SExpr::Id(id) => bindings.resolve(&id).unwrap(),
-        _ => unreachable!(),
+        _ => unreachable!("ID must have a binding during expansion of ID application"),
     };
 
     match binding.symbol.0.as_str() {
