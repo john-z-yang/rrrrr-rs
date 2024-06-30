@@ -56,6 +56,8 @@ macro_rules! match_sexpr {
     ) => {
         if let $crate::compile::syntax::SExpr::Cons(_) = $targ {
             $($handler)*
+        } else if let $crate::compile::syntax::SExpr::Nil = $targ {
+            $($handler)*
         };
     };
 
