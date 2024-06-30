@@ -208,7 +208,7 @@ impl Transformer {
                 } else {
                     unreachable!("Expected symbols in syntax transformer literals");
                 }
-            }, literals_list);
+            }, &literals_list.coerce_to_datum());
 
             let mut syntax_rules = Vec::<SyntaxRule>::new();
             for_each(|rule_pair| {
