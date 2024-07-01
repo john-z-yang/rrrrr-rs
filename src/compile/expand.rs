@@ -359,7 +359,7 @@ mod tests {
     }
 
     #[test]
-    fn test_expand_or_macro_hygiene() {
+    fn test_expand_simple_macro_hygiene() {
         let mut bindings = Bindings::new();
 
         bindings.add_binding(&Id::new("x", [Bindings::CORE_SCOPE]), &Symbol::new("x"));
@@ -411,5 +411,133 @@ mod tests {
                 .unwrap()
                 .symbol,
         )
+    }
+
+    #[test]
+    fn test_expand_or_macro_hygiene() {
+        let mut bindings = Bindings::new();
+
+        bindings.add_binding(
+            &Id::new("my-or", [Bindings::CORE_SCOPE]),
+            &Symbol::new("my-or"),
+        );
+
+        #[rustfmt::skip]
+        let transformer = Transformer::new(&introduce(&sexpr!(
+            S(syntax-rules),
+            (),
+            ((S(_)), SExpr::new_bool(false)),
+            ((S(_), S(e)), S(e)),
+            ((S(_), S(e1), S(e2), S(...)),
+             ((S(lambda), (S(temp)),
+                (S(if), S(temp), S(temp), (S(my-or), S(e2), S(...)))), S(e1)),
+        ))));
+
+        let mut env = HashMap::from([(
+            bindings
+                .resolve(&Id::new("my-or", [Bindings::CORE_SCOPE]))
+                .unwrap()
+                .symbol,
+            transformer,
+        )]);
+
+        #[rustfmt::skip]
+        let sexpr = sexpr!(
+            (
+                (
+                    S(lambda),
+                    (S(temp)),
+                    (S(my-or), SExpr::new_bool(false), S(temp))
+                ),
+                SExpr::new_bool(true),
+            )
+        );
+        let result = expand(&introduce(&sexpr), &mut bindings, &mut env);
+
+        #[rustfmt::skip]
+        let expected = sexpr!(
+            (
+                (
+                    SExpr::new_id("lambda", [Bindings::CORE_SCOPE]),
+                    (SExpr::new_id("temp", [Bindings::CORE_SCOPE, 1])),
+                    (
+                        (
+                            SExpr::new_id("lambda", [Bindings::CORE_SCOPE, 2]),
+                            (SExpr::new_id("temp", [Bindings::CORE_SCOPE, 2, 3])),
+                            (
+                                SExpr::new_id("if", [Bindings::CORE_SCOPE, 2, 3]),
+                                SExpr::new_id("temp", [Bindings::CORE_SCOPE, 0, 2, 3]),
+                                SExpr::new_id("temp", [Bindings::CORE_SCOPE, 0, 2, 3]),
+                                SExpr::new_id("temp", [Bindings::CORE_SCOPE, 1, 3])
+                            )
+                        ),
+                        SExpr::new_bool(false)
+                    )
+                ),
+                SExpr::new_bool(true),
+            )
+        );
+
+        assert_eq!(result, expected);
+
+        let outer_temp_id = first(&nth(&first(&first(&result)), 1).unwrap());
+        let inner_temp_id =
+            first(&nth(&first(&nth(&first(&first(&result)), 2).unwrap()), 1).unwrap());
+        let if_expr = nth(&first(&nth(&first(&first(&result)), 2).unwrap()), 2).unwrap();
+
+        assert_ne!(
+            bindings
+                .resolve(&outer_temp_id.clone().try_into().unwrap())
+                .unwrap()
+                .symbol,
+            bindings
+                .resolve(&inner_temp_id.clone().try_into().unwrap())
+                .unwrap()
+                .symbol
+        );
+
+        assert_eq!(
+            bindings
+                .resolve(&(nth(&if_expr, 1).unwrap()).try_into().unwrap())
+                .unwrap()
+                .symbol,
+            bindings
+                .resolve(&(nth(&if_expr, 2).unwrap()).try_into().unwrap())
+                .unwrap()
+                .symbol,
+        );
+
+        assert_ne!(
+            bindings
+                .resolve(&(nth(&if_expr, 1).unwrap()).try_into().unwrap())
+                .unwrap()
+                .symbol,
+            bindings
+                .resolve(&(nth(&if_expr, 3).unwrap()).try_into().unwrap())
+                .unwrap()
+                .symbol,
+        );
+
+        assert_eq!(
+            bindings
+                .resolve(&inner_temp_id.clone().try_into().unwrap())
+                .unwrap()
+                .symbol,
+            bindings
+                .resolve(&(nth(&if_expr, 2).unwrap()).try_into().unwrap())
+                .unwrap()
+                .symbol,
+        );
+
+        assert_eq!(
+            bindings
+                .resolve(&outer_temp_id.clone().try_into().unwrap())
+                .unwrap()
+                .symbol,
+            bindings
+                .resolve(&(nth(&if_expr, 3).unwrap()).try_into().unwrap())
+                .unwrap()
+                .symbol,
+        );
     }
 }
