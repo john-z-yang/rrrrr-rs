@@ -130,10 +130,22 @@ pub fn first(sexpr: &SExpr) -> SExpr {
     }
 }
 
-pub fn last(sexpr: &SExpr) -> SExpr {
+pub fn last(sexpr: &SExpr) -> Option<SExpr> {
     match sexpr {
+        SExpr::Cons(cons) if matches!(cons.cdr, SExpr::Nil) => Some(cons.car.clone()),
         SExpr::Cons(cons) => last(&cons.cdr),
-        _ => sexpr.clone(),
+        _ => None,
+    }
+}
+
+pub fn nth(sexpr: &SExpr, idx: usize) -> Option<SExpr> {
+    let SExpr::Cons(cons) = sexpr else {
+        return None;
+    };
+    if idx == 0 {
+        Some(cons.car.clone())
+    } else {
+        nth(&cons.cdr, idx - 1)
     }
 }
 

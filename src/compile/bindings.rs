@@ -19,11 +19,8 @@ impl Bindings {
             scope_counter: Self::CORE_SCOPE,
             gen_sym_counter: 0,
         };
-        for symbol in ["lambda", "list", "cons", "first", "second", "rest"] {
-            bindings.add_binding(
-                &Id::with_scope(symbol, [Self::CORE_SCOPE]),
-                &Symbol::new(symbol),
-            )
+        for symbol in ["if", "lambda", "list", "cons", "first", "second", "rest"] {
+            bindings.add_binding(&Id::new(symbol, [Self::CORE_SCOPE]), &Symbol::new(symbol))
         }
         bindings
     }
@@ -68,78 +65,68 @@ impl Bindings {
 
 #[cfg(test)]
 mod tests {
-    use std::collections::BTreeSet;
 
     use super::*;
 
     #[test]
     fn test_resolve_with_empty_bindings() {
         let bindings = Bindings::new();
-        assert_eq!(
-            bindings.resolve(&Id {
-                symbol: Symbol::new("a"),
-                scopes: BTreeSet::new(),
-            }),
-            None
-        );
+        assert_eq!(bindings.resolve(&Id::new("a", [])), None);
     }
 
     #[test]
     fn test_resolve_with_single_bindings() {
         let mut bindings = Bindings::new();
-        bindings.add_binding(&Id::new("a"), &Symbol::new("1"));
-        assert_eq!(
-            bindings.resolve(&Id::new("a")),
-            Some(Id::with_scope("1", []))
-        );
-        assert_eq!(bindings.resolve(&Id::new("b")), None);
+        bindings.add_binding(&Id::new("a", []), &Symbol::new("1"));
+        assert_eq!(bindings.resolve(&Id::new("a", [])), Some(Id::new("1", [])));
+        assert_eq!(bindings.resolve(&Id::new("b", [])), None);
     }
 
     #[test]
     fn test_resolve_with_multiple_stacked_bindings() {
         let mut bindings = Bindings::new();
-        bindings.add_binding(&Id::with_scope("a", [1, 2]), &Symbol::new("middle"));
-        bindings.add_binding(&Id::with_scope("a", [1, 2, 3]), &Symbol::new("inner"));
-        bindings.add_binding(&Id::with_scope("a", [1]), &Symbol::new("outer"));
+        bindings.add_binding(&Id::new("a", [1, 2]), &Symbol::new("middle"));
+        bindings.add_binding(&Id::new("a", [1, 2, 3]), &Symbol::new("inner"));
+        bindings.add_binding(&Id::new("a", [1]), &Symbol::new("outer"));
         assert_eq!(
-            bindings.resolve(&Id::with_scope("a", [1, 2, 4])),
-            Some(Id::with_scope("middle", [1, 2]))
+            bindings.resolve(&Id::new("a", [1, 2, 4])),
+            Some(Id::new("middle", [1, 2]))
         );
         assert_eq!(
-            bindings.resolve(&Id::with_scope("a", [1])),
-            Some(Id::with_scope("outer", [1]))
+            bindings.resolve(&Id::new("a", [1])),
+            Some(Id::new("outer", [1]))
         );
-        assert_eq!(bindings.resolve(&Id::with_scope("a", [2])), None);
-        assert_eq!(bindings.resolve(&Id::new("a")), None);
+        assert_eq!(bindings.resolve(&Id::new("a", [2])), None);
+        assert_eq!(bindings.resolve(&Id::new("a", [])), None);
     }
 
     #[test]
     fn test_resolve_with_multiple_single_bindings() {
         let mut bindings = Bindings::new();
-        bindings.add_binding(&Id::with_scope("a", [3]), &Symbol::new("3"));
-        bindings.add_binding(&Id::with_scope("a", [2]), &Symbol::new("2"));
-        bindings.add_binding(&Id::with_scope("a", [1]), &Symbol::new("1"));
+        bindings.add_binding(&Id::new("a", [3]), &Symbol::new("3"));
+        bindings.add_binding(&Id::new("a", [2]), &Symbol::new("2"));
+        bindings.add_binding(&Id::new("a", [1]), &Symbol::new("1"));
         assert_eq!(
-            bindings.resolve(&Id::with_scope("a", [1, 2])),
-            Some(Id::with_scope("1", [1]))
+            bindings.resolve(&Id::new("a", [1, 2])),
+            Some(Id::new("1", [1]))
         );
         assert_eq!(
-            bindings.resolve(&Id::with_scope("a", [1])),
-            Some(Id::with_scope("1", [1]))
+            bindings.resolve(&Id::new("a", [1])),
+            Some(Id::new("1", [1]))
         );
         assert_eq!(
-            bindings.resolve(&Id::with_scope("a", [2])),
-            Some(Id::with_scope("2", [2]))
+            bindings.resolve(&Id::new("a", [2])),
+            Some(Id::new("2", [2]))
         );
-        assert_eq!(bindings.resolve(&Id::new("a")), None);
+        assert_eq!(bindings.resolve(&Id::new("a", [])), None);
     }
 
     #[test]
     fn test_resolve_with_core_bindings() {
         let bindings = Bindings::new();
         assert_eq!(
-            bindings.resolve(&Id::with_scope("lambda", [Bindings::CORE_SCOPE])),
-            Some(Id::with_scope("lambda", [Bindings::CORE_SCOPE]))
+            bindings.resolve(&Id::new("lambda", [Bindings::CORE_SCOPE])),
+            Some(Id::new("lambda", [Bindings::CORE_SCOPE]))
         );
     }
 }

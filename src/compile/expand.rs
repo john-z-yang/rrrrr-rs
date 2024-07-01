@@ -10,7 +10,7 @@ use crate::{compile::util::for_each, match_sexpr, sexpr};
 
 type Env = HashMap<Symbol, Transformer>;
 
-fn introduce(sexpr: &SExpr) -> SExpr {
+pub(super) fn introduce(sexpr: &SExpr) -> SExpr {
     sexpr.coerce_to_syntax().add_scope(Bindings::CORE_SCOPE)
 }
 
@@ -38,7 +38,7 @@ fn expand_id(id: &Id, bindings: &mut Bindings) -> SExpr {
 fn expand_id_application(sexpr: &SExpr, bindings: &mut Bindings, env: &mut Env) -> SExpr {
     let binding = match first(sexpr) {
         SExpr::Id(id) => bindings.resolve(&id).unwrap(),
-        _ => unreachable!("ID must have a binding during expansion of ID application"),
+        _ => unreachable!("first element of ID application must be an ID"),
     };
 
     match binding.symbol.0.as_str() {
@@ -89,7 +89,10 @@ fn expand_let_syntax(_sexpr: &SExpr, _bindings: &mut Bindings, _env: &mut Env) -
 #[cfg(test)]
 mod tests {
 
-    use crate::sexpr;
+    use crate::{
+        compile::util::{last, nth},
+        sexpr,
+    };
 
     use super::*;
 
@@ -103,7 +106,7 @@ mod tests {
         assert_eq!(
             introduce(&list),
             sexpr!(
-                SExpr::new_id_with_scope("cons", [Bindings::CORE_SCOPE]),
+                SExpr::new_id("cons", [Bindings::CORE_SCOPE]),
                 SExpr::new_num(0),
                 SExpr::new_num(1)
             )
@@ -121,15 +124,15 @@ mod tests {
             &mut env,
         );
         let right = sexpr!(
-            SExpr::new_id_with_scope("lambda", [Bindings::CORE_SCOPE]),
+            SExpr::new_id("lambda", [Bindings::CORE_SCOPE]),
             (
-                SExpr::new_id_with_scope("x", [Bindings::CORE_SCOPE, 1]),
-                SExpr::new_id_with_scope("y", [Bindings::CORE_SCOPE, 1])
+                SExpr::new_id("x", [Bindings::CORE_SCOPE, 1]),
+                SExpr::new_id("y", [Bindings::CORE_SCOPE, 1])
             ),
             (
-                SExpr::new_id_with_scope("cons", [Bindings::CORE_SCOPE, 1]),
-                SExpr::new_id_with_scope("x", [Bindings::CORE_SCOPE, 1]),
-                SExpr::new_id_with_scope("y", [Bindings::CORE_SCOPE, 1])
+                SExpr::new_id("cons", [Bindings::CORE_SCOPE, 1]),
+                SExpr::new_id("x", [Bindings::CORE_SCOPE, 1]),
+                SExpr::new_id("y", [Bindings::CORE_SCOPE, 1]),
             ),
         );
         assert_eq!(left, right);
@@ -145,30 +148,30 @@ mod tests {
             (S(lambda), (S(y)), (S(cons), S(x), S(y))),
             (S(cons), S(x), S(x))
         );
-        let left = expand(
+        let result = expand(
             &introduce(&lambda_expr.coerce_to_syntax()),
             &mut bindings,
             &mut env,
         );
-        let right = sexpr!(
-            SExpr::new_id_with_scope("lambda", [Bindings::CORE_SCOPE]),
-            (SExpr::new_id_with_scope("x", [Bindings::CORE_SCOPE, 1])),
+        let expected = sexpr!(
+            SExpr::new_id("lambda", [Bindings::CORE_SCOPE]),
+            (SExpr::new_id("x", [Bindings::CORE_SCOPE, 1])),
             (
-                SExpr::new_id_with_scope("lambda", [Bindings::CORE_SCOPE, 1]),
-                (SExpr::new_id_with_scope("y", [Bindings::CORE_SCOPE, 1, 2]),),
+                SExpr::new_id("lambda", [Bindings::CORE_SCOPE, 1]),
+                (SExpr::new_id("y", [Bindings::CORE_SCOPE, 1, 2])),
                 (
-                    SExpr::new_id_with_scope("cons", [Bindings::CORE_SCOPE, 1, 2]),
-                    SExpr::new_id_with_scope("x", [Bindings::CORE_SCOPE, 1, 2]),
-                    SExpr::new_id_with_scope("y", [Bindings::CORE_SCOPE, 1, 2]),
+                    SExpr::new_id("cons", [Bindings::CORE_SCOPE, 1, 2]),
+                    SExpr::new_id("x", [Bindings::CORE_SCOPE, 1, 2]),
+                    SExpr::new_id("y", [Bindings::CORE_SCOPE, 1, 2]),
                 )
             ),
             (
-                SExpr::new_id_with_scope("cons", [Bindings::CORE_SCOPE, 1]),
-                SExpr::new_id_with_scope("x", [Bindings::CORE_SCOPE, 1]),
-                SExpr::new_id_with_scope("x", [Bindings::CORE_SCOPE, 1]),
+                SExpr::new_id("cons", [Bindings::CORE_SCOPE, 1]),
+                SExpr::new_id("x", [Bindings::CORE_SCOPE, 1]),
+                SExpr::new_id("x", [Bindings::CORE_SCOPE, 1]),
             )
         );
-        assert_eq!(left, right);
+        assert_eq!(result, expected);
     }
 
     #[test]
@@ -184,5 +187,229 @@ mod tests {
             ),
             sexpr!(SExpr::new_bool(false))
         );
+    }
+
+    #[test]
+    fn test_expand_and_macro_0_arg() {
+        let mut bindings = Bindings::new();
+
+        bindings.add_binding(&Id::new("and", [Bindings::CORE_SCOPE]), &Symbol::new("and"));
+
+        #[rustfmt::skip]
+        let transformer = Transformer::new(&introduce(&sexpr!(
+            S(syntax-rules),
+            (),
+            ((S(_)), SExpr::new_bool(false)),
+            ((S(_), S(e)), S(e)),
+            ((S(_), S(e1), S(e2), S(...)),
+             (S(if), S(e1),
+                     (S(and), S(e2), S(...)),
+                     SExpr::new_bool(false))))
+        ));
+
+        let mut env = HashMap::from([(
+            bindings
+                .resolve(&Id::new("and", [Bindings::CORE_SCOPE]))
+                .unwrap()
+                .symbol,
+            transformer,
+        )]);
+
+        let sexpr = sexpr!(S(and));
+        let result = expand(
+            &introduce(&sexpr.coerce_to_syntax()),
+            &mut bindings,
+            &mut env,
+        );
+        let expected = SExpr::new_bool(false);
+        assert_eq!(result, expected);
+    }
+
+    #[test]
+    fn test_expand_and_macro_1_arg() {
+        let mut bindings = Bindings::new();
+
+        bindings.add_binding(&Id::new("and", [Bindings::CORE_SCOPE]), &Symbol::new("and"));
+
+        #[rustfmt::skip]
+        let transformer = Transformer::new(&introduce(&sexpr!(
+            S(syntax-rules),
+            (),
+            ((S(_)), SExpr::new_bool(false)),
+            ((S(_), S(e)), S(e)),
+            ((S(_), S(e1), S(e2), S(...)),
+             (S(if), S(e1),
+                     (S(and), S(e2), S(...)),
+                     SExpr::new_bool(false)))
+        )));
+
+        let mut env = HashMap::from([(
+            bindings
+                .resolve(&Id::new("and", [Bindings::CORE_SCOPE]))
+                .unwrap()
+                .symbol,
+            transformer,
+        )]);
+
+        let sexpr = introduce(&sexpr!(S(and), S(list)));
+        let result = expand(&introduce(&sexpr), &mut bindings, &mut env);
+        let expected = SExpr::new_id("list", [Bindings::CORE_SCOPE]);
+        assert_eq!(result, expected);
+    }
+
+    #[test]
+    fn test_expand_and_macro_2_args() {
+        let mut bindings = Bindings::new();
+
+        bindings.add_binding(&Id::new("and", [Bindings::CORE_SCOPE]), &Symbol::new("and"));
+
+        #[rustfmt::skip]
+        let transformer = Transformer::new(&introduce(&sexpr!(
+            S(syntax-rules),
+            (),
+            ((S(_)), SExpr::new_bool(false)),
+            ((S(_), S(e)), S(e)),
+            ((S(_), S(e1), S(e2), S(...)),
+             (S(if), S(e1),
+                     (S(and), S(e2), S(...)),
+                     SExpr::new_bool(false)))
+        )));
+
+        let mut env = HashMap::from([(
+            bindings
+                .resolve(&Id::new("and", [Bindings::CORE_SCOPE]))
+                .unwrap()
+                .symbol,
+            transformer,
+        )]);
+
+        let sexpr = sexpr!(S(and), S(list), S(list));
+        let result = expand(&introduce(&sexpr), &mut bindings, &mut env);
+        let expected = sexpr!(
+            SExpr::new_id("if", [Bindings::CORE_SCOPE, 1]),
+            SExpr::new_id("list", [Bindings::CORE_SCOPE]),
+            SExpr::new_id("list", [Bindings::CORE_SCOPE]),
+            SExpr::new_bool(false)
+        );
+        assert_eq!(result, expected);
+    }
+
+    #[test]
+    fn test_expand_and_macro_4_args() {
+        let mut bindings = Bindings::new();
+
+        bindings.add_binding(&Id::new("and", [Bindings::CORE_SCOPE]), &Symbol::new("and"));
+
+        #[rustfmt::skip]
+        let transformer = Transformer::new(&introduce(&sexpr!(
+            S(syntax-rules),
+            (),
+            ((S(_)), SExpr::new_bool(false)),
+            ((S(_), S(e)), S(e)),
+            ((S(_), S(e1), S(e2), S(...)),
+             (S(if), S(e1),
+                     (S(and), S(e2), S(...)),
+                     SExpr::new_bool(false))),
+        )));
+
+        let mut env = HashMap::from([(
+            bindings
+                .resolve(&Id::new("and", [Bindings::CORE_SCOPE]))
+                .unwrap()
+                .symbol,
+            transformer,
+        )]);
+
+        let sexpr = sexpr!(
+            S(and),
+            SExpr::new_bool(true),
+            SExpr::new_bool(true),
+            SExpr::new_bool(true),
+            SExpr::new_bool(true),
+        );
+        // (and t t t t)
+        // (if t (and t t t) f)
+        // (if t (if t (and t t) f) f)
+        // (if t (if t (if t (and t) f) f) f)
+        // (if t (if t (if t t f) f) f) f)
+        let result = expand(&introduce(&sexpr), &mut bindings, &mut env);
+        let expected = sexpr!(
+            SExpr::new_id("if", [Bindings::CORE_SCOPE, 1]),
+            SExpr::new_bool(true),
+            (
+                SExpr::new_id("if", [Bindings::CORE_SCOPE, 2]),
+                SExpr::new_bool(true),
+                (
+                    SExpr::new_id("if", [Bindings::CORE_SCOPE, 3]),
+                    SExpr::new_bool(true),
+                    SExpr::new_bool(true),
+                    SExpr::new_bool(false),
+                ),
+                SExpr::new_bool(false)
+            ),
+            SExpr::new_bool(false)
+        );
+        assert_eq!(result, expected);
+        assert_eq!(
+            bindings
+                .resolve(&(first(&result).try_into().unwrap()))
+                .unwrap(),
+            Id::new("if", [Bindings::CORE_SCOPE])
+        );
+    }
+
+    #[test]
+    fn test_expand_or_macro_hygiene() {
+        let mut bindings = Bindings::new();
+
+        bindings.add_binding(&Id::new("x", [Bindings::CORE_SCOPE]), &Symbol::new("x"));
+        bindings.add_binding(
+            &Id::new("my-macro", [Bindings::CORE_SCOPE]),
+            &Symbol::new("my-macro"),
+        );
+
+        #[rustfmt::skip]
+        let transformer = Transformer::new(&introduce(&sexpr!(
+            S(syntax-rules),
+            (),
+            ((S(_), S(body)), (S(lambda), (S(x)), S(body))),
+        )));
+
+        let mut env = HashMap::from([(
+            bindings
+                .resolve(&Id::new("my-macro", [Bindings::CORE_SCOPE]))
+                .unwrap()
+                .symbol,
+            transformer,
+        )]);
+
+        let sexpr = sexpr!(S(my-macro), S(x));
+        let result = expand(&introduce(&sexpr), &mut bindings, &mut env);
+        let expected = sexpr!(
+            SExpr::new_id("lambda", [Bindings::CORE_SCOPE, 1]),
+            (SExpr::new_id("x", [Bindings::CORE_SCOPE, 1, 2])),
+            SExpr::new_id("x", [Bindings::CORE_SCOPE, 2])
+        );
+        assert_eq!(result, expected);
+        assert_ne!(
+            bindings
+                .resolve(&first(&nth(&result, 1).unwrap()).try_into().unwrap())
+                .unwrap()
+                .symbol,
+            bindings
+                .resolve(&last(&result).unwrap().try_into().unwrap())
+                .unwrap()
+                .symbol,
+        );
+        assert_eq!(
+            bindings
+                .resolve(&Id::new("x", [Bindings::CORE_SCOPE]))
+                .unwrap()
+                .symbol,
+            bindings
+                .resolve(&last(&result).unwrap().try_into().unwrap())
+                .unwrap()
+                .symbol,
+        )
     }
 }

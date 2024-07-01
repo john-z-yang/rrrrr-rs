@@ -60,17 +60,10 @@ impl fmt::Display for SExpr {
 }
 
 impl Id {
-    pub fn new(symbol: &str) -> Self {
+    pub fn new<const N: usize>(symbol: &str, scopes: [ScopeId; N]) -> Self {
         Id {
             symbol: Symbol::new(symbol),
-            scopes: BTreeSet::new(),
-        }
-    }
-
-    pub fn with_scope<const N: usize>(symbol: &str, scopes: [ScopeId; N]) -> Self {
-        Id {
-            symbol: Symbol::new(symbol),
-            scopes: Scopes::from(scopes),
+            scopes: BTreeSet::from(scopes),
         }
     }
 }
@@ -130,15 +123,76 @@ impl fmt::Display for Num {
     }
 }
 
-impl SExpr {
-    pub fn new_id(symbol: &str) -> Self {
-        Self::Id(Id {
-            symbol: Symbol::new(symbol),
-            scopes: BTreeSet::new(),
-        })
+impl From<Id> for SExpr {
+    fn from(value: Id) -> Self {
+        SExpr::Id(value)
     }
+}
 
-    pub fn new_id_with_scope<const N: usize>(symbol: &str, scopes: [ScopeId; N]) -> Self {
+impl From<Cons> for SExpr {
+    fn from(value: Cons) -> Self {
+        SExpr::Cons(Box::new(value))
+    }
+}
+
+impl From<Symbol> for SExpr {
+    fn from(value: Symbol) -> Self {
+        SExpr::Symbol(value)
+    }
+}
+
+impl From<Bool> for SExpr {
+    fn from(value: Bool) -> Self {
+        SExpr::Bool(value)
+    }
+}
+
+impl TryFrom<SExpr> for Id {
+    type Error = ();
+    fn try_from(value: SExpr) -> Result<Self, Self::Error> {
+        if let SExpr::Id(id) = value {
+            Ok(id)
+        } else {
+            Err(())
+        }
+    }
+}
+
+impl TryFrom<SExpr> for Cons {
+    type Error = ();
+    fn try_from(value: SExpr) -> Result<Self, Self::Error> {
+        if let SExpr::Cons(cons) = value {
+            Ok(*cons)
+        } else {
+            Err(())
+        }
+    }
+}
+
+impl TryFrom<SExpr> for Symbol {
+    type Error = ();
+    fn try_from(value: SExpr) -> Result<Self, Self::Error> {
+        if let SExpr::Symbol(symbol) = value {
+            Ok(symbol)
+        } else {
+            Err(())
+        }
+    }
+}
+
+impl TryFrom<SExpr> for Bool {
+    type Error = ();
+    fn try_from(value: SExpr) -> Result<Self, Self::Error> {
+        if let SExpr::Bool(bool) = value {
+            Ok(bool)
+        } else {
+            Err(())
+        }
+    }
+}
+
+impl SExpr {
+    pub fn new_id<const N: usize>(symbol: &str, scopes: [ScopeId; N]) -> Self {
         Self::Id(Id {
             symbol: Symbol::new(symbol),
             scopes: Scopes::from(scopes),
@@ -163,7 +217,7 @@ impl SExpr {
 
     pub fn coerce_to_syntax(&self) -> Self {
         match self {
-            Self::Symbol(Symbol(symbol)) => Self::new_id(symbol),
+            Self::Symbol(Symbol(symbol)) => SExpr::new_id(symbol, []),
             Self::Cons(cons) => {
                 Self::new_cons(cons.car.coerce_to_syntax(), cons.cdr.coerce_to_syntax())
             }
@@ -232,25 +286,22 @@ mod tests {
     #[test]
     fn test_add_scope() {
         let list = sexpr!(
-            SExpr::new_id_with_scope("a", [1]),
+            SExpr::new_id("a", [1]),
             SExpr::new_num(0),
-            (SExpr::new_num(1), (SExpr::new_id_with_scope("b", [0, 1]))),
+            (SExpr::new_num(1), (SExpr::new_id("b", [0, 1]))),
             SExpr::new_num(2),
-            (SExpr::new_id_with_scope("c", [0])),
-            SExpr::new_id_with_scope("d", [0, 1])
+            (SExpr::new_id("c", [0])),
+            SExpr::new_id("d", [0, 1]),
         );
         assert_eq!(
             list.add_scope(0).add_scope(2),
             sexpr!(
-                SExpr::new_id_with_scope("a", [0, 1, 2]),
+                SExpr::new_id("a", [0, 1, 2]),
                 SExpr::new_num(0),
-                (
-                    SExpr::new_num(1),
-                    (SExpr::new_id_with_scope("b", [0, 1, 2]))
-                ),
+                (SExpr::new_num(1), (SExpr::new_id("b", [0, 1, 2])),),
                 SExpr::new_num(2),
-                (SExpr::new_id_with_scope("c", [0, 2])),
-                SExpr::new_id_with_scope("d", [0, 1, 2])
+                (SExpr::new_id("c", [0, 2])),
+                SExpr::new_id("d", [0, 1, 2])
             )
         )
     }
@@ -258,22 +309,22 @@ mod tests {
     #[test]
     fn test_flip_scope() {
         let list = sexpr!(
-            SExpr::new_id_with_scope("a", [1]),
+            SExpr::new_id("a", [1]),
             SExpr::new_num(0),
-            (SExpr::new_num(1), (SExpr::new_id_with_scope("b", [0, 1]))),
+            (SExpr::new_num(1), (SExpr::new_id("b", [0, 1]))),
             SExpr::new_num(2),
-            (SExpr::new_id_with_scope("c", [0])),
-            SExpr::new_id_with_scope("d", [0, 1])
+            (SExpr::new_id("c", [0])),
+            SExpr::new_id("d", [0, 1]),
         );
         assert_eq!(
             list.flip_scope(0),
             sexpr!(
-                SExpr::new_id_with_scope("a", [0, 1]),
+                SExpr::new_id("a", [0, 1]),
                 SExpr::new_num(0),
-                (SExpr::new_num(1), (SExpr::new_id_with_scope("b", [1]))),
+                (SExpr::new_num(1), (SExpr::new_id("b", [1]))),
                 SExpr::new_num(2),
-                (SExpr::new_id_with_scope("c", [])),
-                SExpr::new_id_with_scope("d", [1])
+                (SExpr::new_id("c", [])),
+                SExpr::new_id("d", [1]),
             )
         )
     }
@@ -282,7 +333,7 @@ mod tests {
     fn test_syntax_coercion() {
         assert_eq!(
             SExpr::new_symbol("a").coerce_to_syntax(),
-            SExpr::new_id("a")
+            SExpr::new_id("a", []),
         );
         let list = sexpr!(
             SExpr::new_symbol("a"),
@@ -290,17 +341,17 @@ mod tests {
             (SExpr::new_num(1), (SExpr::new_symbol("b"))),
             SExpr::new_num(2),
             (SExpr::new_symbol("c")),
-            SExpr::new_id_with_scope("d", [0, 1])
+            SExpr::new_id("d", [0, 1]),
         );
         assert_eq!(
             list.coerce_to_syntax(),
             sexpr!(
-                SExpr::new_id("a"),
+                SExpr::new_id("a", []),
                 SExpr::new_num(0),
-                (SExpr::new_num(1), (SExpr::new_id("b"))),
+                (SExpr::new_num(1), (SExpr::new_id("b", []))),
                 SExpr::new_num(2),
-                (SExpr::new_id("c")),
-                SExpr::new_id_with_scope("d", [0, 1])
+                (SExpr::new_id("c", [])),
+                SExpr::new_id("d", [0, 1])
             )
         )
     }
@@ -308,12 +359,12 @@ mod tests {
     #[test]
     fn test_datum_coercion() {
         let list = sexpr!(
-            SExpr::new_id("a"),
+            SExpr::new_id("a", []),
             SExpr::new_num(0),
-            (SExpr::new_num(1), (SExpr::new_id("b"))),
+            (SExpr::new_num(1), (SExpr::new_id("b", []))),
             SExpr::new_num(2),
-            (SExpr::new_id("c")),
-            SExpr::new_id_with_scope("d", [0, 1])
+            (SExpr::new_id("c", [])),
+            SExpr::new_id("d", [0, 1])
         );
         assert_eq!(
             list.coerce_to_datum(),
