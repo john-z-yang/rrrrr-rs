@@ -132,15 +132,15 @@ impl SyntaxRule {
         literals: &HashSet<Symbol>,
         pattern: &SExpr,
         sexpr: &SExpr,
-        bindings: &mut HashMap<Symbol, SExpr>,
+        bindings: &mut HashMap<Id, SExpr>,
     ) -> Option<()> {
         match pattern {
-            SExpr::Symbol(pattern) => {
-                if literals.contains(pattern) {
+            SExpr::Id(pattern) => {
+                if literals.contains(&pattern.symbol) {
                     let SExpr::Id(Id { symbol, scopes: _ }) = sexpr else {
                         return None;
                     };
-                    (pattern == symbol).then_some(())
+                    (pattern.symbol == *symbol).then_some(())
                 } else {
                     bindings.insert(pattern.clone(), sexpr.clone());
                     Some(())
@@ -148,8 +148,8 @@ impl SyntaxRule {
             }
             SExpr::Cons(pattern) => {
                 match &pattern.car {
-                    SExpr::Symbol(symbol) if symbol.0 == "..." => {
-                        bindings.insert(symbol.clone(), sexpr.clone());
+                    SExpr::Id(id) if id.symbol.0 == "..." => {
+                        bindings.insert(id.clone(), sexpr.clone());
                     }
                     _ => {
                         let SExpr::Cons(cons) = sexpr else {
@@ -169,16 +169,16 @@ impl SyntaxRule {
         &self,
         literals: &HashSet<Symbol>,
         sexpr: &SExpr,
-    ) -> Option<HashMap<Symbol, SExpr>> {
-        let mut bindings = HashMap::<Symbol, SExpr>::new();
+    ) -> Option<HashMap<Id, SExpr>> {
+        let mut bindings = HashMap::<Id, SExpr>::new();
         Self::_match_pattern(literals, &self.pattern, sexpr, &mut bindings).map(|_| bindings)
     }
 
-    fn _render_template(template: &SExpr, bindings: &HashMap<Symbol, SExpr>) -> SExpr {
+    fn _render_template(template: &SExpr, bindings: &HashMap<Id, SExpr>) -> SExpr {
         match template {
-            SExpr::Symbol(pattern) => bindings.get(pattern).unwrap_or(template).clone(),
+            SExpr::Id(pattern) => bindings.get(pattern).unwrap_or(template).clone(),
             SExpr::Cons(pattern) => match &pattern.car {
-                SExpr::Symbol(symbol) if symbol.0 == "..." => bindings.get(symbol).unwrap().clone(),
+                SExpr::Id(id) if id.symbol.0 == "..." => bindings.get(id).unwrap().clone(),
                 _ => SExpr::new_cons(
                     Self::_render_template(&pattern.car, bindings),
                     Self::_render_template(&pattern.cdr, bindings),
@@ -188,13 +188,13 @@ impl SyntaxRule {
         }
     }
 
-    fn render_template(&self, bindings: &HashMap<Symbol, SExpr>) -> SExpr {
+    fn render_template(&self, bindings: &HashMap<Id, SExpr>) -> SExpr {
         Self::_render_template(&self.template, bindings)
     }
 
     pub fn apply(&self, literals: &HashSet<Symbol>, sexpr: &SExpr) -> Option<SExpr> {
         let bindings = self.match_pattern(literals, sexpr)?;
-        Some(self.render_template(&bindings).coerce_to_syntax())
+        Some(self.render_template(&bindings))
     }
 }
 
@@ -232,78 +232,75 @@ impl Transformer {
 
 #[cfg(test)]
 mod tests {
-    use crate::sexpr;
+    use crate::{compile::expand::introduce, sexpr};
 
     use super::*;
 
     #[test]
     fn test_and_transformer_base_case() {
         #[rustfmt::skip]
-        let transformer = Transformer::new(&sexpr!(
+        let transformer = Transformer::new(&introduce(&sexpr!(
             S(syntax-rules),
             (),
             ((S(_)), SExpr::new_bool(false))
-        ));
+        )));
 
         assert_eq!(
-            transformer
-                .transform(&sexpr!(S(and)).coerce_to_syntax())
-                .unwrap(),
+            transformer.transform(&introduce(&sexpr!(S(and)))).unwrap(),
             SExpr::new_bool(false)
         );
 
         #[rustfmt::skip]
-        let transformer = Transformer::new(&sexpr!(
+        let transformer = Transformer::new(&introduce(&sexpr!(
             S(syntax-rules),
             (),
             ((S(_), S(e)), S(e))
-        ));
+        )));
 
         assert_eq!(
             transformer
-                .transform(&sexpr!(S(and), S(a)).coerce_to_syntax())
+                .transform(&introduce(&sexpr!(S(and), S(x))))
                 .unwrap(),
-            SExpr::new_symbol("a").coerce_to_syntax()
+            introduce(&SExpr::new_symbol("x"))
         );
     }
 
     #[test]
     fn test_and_transformer_recursive_case() {
         #[rustfmt::skip]
-        let transformer = Transformer::new(&sexpr!(
+        let transformer = Transformer::new(&introduce(&sexpr!(
             S(syntax-rules),
             (),
             ((S(_), S(e1), S(e2), S(...)),
              (S(if), S(e1),
                      (S(and), S(e2), S(...)),
                      SExpr::new_bool(false)))
-        ));
+        )));
 
         assert_eq!(
             transformer
-                .transform(&sexpr!(S(and), S(a), S(b)).coerce_to_syntax())
+                .transform(&introduce(&sexpr!(S(and), S(a), S(b))))
                 .unwrap(),
-            sexpr!(S(if), S(a), (S(and), S(b)), SExpr::new_bool(false)).coerce_to_syntax()
+            introduce(&sexpr!(S(if), S(a), (S(and), S(b)), SExpr::new_bool(false)))
         );
         assert_eq!(
             transformer
-                .transform(&sexpr!(S(and), S(a), S(b), S(c)).coerce_to_syntax())
+                .transform(&introduce(&sexpr!(S(and), S(a), S(b), S(c))))
                 .unwrap(),
-            sexpr!(S(if), S(a), (S(and), S(b), S(c)), SExpr::new_bool(false)).coerce_to_syntax()
+            introduce(&sexpr!(S(if), S(a), (S(and), S(b), S(c)), SExpr::new_bool(false)))
         );
         assert_eq!(
             transformer
-                .transform(&sexpr!(S(and), S(a), S(b), S(c), S(d)).coerce_to_syntax())
+                .transform(&introduce(&sexpr!(S(and), S(a), S(b), S(c), S(d))))
                 .unwrap(),
-            sexpr!(S(if), S(a), (S(and), S(b), S(c), S(d)), SExpr::new_bool(false))
-                .coerce_to_syntax()
+            introduce(&sexpr!(S(if), S(a), (S(and), S(b), S(c), S(d)), SExpr::new_bool(false)))
         );
     }
 
     #[test]
     fn test_and_transformer() {
         #[rustfmt::skip]
-        let transformer = Transformer::new(&sexpr!(
+        let transformer = Transformer::new(&introduce(&sexpr!(
             S(syntax-rules),
             (),
             ((S(_)), SExpr::new_bool(false)),
@@ -312,37 +309,34 @@ mod tests {
              (S(if), S(e1),
                      (S(and), S(e2), S(...)),
                      SExpr::new_bool(false)))
-        ));
+        )));
         assert_eq!(
-            transformer
-                .transform(&sexpr!(S(and)).coerce_to_syntax())
-                .unwrap(),
+            transformer.transform(&introduce(&sexpr!(S(and)))).unwrap(),
             SExpr::new_bool(false)
         );
         assert_eq!(
             transformer
-                .transform(&sexpr!(S(and), S(a)).coerce_to_syntax())
+                .transform(&introduce(&sexpr!(S(and), S(a))))
                 .unwrap(),
-            SExpr::new_symbol("a").coerce_to_syntax()
+            introduce(&SExpr::new_symbol("a"))
         );
         assert_eq!(
             transformer
-                .transform(&sexpr!(S(and), S(a), S(b)).coerce_to_syntax())
+                .transform(&introduce(&sexpr!(S(and), S(a), S(b))))
                 .unwrap(),
-            sexpr!(S(if), S(a), (S(and), S(b)), SExpr::new_bool(false)).coerce_to_syntax()
+            introduce(&sexpr!(S(if), S(a), (S(and), S(b)), SExpr::new_bool(false)))
         );
         assert_eq!(
             transformer
-                .transform(&sexpr!(S(and), S(a), S(b), S(c)).coerce_to_syntax())
+                .transform(&introduce(&sexpr!(S(and), S(a), S(b), S(c))))
                 .unwrap(),
-            sexpr!(S(if), S(a), (S(and), S(b), S(c)), SExpr::new_bool(false)).coerce_to_syntax()
+            introduce(&sexpr!(S(if), S(a), (S(and), S(b), S(c)), SExpr::new_bool(false)))
         );
         assert_eq!(
             transformer
-                .transform(&sexpr!(S(and), S(a), S(b), S(c), S(d)).coerce_to_syntax())
+                .transform(&introduce(&sexpr!(S(and), S(a), S(b), S(c), S(d))))
                 .unwrap(),
-            sexpr!(S(if), S(a), (S(and), S(b), S(c), S(d)), SExpr::new_bool(false))
-                .coerce_to_syntax()
+            introduce(&sexpr!(S(if), S(a), (S(and), S(b), S(c), S(d)), SExpr::new_bool(false)))
         );
     }
 }
