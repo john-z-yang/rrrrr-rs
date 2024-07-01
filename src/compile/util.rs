@@ -123,10 +123,10 @@ macro_rules! match_sexpr {
     };
 }
 
-pub fn first(sexpr: &SExpr) -> SExpr {
+pub fn first(sexpr: &SExpr) -> Option<SExpr> {
     match sexpr {
-        SExpr::Cons(cons) => cons.car.clone(),
-        _ => sexpr.clone(),
+        SExpr::Cons(cons) => Some(cons.car.clone()),
+        _ => None,
     }
 }
 

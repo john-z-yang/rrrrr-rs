@@ -37,7 +37,7 @@ fn expand_id(id: &Id, bindings: &mut Bindings) -> SExpr {
 
 fn expand_id_application(sexpr: &SExpr, bindings: &mut Bindings, env: &mut Env) -> SExpr {
     let binding = match first(sexpr) {
-        SExpr::Id(id) => bindings.resolve(&id).unwrap(),
+        Some(SExpr::Id(id)) => bindings.resolve(&id).unwrap(),
         _ => unreachable!("first element of ID application must be an ID"),
     };
 
@@ -352,7 +352,7 @@ mod tests {
         assert_eq!(result, expected);
         assert_eq!(
             bindings
-                .resolve(&(first(&result).try_into().unwrap()))
+                .resolve(&(first(&result).unwrap().try_into().unwrap()))
                 .unwrap(),
             Id::new("if", [Bindings::CORE_SCOPE])
         );
@@ -393,7 +393,12 @@ mod tests {
         assert_eq!(result, expected);
         assert_ne!(
             bindings
-                .resolve(&first(&nth(&result, 1).unwrap()).try_into().unwrap())
+                .resolve(
+                    &first(&nth(&result, 1).unwrap())
+                        .unwrap()
+                        .try_into()
+                        .unwrap()
+                )
                 .unwrap()
                 .symbol,
             bindings
@@ -480,10 +485,21 @@ mod tests {
 
         assert_eq!(result, expected);
 
-        let outer_temp_id = first(&nth(&first(&first(&result)), 1).unwrap());
-        let inner_temp_id =
-            first(&nth(&first(&nth(&first(&first(&result)), 2).unwrap()), 1).unwrap());
-        let if_expr = nth(&first(&nth(&first(&first(&result)), 2).unwrap()), 2).unwrap();
+        let outer_temp_id =
+            first(&nth(&first(&first(&result).unwrap()).unwrap(), 1).unwrap()).unwrap();
+        let inner_temp_id = first(
+            &nth(
+                &first(&nth(&first(&first(&result).unwrap()).unwrap(), 2).unwrap()).unwrap(),
+                1,
+            )
+            .unwrap(),
+        )
+        .unwrap();
+        let if_expr = nth(
+            &first(&nth(&first(&first(&result).unwrap()).unwrap(), 2).unwrap()).unwrap(),
+            2,
+        )
+        .unwrap();
 
         assert_ne!(
             bindings
