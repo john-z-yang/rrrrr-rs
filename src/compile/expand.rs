@@ -82,7 +82,7 @@ fn expand_lambda(sexpr: &SExpr, bindings: &mut Bindings, env: &mut Env) -> SExpr
 }
 
 fn expand_let_syntax(sexpr: &SExpr, bindings: &mut Bindings, env: &mut Env) -> SExpr {
-    match_sexpr! {(S(let-syntax), ((keyword, transformer_spec)), body) = sexpr =>
+    match_sexpr! {(#"let-syntax", ((keyword, transformer_spec)), body) = sexpr =>
         let scope_id = bindings.new_scope_id();
         let keyword = keyword.add_scope(scope_id);
 

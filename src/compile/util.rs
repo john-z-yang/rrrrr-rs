@@ -87,11 +87,10 @@ macro_rules! match_sexpr {
 
     // Compare if the first element is an exact symbol or id i.e. `('lambda, ...)`
     (
-        (S($($symbol:tt)*) $(, $($rest:tt)*)?) = $targ:expr => $($handler:tt)*
+        (# $symbol:literal $(, $($rest:tt)*)?) = $targ:expr => $($handler:tt)*
     ) => {
         if let $crate::compile::syntax::SExpr::Cons(ref cons) = $targ {
-            let symbol = stringify!($($symbol)*).chars();
-            let symbol = $crate::compile::syntax::Symbol::new(symbol.as_str());
+            let symbol = $crate::compile::syntax::Symbol::new($symbol);
             if let $crate::compile::syntax::SExpr::Symbol(ref sym) = &cons.car {
                 if *sym == symbol {
                     match_sexpr! {($($($rest)*)?) = cons.cdr =>

@@ -200,7 +200,7 @@ impl SyntaxRule {
 
 impl Transformer {
     pub fn new(spec: &SExpr) -> Self {
-        match_sexpr! {(S(syntax-rules), (literals_list @ ..), rules @ ..) = spec =>
+        match_sexpr! {(#"syntax-rules", (literals_list @ ..), rules @ ..) = spec =>
             let mut literals = HashSet::<Symbol>::new();
             for_each(|literal| {
                 if let SExpr::Symbol(sym) = literal{

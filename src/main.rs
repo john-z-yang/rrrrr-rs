@@ -6,7 +6,7 @@ fn main() {
 
     println!("created expression:\n  {}", lambda_expr);
 
-    match_sexpr! {(S(lambda), (args @ ..), body @ ..) = lambda_expr => {
+    match_sexpr! {(#"lambda", (args @ ..), body @ ..) = lambda_expr => {
         println!("matched p1, args {}, body {}", args, body);
     }};
 }
