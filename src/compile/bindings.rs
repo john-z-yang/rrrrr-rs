@@ -46,14 +46,7 @@ impl Bindings {
             .and_then(|(_, candidates)| {
                 candidates
                     .iter()
-                    .filter(|(scopes, _)| {
-                        for scope in scopes {
-                            if !id.scopes.contains(scope) {
-                                return false;
-                            }
-                        }
-                        id.scopes.len() >= scopes.len()
-                    })
+                    .filter(|(candidate_scopes, _)| candidate_scopes.is_subset(&id.scopes))
                     .max_by(|(lhs, _), (rhs, _)| lhs.len().cmp(&rhs.len()))
             })
             .map(|(_, symbol)| symbol.clone())
