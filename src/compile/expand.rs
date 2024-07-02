@@ -31,7 +31,7 @@ fn expand(sexpr: &SExpr, bindings: &mut Bindings, env: &mut Env) -> SExpr {
 }
 
 fn expand_id(id: &Id, bindings: &mut Bindings) -> SExpr {
-    bindings.resolve(id).map(SExpr::Id).unwrap();
+    assert!(bindings.resolve(id).is_some(), "ID must have a binding");
     SExpr::Id(id.clone())
 }
 
@@ -41,12 +41,12 @@ fn expand_id_application(sexpr: &SExpr, bindings: &mut Bindings, env: &mut Env) 
         _ => unreachable!("first element of ID application must be an ID"),
     };
 
-    match binding.symbol.0.as_str() {
+    match binding.0.as_str() {
         "quote" | "quote-syntax" => sexpr.clone(),
         "let-syntax" => expand_let_syntax(sexpr, bindings, env),
         "lambda" => expand_lambda(sexpr, bindings, env),
         _ => {
-            if let Some(transformer) = env.get(&binding.symbol) {
+            if let Some(transformer) = env.get(&binding) {
                 let scope_id = bindings.new_scope_id();
                 let sexpr = sexpr.add_scope(scope_id);
                 let transformed_sexpr = transformer.transform(&sexpr).unwrap();
@@ -210,8 +210,7 @@ mod tests {
         let mut env = HashMap::from([(
             bindings
                 .resolve(&Id::new("and", [Bindings::CORE_SCOPE]))
-                .unwrap()
-                .symbol,
+                .unwrap(),
             transformer,
         )]);
 
@@ -246,8 +245,7 @@ mod tests {
         let mut env = HashMap::from([(
             bindings
                 .resolve(&Id::new("and", [Bindings::CORE_SCOPE]))
-                .unwrap()
-                .symbol,
+                .unwrap(),
             transformer,
         )]);
 
@@ -278,8 +276,7 @@ mod tests {
         let mut env = HashMap::from([(
             bindings
                 .resolve(&Id::new("and", [Bindings::CORE_SCOPE]))
-                .unwrap()
-                .symbol,
+                .unwrap(),
             transformer,
         )]);
 
@@ -315,8 +312,7 @@ mod tests {
         let mut env = HashMap::from([(
             bindings
                 .resolve(&Id::new("and", [Bindings::CORE_SCOPE]))
-                .unwrap()
-                .symbol,
+                .unwrap(),
             transformer,
         )]);
 
@@ -354,7 +350,7 @@ mod tests {
             bindings
                 .resolve(&(first(&result).unwrap().try_into().unwrap()))
                 .unwrap(),
-            Id::new("if", [Bindings::CORE_SCOPE])
+            Symbol::new("if")
         );
     }
 
@@ -378,8 +374,7 @@ mod tests {
         let mut env = HashMap::from([(
             bindings
                 .resolve(&Id::new("my-macro", [Bindings::CORE_SCOPE]))
-                .unwrap()
-                .symbol,
+                .unwrap(),
             transformer,
         )]);
 
@@ -399,22 +394,18 @@ mod tests {
                         .try_into()
                         .unwrap()
                 )
-                .unwrap()
-                .symbol,
+                .unwrap(),
             bindings
                 .resolve(&last(&result).unwrap().try_into().unwrap())
-                .unwrap()
-                .symbol,
+                .unwrap(),
         );
         assert_eq!(
             bindings
                 .resolve(&Id::new("x", [Bindings::CORE_SCOPE]))
-                .unwrap()
-                .symbol,
+                .unwrap(),
             bindings
                 .resolve(&last(&result).unwrap().try_into().unwrap())
-                .unwrap()
-                .symbol,
+                .unwrap(),
         )
     }
 
@@ -441,8 +432,7 @@ mod tests {
         let mut env = HashMap::from([(
             bindings
                 .resolve(&Id::new("my-or", [Bindings::CORE_SCOPE]))
-                .unwrap()
-                .symbol,
+                .unwrap(),
             transformer,
         )]);
 
@@ -504,56 +494,46 @@ mod tests {
         assert_ne!(
             bindings
                 .resolve(&outer_temp_id.clone().try_into().unwrap())
-                .unwrap()
-                .symbol,
+                .unwrap(),
             bindings
                 .resolve(&inner_temp_id.clone().try_into().unwrap())
-                .unwrap()
-                .symbol
+                .unwrap(),
         );
 
         assert_eq!(
             bindings
                 .resolve(&(nth(&if_expr, 1).unwrap()).try_into().unwrap())
-                .unwrap()
-                .symbol,
+                .unwrap(),
             bindings
                 .resolve(&(nth(&if_expr, 2).unwrap()).try_into().unwrap())
-                .unwrap()
-                .symbol,
+                .unwrap(),
         );
 
         assert_ne!(
             bindings
                 .resolve(&(nth(&if_expr, 1).unwrap()).try_into().unwrap())
-                .unwrap()
-                .symbol,
+                .unwrap(),
             bindings
                 .resolve(&(nth(&if_expr, 3).unwrap()).try_into().unwrap())
-                .unwrap()
-                .symbol,
+                .unwrap(),
         );
 
         assert_eq!(
             bindings
                 .resolve(&inner_temp_id.clone().try_into().unwrap())
-                .unwrap()
-                .symbol,
+                .unwrap(),
             bindings
                 .resolve(&(nth(&if_expr, 2).unwrap()).try_into().unwrap())
-                .unwrap()
-                .symbol,
+                .unwrap(),
         );
 
         assert_eq!(
             bindings
                 .resolve(&outer_temp_id.clone().try_into().unwrap())
-                .unwrap()
-                .symbol,
+                .unwrap(),
             bindings
                 .resolve(&(nth(&if_expr, 3).unwrap()).try_into().unwrap())
-                .unwrap()
-                .symbol,
+                .unwrap(),
         );
     }
 }

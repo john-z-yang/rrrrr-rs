@@ -40,7 +40,7 @@ impl Bindings {
         binding.push((id.scopes.clone(), symbol.clone()));
     }
 
-    pub fn resolve(&self, id: &Id) -> Option<Id> {
+    pub fn resolve(&self, id: &Id) -> Option<Symbol> {
         self.symbols
             .get_key_value(&id.symbol)
             .and_then(|(_, candidates)| {
@@ -56,10 +56,7 @@ impl Bindings {
                     })
                     .max_by(|(lhs, _), (rhs, _)| lhs.len().cmp(&rhs.len()))
             })
-            .map(|(scopes, symbol)| Id {
-                scopes: scopes.clone(),
-                symbol: symbol.clone(),
-            })
+            .map(|(_, symbol)| symbol.clone())
     }
 }
 
@@ -78,7 +75,7 @@ mod tests {
     fn test_resolve_with_single_bindings() {
         let mut bindings = Bindings::new();
         bindings.add_binding(&Id::new("a", []), &Symbol::new("1"));
-        assert_eq!(bindings.resolve(&Id::new("a", [])), Some(Id::new("1", [])));
+        assert_eq!(bindings.resolve(&Id::new("a", [])), Some(Symbol::new("1")));
         assert_eq!(bindings.resolve(&Id::new("b", [])), None);
     }
 
@@ -90,11 +87,11 @@ mod tests {
         bindings.add_binding(&Id::new("a", [1]), &Symbol::new("outer"));
         assert_eq!(
             bindings.resolve(&Id::new("a", [1, 2, 4])),
-            Some(Id::new("middle", [1, 2]))
+            Some(Symbol::new("middle"))
         );
         assert_eq!(
             bindings.resolve(&Id::new("a", [1])),
-            Some(Id::new("outer", [1]))
+            Some(Symbol::new("outer"))
         );
         assert_eq!(bindings.resolve(&Id::new("a", [2])), None);
         assert_eq!(bindings.resolve(&Id::new("a", [])), None);
@@ -108,16 +105,10 @@ mod tests {
         bindings.add_binding(&Id::new("a", [1]), &Symbol::new("1"));
         assert_eq!(
             bindings.resolve(&Id::new("a", [1, 2])),
-            Some(Id::new("1", [1]))
+            Some(Symbol::new("1"))
         );
-        assert_eq!(
-            bindings.resolve(&Id::new("a", [1])),
-            Some(Id::new("1", [1]))
-        );
-        assert_eq!(
-            bindings.resolve(&Id::new("a", [2])),
-            Some(Id::new("2", [2]))
-        );
+        assert_eq!(bindings.resolve(&Id::new("a", [1])), Some(Symbol::new("1")));
+        assert_eq!(bindings.resolve(&Id::new("a", [2])), Some(Symbol::new("2")));
         assert_eq!(bindings.resolve(&Id::new("a", [])), None);
     }
 
@@ -126,7 +117,7 @@ mod tests {
         let bindings = Bindings::new();
         assert_eq!(
             bindings.resolve(&Id::new("lambda", [Bindings::CORE_SCOPE])),
-            Some(Id::new("lambda", [Bindings::CORE_SCOPE]))
+            Some(Symbol::new("lambda"))
         );
     }
 }
