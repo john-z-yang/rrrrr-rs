@@ -19,7 +19,16 @@ impl Bindings {
             scope_counter: Self::CORE_SCOPE,
             gen_sym_counter: 0,
         };
-        for symbol in ["if", "lambda", "list", "cons", "first", "second", "rest"] {
+        for symbol in [
+            "let-syntax",
+            "if",
+            "lambda",
+            "list",
+            "cons",
+            "first",
+            "second",
+            "rest",
+        ] {
             bindings.add_binding(&Id::new(symbol, [Self::CORE_SCOPE]), &Symbol::new(symbol))
         }
         bindings

@@ -36,6 +36,7 @@ fn expand_id(id: &Id, bindings: &mut Bindings) -> SExpr {
 }
 
 fn expand_id_application(sexpr: &SExpr, bindings: &mut Bindings, env: &mut Env) -> SExpr {
+    println!("{}", first(sexpr).unwrap());
     let binding = match first(sexpr) {
         Some(SExpr::Id(id)) => bindings.resolve(&id).unwrap(),
         _ => unreachable!("first element of ID application must be an ID"),
@@ -82,8 +83,26 @@ fn expand_lambda(sexpr: &SExpr, bindings: &mut Bindings, env: &mut Env) -> SExpr
     unreachable!("Invalid use of lambda form: {}", sexpr);
 }
 
-fn expand_let_syntax(_sexpr: &SExpr, _bindings: &mut Bindings, _env: &mut Env) -> SExpr {
-    todo!()
+fn expand_let_syntax(sexpr: &SExpr, bindings: &mut Bindings, env: &mut Env) -> SExpr {
+    match_sexpr! {(S(let-syntax), ((keyword, transformer_spec)), body) = sexpr =>
+        let scope_id = bindings.new_scope_id();
+        let keyword = keyword.add_scope(scope_id);
+
+        let SExpr::Id(id) = keyword else {
+            unreachable!("Expected identifiers in syntax keyword");
+        };
+        let binding = bindings.gen_sym();
+        bindings.add_binding(&id, &binding);
+
+        let transformer = Transformer::new(&transformer_spec.add_scope(scope_id));
+        env.insert(binding.clone(), transformer);
+
+        let res = expand(&body.add_scope(scope_id), bindings, env);
+        env.remove_entry(&binding);
+
+        return res;
+    }
+    unreachable!("Invalid use of let_syntax form: {}", sexpr);
 }
 
 #[cfg(test)]
@@ -535,5 +554,72 @@ mod tests {
                 .resolve(&(nth(&if_expr, 3).unwrap()).try_into().unwrap())
                 .unwrap(),
         );
+    }
+
+    #[test]
+    fn test_expand_let_syntax_to_num() {
+        let mut bindings = Bindings::new();
+        let mut env = HashMap::<Symbol, Transformer>::new();
+        let let_syntax_expr = sexpr!(
+            S(let-syntax),
+                ((S(one),
+                    (S(syntax-rules), (),
+                        ((S(_)), SExpr::new_num(1))))),
+                (S(one))
+        );
+        let result = expand(
+            &introduce(&let_syntax_expr.coerce_to_syntax()),
+            &mut bindings,
+            &mut env,
+        );
+        let expected = SExpr::new_num(1);
+        assert_eq!(result, expected);
+    }
+
+    #[test]
+    fn test_expand_let_syntax_via_or_macro() {
+        let mut bindings = Bindings::new();
+        let mut env = HashMap::<Symbol, Transformer>::new();
+        let let_syntax_expr = sexpr!(
+            S(let-syntax),
+                ((S(or),
+                    (S(syntax-rules), (),
+                    ((S(_)), SExpr::new_bool(false)),
+                    ((S(_), S(e)), S(e)),
+                    ((S(_), S(e1), S(e2), S(...)),
+                    ((S(lambda), (S(temp)),
+                        (S(if), S(temp), S(temp), (S(or), S(e2), S(...)))), S(e1)))))),
+                    ((S(lambda),
+                        (S(temp)),
+                        (S(or), SExpr::new_bool(false), S(temp))),
+                    SExpr::new_bool(true)),
+        );
+        let result = expand(
+            &introduce(&let_syntax_expr.coerce_to_syntax()),
+            &mut bindings,
+            &mut env,
+        );
+        #[rustfmt::skip]
+        let expected = sexpr!(
+            (
+                SExpr::new_id("lambda", [Bindings::CORE_SCOPE, 1]),
+                (SExpr::new_id("temp", [Bindings::CORE_SCOPE, 1, 2])),
+                (
+                    (
+                        SExpr::new_id("lambda", [Bindings::CORE_SCOPE, 1, 3]),
+                        (SExpr::new_id("temp", [Bindings::CORE_SCOPE, 1, 3, 4])),
+                        (
+                            SExpr::new_id("if", [Bindings::CORE_SCOPE, 1, 3, 4]),
+                            SExpr::new_id("temp", [Bindings::CORE_SCOPE, 1, 3, 4]),
+                            SExpr::new_id("temp", [Bindings::CORE_SCOPE, 1, 3, 4]),
+                            SExpr::new_id("temp", [Bindings::CORE_SCOPE, 1, 2, 4])
+                        )
+                    ),
+                    SExpr::new_bool(false)
+                )
+            ),
+            SExpr::new_bool(true)
+        );
+        assert_eq!(result, expected);
     }
 }
