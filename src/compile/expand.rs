@@ -43,7 +43,7 @@ fn expand_id_application(sexpr: &SExpr, bindings: &mut Bindings, env: &mut Env) 
 
     match binding.0.as_str() {
         "quote" | "quote-syntax" => sexpr.clone(),
-        "let-syntax" => expand_let_syntax(sexpr, bindings, env),
+        "letrec-syntax" => expand_letrec_syntax(sexpr, bindings, env),
         "lambda" => expand_lambda(sexpr, bindings, env),
         _ => {
             if let Some(transformer) = env.get(&binding) {
@@ -81,8 +81,8 @@ fn expand_lambda(sexpr: &SExpr, bindings: &mut Bindings, env: &mut Env) -> SExpr
     unreachable!("Invalid use of lambda form: {}", sexpr);
 }
 
-fn expand_let_syntax(sexpr: &SExpr, bindings: &mut Bindings, env: &mut Env) -> SExpr {
-    match_sexpr! {(#"let-syntax", ((keyword, transformer_spec)), body) = sexpr =>
+fn expand_letrec_syntax(sexpr: &SExpr, bindings: &mut Bindings, env: &mut Env) -> SExpr {
+    match_sexpr! {(#"letrec-syntax", ((keyword, transformer_spec)), body) = sexpr =>
         let scope_id = bindings.new_scope_id();
         let keyword = keyword.add_scope(scope_id);
 
@@ -546,7 +546,7 @@ mod tests {
         let mut bindings = Bindings::new();
         let mut env = HashMap::<Symbol, Transformer>::new();
         let let_syntax_expr = sexpr!(
-            #"let-syntax",
+            #"letrec-syntax",
                 ((#"one",
                     (#"syntax-rules", (),
                         ((#"_"), SExpr::new_num(1))))),
@@ -566,7 +566,7 @@ mod tests {
         let mut bindings = Bindings::new();
         let mut env = HashMap::<Symbol, Transformer>::new();
         let let_syntax_expr = sexpr!(
-            #"let-syntax",
+            #"letrec-syntax",
                 ((#"or",
                     (#"syntax-rules", (),
                     ((#"_"), SExpr::new_bool(false)),

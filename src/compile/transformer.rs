@@ -10,7 +10,7 @@ use super::syntax::{Id, SExpr, Symbol};
 // before evaluating the transformer. But it does not concern itself with the transformer spec
 // capturing a free reference. I.e.
 // (let ((x 1))
-//   (let-syntax
+//   (letrec-syntax
 //       ((make-thing
 //         (syntax-rules ()
 //           ((_) x))))
@@ -28,7 +28,7 @@ use super::syntax::{Id, SExpr, Symbol};
 // So the tranformation look something like so:
 //
 // (let ((x 1))
-//   (let-syntax
+//   (letrec-syntax
 //       ((make-thing
 //         (syntax-rules ()
 //           ((_) x))))
@@ -37,7 +37,7 @@ use super::syntax::{Id, SExpr, Symbol};
 //
 // Add scopes:
 // (let (({x: 1} 1))
-//   (let-syntax
+//   (letrec-syntax
 //       ((make-thing
 //         (syntax-rules ()
 //           (({_:1, 2}) {x: 1, 2}))))
@@ -46,7 +46,7 @@ use super::syntax::{Id, SExpr, Symbol};
 //
 // Evaluate the transformer:
 // (let (({x: 1} 1))
-//   (let-syntax
+//   (letrec-syntax
 //       ((make-thing
 //         (syntax-rules ()
 //           (({_:1, 2}) {x: 1, 2}))))
@@ -55,7 +55,7 @@ use super::syntax::{Id, SExpr, Symbol};
 //
 // I guess one thing I am not sure if this can work is whether we will ever run into a case like:
 // (let (({x: 1} 1))
-//   (let-syntax
+//   (letrec-syntax
 //       ((make-thing
 //         (syntax-rules ()
 //           (({x:1, 3}) {x: 1, 2, 3, 4}))))
@@ -69,11 +69,11 @@ use super::syntax::{Id, SExpr, Symbol};
 // Hmmm, I manage to create some examples here:
 // (define x 1)
 //
-// (let-syntax
+// (letrec-syntax
 //     ((just-x
 //       (syntax-rules ()
 //         ((_) x))))
-//   (let-syntax
+//   (letrec-syntax
 //       ((make-thing
 //         (syntax-rules ()
 //           ((_ y) (just-x)))))
@@ -83,11 +83,11 @@ use super::syntax::{Id, SExpr, Symbol};
 //
 // (define x 1)
 //
-// (let-syntax
+// (letrec-syntax
 //     ((just-x
 //       (syntax-rules ()
 //         ((_) {x: 1}))))
-//   (let-syntax
+//   (letrec-syntax
 //       ((quote-thing
 //         (syntax-rules ()
 //           ((_ x) (just-x)))))
@@ -98,18 +98,18 @@ use super::syntax::{Id, SExpr, Symbol};
 // ==> {x: 1}
 //
 //
-// (let-syntax
+// (letrec-syntax
 //     ((outer
 //       (syntax-rules ()
 //         ((_ {x: 1, 2})
-//          (let-syntax
+//          (letrec-syntax
 //              ((quote-thing
 //                (syntax-rules ()
 //                  ((_) {x: 1, 2, 3}))))
 //            (quote-thing))))))
 //     (outer 10))
 // ==> (outer 10)
-// ==> (let-syntax
+// ==> (letrec-syntax
 //         ((quote-thing
 //           (syntax-rules ()
 //             ((_) x))))

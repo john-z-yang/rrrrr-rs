@@ -20,7 +20,7 @@ impl Bindings {
             gen_sym_counter: 0,
         };
         for symbol in [
-            "let-syntax",
+            "letrec-syntax",
             "if",
             "lambda",
             "list",
