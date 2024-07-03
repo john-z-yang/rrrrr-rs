@@ -65,6 +65,8 @@ use super::sexpr::{Id, SExpr, Symbol};
 // Where {x: 1, 2, 4} is the result of expanding another macro (i.e. the original macro captures
 // 1 and 2, we assign 4 during expansion).
 // If the substitution is valid, then we must lower the input of the transformer into gensyms.
+// Although I don't think this is possible because it doesn't seem to be a way to evaluate inside
+// the syntax rule and are equavlent to a quote-syntax of some sort.
 //
 // Hmmm, I manage to create some examples here:
 // (define x 1)
