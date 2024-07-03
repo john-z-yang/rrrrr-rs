@@ -2,7 +2,7 @@ use std::collections::HashMap;
 
 use super::{
     bindings::Bindings,
-    syntax::{Id, SExpr, Symbol},
+    sexpr::{Id, SExpr, Symbol},
     transformer::Transformer,
     util::{first, map},
 };

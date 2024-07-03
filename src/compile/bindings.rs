@@ -1,4 +1,4 @@
-use super::syntax::{Id, Symbol};
+use super::sexpr::{Id, Symbol};
 use std::collections::{BTreeSet, HashMap};
 
 pub type ScopeId = u64;

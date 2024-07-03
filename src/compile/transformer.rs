@@ -2,7 +2,7 @@ use std::collections::{HashMap, HashSet};
 
 use crate::{compile::util::for_each, match_sexpr};
 
-use super::syntax::{Id, SExpr, Symbol};
+use super::sexpr::{Id, SExpr, Symbol};
 
 // TODO:
 //
