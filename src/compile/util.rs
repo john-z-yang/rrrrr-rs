@@ -8,6 +8,9 @@ macro_rules! sexpr {
     (..$expr:expr) => {
         $expr
     };
+    (..#$symbol:literal) => {
+        $crate::compile::syntax::SExpr::new_symbol($symbol)
+    };
     (($($inner:tt)*) $(, $($rest:tt)*)?) => {
         $crate::compile::syntax::SExpr::new_cons(
             sexpr!($($inner)*),
