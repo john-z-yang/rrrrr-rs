@@ -3,7 +3,7 @@ use std::fmt;
 
 use super::bindings::{ScopeId, Scopes};
 
-#[derive(Debug, PartialEq, Clone)]
+#[derive(PartialEq, Clone)]
 pub enum SExpr {
     Id(Id),
     Cons(Cons),
@@ -13,13 +13,13 @@ pub enum SExpr {
     Num(Num),
 }
 
-#[derive(Debug, PartialEq, Clone, Eq, Hash)]
+#[derive(PartialEq, Clone, Eq, Hash)]
 pub struct Id {
     pub symbol: Symbol,
     pub scopes: Scopes,
 }
 
-#[derive(Debug, PartialEq, Clone)]
+#[derive(PartialEq, Clone)]
 pub struct Cons {
     pub car: Box<SExpr>,
     pub cdr: Box<SExpr>,
@@ -33,31 +33,6 @@ pub struct Bool(bool);
 
 #[derive(Debug, PartialEq, Clone)]
 pub struct Num(u32);
-
-impl fmt::Display for SExpr {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        match self {
-            SExpr::Id(id) => {
-                write!(f, "{}", id)
-            }
-            SExpr::Cons(cons) => {
-                write!(f, "{}", cons)
-            }
-            SExpr::Symbol(symbol) => {
-                write!(f, "{}", symbol)
-            }
-            SExpr::Nil => {
-                write!(f, "Nil")
-            }
-            SExpr::Bool(bool) => {
-                write!(f, "{}", bool)
-            }
-            SExpr::Num(num) => {
-                write!(f, "{}", num)
-            }
-        }
-    }
-}
 
 impl Id {
     pub fn new<const N: usize>(symbol: &str, scopes: [ScopeId; N]) -> Self {
@@ -76,7 +51,7 @@ impl Cons {
         }
     }
 
-    fn fmt_list(&self, f: &mut fmt::Formatter) -> fmt::Result {
+    fn fmt_disp(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "{}", self.car)?;
         match self.cdr.as_ref() {
             SExpr::Nil => {
@@ -84,7 +59,23 @@ impl Cons {
             }
             SExpr::Cons(cons) => {
                 write!(f, " ")?;
-                cons.fmt_list(f)
+                cons.fmt_disp(f)
+            }
+            other => {
+                write!(f, ". {})", other)
+            }
+        }
+    }
+
+    fn fmt_dbg(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "{:?}", self.car)?;
+        match self.cdr.as_ref() {
+            SExpr::Nil => {
+                write!(f, ")")
+            }
+            SExpr::Cons(cons) => {
+                write!(f, " ")?;
+                cons.fmt_dbg(f)
             }
             other => {
                 write!(f, ". {})", other)
@@ -99,6 +90,73 @@ impl Symbol {
     }
 }
 
+impl fmt::Debug for SExpr {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            SExpr::Id(id) => {
+                write!(f, "{:?}", id)
+            }
+            SExpr::Cons(cons) => {
+                write!(f, "{:?}", cons)
+            }
+            SExpr::Symbol(symbol) => {
+                write!(f, "{:?}", symbol)
+            }
+            SExpr::Nil => {
+                write!(f, "()")
+            }
+            SExpr::Bool(bool) => {
+                write!(f, "{:?}", bool)
+            }
+            SExpr::Num(num) => {
+                write!(f, "{:?}", num)
+            }
+        }
+    }
+}
+
+impl fmt::Debug for Id {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(
+            f,
+            "Id {{ symbol: {}, scopes: {:?} }}",
+            self.symbol, self.scopes
+        )
+    }
+}
+
+impl fmt::Debug for Cons {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "(")?;
+        self.fmt_dbg(f)
+    }
+}
+
+impl fmt::Display for SExpr {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            SExpr::Id(id) => {
+                write!(f, "{}", id)
+            }
+            SExpr::Cons(cons) => {
+                write!(f, "{}", cons)
+            }
+            SExpr::Symbol(symbol) => {
+                write!(f, "{}", symbol)
+            }
+            SExpr::Nil => {
+                write!(f, "()")
+            }
+            SExpr::Bool(bool) => {
+                write!(f, "{}", bool)
+            }
+            SExpr::Num(num) => {
+                write!(f, "{}", num)
+            }
+        }
+    }
+}
+
 impl fmt::Display for Id {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "{}", self.symbol)
@@ -108,7 +166,7 @@ impl fmt::Display for Id {
 impl fmt::Display for Cons {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "(")?;
-        self.fmt_list(f)
+        self.fmt_disp(f)
     }
 }
 
