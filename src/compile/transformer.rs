@@ -179,7 +179,7 @@ impl SyntaxRule {
             SExpr::Id(pattern) => bindings.get(pattern).unwrap_or(template).clone(),
             SExpr::Cons(pattern) => match pattern.car.as_ref() {
                 SExpr::Id(id) if id.symbol.0 == "..." => bindings.get(id).unwrap().clone(),
-                _ => SExpr::new_cons(
+                _ => SExpr::cons(
                     Self::_render_template(&pattern.car, bindings),
                     Self::_render_template(&pattern.cdr, bindings),
                 ),
@@ -241,12 +241,12 @@ mod tests {
         let transformer = Transformer::new(&introduce(&sexpr!(
             #"syntax-rules",
             (),
-            ((#"_"), SExpr::new_bool(false))
+            ((#"_"), SExpr::bool(false))
         )));
 
         assert_eq!(
             transformer.transform(&introduce(&sexpr!(#"and"))).unwrap(),
-            SExpr::new_bool(false)
+            SExpr::bool(false)
         );
 
         let transformer = Transformer::new(&introduce(&sexpr!(
@@ -259,7 +259,7 @@ mod tests {
             transformer
                 .transform(&introduce(&sexpr!(#"and", #"x")))
                 .unwrap(),
-            introduce(&SExpr::new_symbol("x"))
+            introduce(&SExpr::symbol("x"))
         );
     }
 
@@ -271,26 +271,26 @@ mod tests {
             ((#"_", #"e1", #"e2", #"..."),
              (#"if", #"e1",
                      (#"and", #"e2", #"..."),
-                     SExpr::new_bool(false)))
+                     SExpr::bool(false)))
         )));
 
         assert_eq!(
             transformer
                 .transform(&introduce(&sexpr!(#"and", #"a", #"b")))
                 .unwrap(),
-            introduce(&sexpr!(#"if", #"a", (#"and", #"b"), SExpr::new_bool(false)))
+            introduce(&sexpr!(#"if", #"a", (#"and", #"b"), SExpr::bool(false)))
         );
         assert_eq!(
             transformer
                 .transform(&introduce(&sexpr!(#"and", #"a", #"b", #"c")))
                 .unwrap(),
-            introduce(&sexpr!(#"if", #"a", (#"and", #"b", #"c"), SExpr::new_bool(false)))
+            introduce(&sexpr!(#"if", #"a", (#"and", #"b", #"c"), SExpr::bool(false)))
         );
         assert_eq!(
             transformer
                 .transform(&introduce(&sexpr!(#"and", #"a", #"b", #"c", #"d")))
                 .unwrap(),
-            introduce(&sexpr!(#"if", #"a", (#"and", #"b", #"c", #"d"), SExpr::new_bool(false)))
+            introduce(&sexpr!(#"if", #"a", (#"and", #"b", #"c", #"d"), SExpr::bool(false)))
         );
     }
 
@@ -299,40 +299,40 @@ mod tests {
         let transformer = Transformer::new(&introduce(&sexpr!(
             #"syntax-rules",
             (),
-            ((#"_"), SExpr::new_bool(false)),
+            ((#"_"), SExpr::bool(false)),
             ((#"_", #"e"), #"e"),
             ((#"_", #"e1", #"e2", #"..."),
              (#"if", #"e1",
                      (#"and", #"e2", #"..."),
-                     SExpr::new_bool(false))),
+                     SExpr::bool(false))),
         )));
         assert_eq!(
             transformer.transform(&introduce(&sexpr!(#"and"))).unwrap(),
-            SExpr::new_bool(false)
+            SExpr::bool(false)
         );
         assert_eq!(
             transformer
                 .transform(&introduce(&sexpr!(#"and", #"a")))
                 .unwrap(),
-            introduce(&SExpr::new_symbol("a"))
+            introduce(&SExpr::symbol("a"))
         );
         assert_eq!(
             transformer
                 .transform(&introduce(&sexpr!(#"and", #"a", #"b")))
                 .unwrap(),
-            introduce(&sexpr!(#"if", #"a", (#"and", #"b"), SExpr::new_bool(false)))
+            introduce(&sexpr!(#"if", #"a", (#"and", #"b"), SExpr::bool(false)))
         );
         assert_eq!(
             transformer
                 .transform(&introduce(&sexpr!(#"and", #"a", #"b", #"c")))
                 .unwrap(),
-            introduce(&sexpr!(#"if", #"a", (#"and", #"b", #"c"), SExpr::new_bool(false)))
+            introduce(&sexpr!(#"if", #"a", (#"and", #"b", #"c"), SExpr::bool(false)))
         );
         assert_eq!(
             transformer
                 .transform(&introduce(&sexpr!(#"and", #"a", #"b", #"c", #"d")))
                 .unwrap(),
-            introduce(&sexpr!(#"if", #"a", (#"and", #"b", #"c", #"d"), SExpr::new_bool(false)))
+            introduce(&sexpr!(#"if", #"a", (#"and", #"b", #"c", #"d"), SExpr::bool(false)))
         );
     }
 }

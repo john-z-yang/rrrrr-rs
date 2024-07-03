@@ -9,22 +9,22 @@ macro_rules! sexpr {
         $expr
     };
     (..#$symbol:literal) => {
-        $crate::compile::sexpr::SExpr::new_symbol($symbol)
+        $crate::compile::sexpr::SExpr::symbol($symbol)
     };
     (($($inner:tt)*) $(, $($rest:tt)*)?) => {
-        $crate::compile::sexpr::SExpr::new_cons(
+        $crate::compile::sexpr::SExpr::cons(
             sexpr!($($inner)*),
             sexpr!($($($rest)*)?)
         )
     };
     (#$symbol:literal $(, $($rest:tt)*)?) => {{
-        $crate::compile::sexpr::SExpr::new_cons(
-            $crate::compile::sexpr::SExpr::new_symbol($symbol),
+        $crate::compile::sexpr::SExpr::cons(
+            $crate::compile::sexpr::SExpr::symbol($symbol),
             sexpr!($($($rest)*)?)
         )
     }};
     ($first:expr $(, $($rest:tt)*)?) => {
-        $crate::compile::sexpr::SExpr::new_cons($first, sexpr!($($($rest)*)?))
+        $crate::compile::sexpr::SExpr::cons($first, sexpr!($($($rest)*)?))
     };
 }
 
@@ -166,7 +166,7 @@ where
 {
     match sexpr {
         SExpr::Nil => SExpr::Nil,
-        SExpr::Cons(cons) => SExpr::new_cons(op(&cons.car), map(op, &cons.cdr)),
+        SExpr::Cons(cons) => SExpr::cons(op(&cons.car), map(op, &cons.cdr)),
         _ => op(sexpr),
     }
 }

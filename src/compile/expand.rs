@@ -115,17 +115,13 @@ mod tests {
 
     #[test]
     fn test_introduce() {
-        let list = sexpr!(
-            SExpr::new_symbol("cons"),
-            SExpr::new_num(0),
-            SExpr::new_num(1)
-        );
+        let list = sexpr!(SExpr::symbol("cons"), SExpr::num(0), SExpr::num(1));
         assert_eq!(
             introduce(&list),
             sexpr!(
-                SExpr::new_id("cons", [Bindings::CORE_SCOPE]),
-                SExpr::new_num(0),
-                SExpr::new_num(1),
+                SExpr::id("cons", [Bindings::CORE_SCOPE]),
+                SExpr::num(0),
+                SExpr::num(1),
             )
         );
     }
@@ -141,15 +137,15 @@ mod tests {
             &mut env,
         );
         let right = sexpr!(
-            SExpr::new_id("lambda", [Bindings::CORE_SCOPE]),
+            SExpr::id("lambda", [Bindings::CORE_SCOPE]),
             (
-                SExpr::new_id("x", [Bindings::CORE_SCOPE, 1]),
-                SExpr::new_id("y", [Bindings::CORE_SCOPE, 1]),
+                SExpr::id("x", [Bindings::CORE_SCOPE, 1]),
+                SExpr::id("y", [Bindings::CORE_SCOPE, 1]),
             ),
             (
-                SExpr::new_id("cons", [Bindings::CORE_SCOPE, 1]),
-                SExpr::new_id("x", [Bindings::CORE_SCOPE, 1]),
-                SExpr::new_id("y", [Bindings::CORE_SCOPE, 1]),
+                SExpr::id("cons", [Bindings::CORE_SCOPE, 1]),
+                SExpr::id("x", [Bindings::CORE_SCOPE, 1]),
+                SExpr::id("y", [Bindings::CORE_SCOPE, 1]),
             ),
         );
         assert_eq!(left, right);
@@ -171,21 +167,21 @@ mod tests {
             &mut env,
         );
         let expected = sexpr!(
-            SExpr::new_id("lambda", [Bindings::CORE_SCOPE]),
-            (SExpr::new_id("x", [Bindings::CORE_SCOPE, 1])),
+            SExpr::id("lambda", [Bindings::CORE_SCOPE]),
+            (SExpr::id("x", [Bindings::CORE_SCOPE, 1])),
             (
-                SExpr::new_id("lambda", [Bindings::CORE_SCOPE, 1]),
-                (SExpr::new_id("y", [Bindings::CORE_SCOPE, 1, 2])),
+                SExpr::id("lambda", [Bindings::CORE_SCOPE, 1]),
+                (SExpr::id("y", [Bindings::CORE_SCOPE, 1, 2])),
                 (
-                    SExpr::new_id("cons", [Bindings::CORE_SCOPE, 1, 2]),
-                    SExpr::new_id("x", [Bindings::CORE_SCOPE, 1, 2]),
-                    SExpr::new_id("y", [Bindings::CORE_SCOPE, 1, 2]),
+                    SExpr::id("cons", [Bindings::CORE_SCOPE, 1, 2]),
+                    SExpr::id("x", [Bindings::CORE_SCOPE, 1, 2]),
+                    SExpr::id("y", [Bindings::CORE_SCOPE, 1, 2]),
                 )
             ),
             (
-                SExpr::new_id("cons", [Bindings::CORE_SCOPE, 1]),
-                SExpr::new_id("x", [Bindings::CORE_SCOPE, 1]),
-                SExpr::new_id("x", [Bindings::CORE_SCOPE, 1]),
+                SExpr::id("cons", [Bindings::CORE_SCOPE, 1]),
+                SExpr::id("x", [Bindings::CORE_SCOPE, 1]),
+                SExpr::id("x", [Bindings::CORE_SCOPE, 1]),
             ),
         );
         assert_eq!(result, expected);
@@ -195,14 +191,14 @@ mod tests {
     fn test_expand_atoms() {
         let mut bindings = Bindings::new();
         let mut env = HashMap::<Symbol, Transformer>::new();
-        let lambda_expr = sexpr!(SExpr::new_bool(false));
+        let lambda_expr = sexpr!(SExpr::bool(false));
         assert_eq!(
             expand(
                 &introduce(&lambda_expr.coerce_to_syntax()),
                 &mut bindings,
                 &mut env
             ),
-            sexpr!(SExpr::new_bool(false))
+            sexpr!(SExpr::bool(false))
         );
     }
 
@@ -215,12 +211,12 @@ mod tests {
         let transformer = Transformer::new(&introduce(&sexpr!(
             #"syntax-rules",
             (),
-            ((#"_"), SExpr::new_bool(false)),
+            ((#"_"), SExpr::bool(false)),
             ((#"_", #"e"), #"e"),
             ((#"_", #"e1", #"e2", #"..."),
              (#"if", #"e1",
                      (#"and", #"e2", #"..."),
-                     SExpr::new_bool(false))),
+                     SExpr::bool(false))),
         )));
 
         let mut env = HashMap::from([(
@@ -236,7 +232,7 @@ mod tests {
             &mut bindings,
             &mut env,
         );
-        let expected = SExpr::new_bool(false);
+        let expected = SExpr::bool(false);
         assert_eq!(result, expected);
     }
 
@@ -249,12 +245,12 @@ mod tests {
         let transformer = Transformer::new(&introduce(&sexpr!(
             #"syntax-rules",
             (),
-            ((#"_"), SExpr::new_bool(false)),
+            ((#"_"), SExpr::bool(false)),
             ((#"_", #"e"), #"e"),
             ((#"_", #"e1", #"e2", #"..."),
              (#"if", #"e1",
                      (#"and", #"e2", #"..."),
-                     SExpr::new_bool(false))),
+                     SExpr::bool(false))),
         )));
 
         let mut env = HashMap::from([(
@@ -266,7 +262,7 @@ mod tests {
 
         let sexpr = introduce(&sexpr!(#"and", #"list"));
         let result = expand(&introduce(&sexpr), &mut bindings, &mut env);
-        let expected = SExpr::new_id("list", [Bindings::CORE_SCOPE]);
+        let expected = SExpr::id("list", [Bindings::CORE_SCOPE]);
         assert_eq!(result, expected);
     }
 
@@ -279,12 +275,12 @@ mod tests {
         let transformer = Transformer::new(&introduce(&sexpr!(
             #"syntax-rules",
             (),
-            ((#"_"), SExpr::new_bool(false)),
+            ((#"_"), SExpr::bool(false)),
             ((#"_", #"e"), #"e"),
             ((#"_", #"e1", #"e2", #"..."),
              (#"if", #"e1",
                      (#"and", #"e2", #"..."),
-                     SExpr::new_bool(false))),
+                     SExpr::bool(false))),
         )));
 
         let mut env = HashMap::from([(
@@ -297,10 +293,10 @@ mod tests {
         let sexpr = sexpr!(#"and", #"list", #"list");
         let result = expand(&introduce(&sexpr), &mut bindings, &mut env);
         let expected = sexpr!(
-            SExpr::new_id("if", [Bindings::CORE_SCOPE, 1]),
-            SExpr::new_id("list", [Bindings::CORE_SCOPE]),
-            SExpr::new_id("list", [Bindings::CORE_SCOPE]),
-            SExpr::new_bool(false),
+            SExpr::id("if", [Bindings::CORE_SCOPE, 1]),
+            SExpr::id("list", [Bindings::CORE_SCOPE]),
+            SExpr::id("list", [Bindings::CORE_SCOPE]),
+            SExpr::bool(false),
         );
         assert_eq!(result, expected);
     }
@@ -314,12 +310,12 @@ mod tests {
         let transformer = Transformer::new(&introduce(&sexpr!(
             #"syntax-rules",
             (),
-            ((#"_"), SExpr::new_bool(false)),
+            ((#"_"), SExpr::bool(false)),
             ((#"_", #"e"), #"e"),
             ((#"_", #"e1", #"e2", #"..."),
              (#"if", #"e1",
                      (#"and", #"e2", #"..."),
-                     SExpr::new_bool(false))),
+                     SExpr::bool(false))),
         )));
 
         let mut env = HashMap::from([(
@@ -331,10 +327,10 @@ mod tests {
 
         let sexpr = sexpr!(
             #"and",
-            SExpr::new_bool(true),
-            SExpr::new_bool(true),
-            SExpr::new_bool(true),
-            SExpr::new_bool(true),
+            SExpr::bool(true),
+            SExpr::bool(true),
+            SExpr::bool(true),
+            SExpr::bool(true),
         );
         // (and t t t t)
         // (if t (and t t t) f)
@@ -343,20 +339,20 @@ mod tests {
         // (if t (if t (if t t f) f) f) f)
         let result = expand(&introduce(&sexpr), &mut bindings, &mut env);
         let expected = sexpr!(
-            SExpr::new_id("if", [Bindings::CORE_SCOPE, 1]),
-            SExpr::new_bool(true),
+            SExpr::id("if", [Bindings::CORE_SCOPE, 1]),
+            SExpr::bool(true),
             (
-                SExpr::new_id("if", [Bindings::CORE_SCOPE, 2]),
-                SExpr::new_bool(true),
+                SExpr::id("if", [Bindings::CORE_SCOPE, 2]),
+                SExpr::bool(true),
                 (
-                    SExpr::new_id("if", [Bindings::CORE_SCOPE, 3]),
-                    SExpr::new_bool(true),
-                    SExpr::new_bool(true),
-                    SExpr::new_bool(false),
+                    SExpr::id("if", [Bindings::CORE_SCOPE, 3]),
+                    SExpr::bool(true),
+                    SExpr::bool(true),
+                    SExpr::bool(false),
                 ),
-                SExpr::new_bool(false),
+                SExpr::bool(false),
             ),
-            SExpr::new_bool(false),
+            SExpr::bool(false),
         );
         assert_eq!(result, expected);
         assert_eq!(
@@ -393,9 +389,9 @@ mod tests {
         let sexpr = sexpr!(#"my-macro", #"x");
         let result = expand(&introduce(&sexpr), &mut bindings, &mut env);
         let expected = sexpr!(
-            SExpr::new_id("lambda", [Bindings::CORE_SCOPE, 1]),
-            (SExpr::new_id("x", [Bindings::CORE_SCOPE, 1, 2])),
-            SExpr::new_id("x", [Bindings::CORE_SCOPE, 2]),
+            SExpr::id("lambda", [Bindings::CORE_SCOPE, 1]),
+            (SExpr::id("x", [Bindings::CORE_SCOPE, 1, 2])),
+            SExpr::id("x", [Bindings::CORE_SCOPE, 2]),
         );
         assert_eq!(result, expected);
         assert_ne!(
@@ -433,7 +429,7 @@ mod tests {
         let transformer = Transformer::new(&introduce(&sexpr!(
             #"syntax-rules",
             (),
-            ((#"_"), SExpr::new_bool(false)),
+            ((#"_"), SExpr::bool(false)),
             ((#"_", #"e"), #"e"),
             ((#"_", #"e1", #"e2", #"..."),
              ((#"lambda", (#"temp"),
@@ -451,31 +447,31 @@ mod tests {
             (
                 #"lambda",
                 (#"temp"),
-                (#"my-or", SExpr::new_bool(false), #"temp")
+                (#"my-or", SExpr::bool(false), #"temp")
             ),
-            SExpr::new_bool(true),
+            SExpr::bool(true),
         );
         let result = expand(&introduce(&sexpr), &mut bindings, &mut env);
 
         let expected = sexpr!(
             (
-                SExpr::new_id("lambda", [Bindings::CORE_SCOPE]),
-                (SExpr::new_id("temp", [Bindings::CORE_SCOPE, 1])),
+                SExpr::id("lambda", [Bindings::CORE_SCOPE]),
+                (SExpr::id("temp", [Bindings::CORE_SCOPE, 1])),
                 (
                     (
-                        SExpr::new_id("lambda", [Bindings::CORE_SCOPE, 2]),
-                        (SExpr::new_id("temp", [Bindings::CORE_SCOPE, 2, 3])),
+                        SExpr::id("lambda", [Bindings::CORE_SCOPE, 2]),
+                        (SExpr::id("temp", [Bindings::CORE_SCOPE, 2, 3])),
                         (
-                            SExpr::new_id("if", [Bindings::CORE_SCOPE, 2, 3]),
-                            SExpr::new_id("temp", [Bindings::CORE_SCOPE, 0, 2, 3]),
-                            SExpr::new_id("temp", [Bindings::CORE_SCOPE, 0, 2, 3]),
-                            SExpr::new_id("temp", [Bindings::CORE_SCOPE, 1, 3]),
+                            SExpr::id("if", [Bindings::CORE_SCOPE, 2, 3]),
+                            SExpr::id("temp", [Bindings::CORE_SCOPE, 0, 2, 3]),
+                            SExpr::id("temp", [Bindings::CORE_SCOPE, 0, 2, 3]),
+                            SExpr::id("temp", [Bindings::CORE_SCOPE, 1, 3]),
                         )
                     ),
-                    SExpr::new_bool(false)
+                    SExpr::bool(false)
                 )
             ),
-            SExpr::new_bool(true),
+            SExpr::bool(true),
         );
 
         assert_eq!(result, expected);
@@ -549,7 +545,7 @@ mod tests {
             #"letrec-syntax",
                 ((#"one",
                     (#"syntax-rules", (),
-                        ((#"_"), SExpr::new_num(1))))),
+                        ((#"_"), SExpr::num(1))))),
                 (#"one")
         );
         let result = expand(
@@ -557,7 +553,7 @@ mod tests {
             &mut bindings,
             &mut env,
         );
-        let expected = SExpr::new_num(1);
+        let expected = SExpr::num(1);
         assert_eq!(result, expected);
     }
 
@@ -569,15 +565,15 @@ mod tests {
             #"letrec-syntax",
                 ((#"or",
                     (#"syntax-rules", (),
-                    ((#"_"), SExpr::new_bool(false)),
+                    ((#"_"), SExpr::bool(false)),
                     ((#"_", #"e"), #"e"),
                     ((#"_", #"e1", #"e2", #"..."),
                     ((#"lambda", (#"temp"),
                         (#"if", #"temp", #"temp", (#"or", #"e2", #"..."))), #"e1"))))),
                     ((#"lambda",
                         (#"temp"),
-                        (#"or", SExpr::new_bool(false), #"temp")),
-                    SExpr::new_bool(true)),
+                        (#"or", SExpr::bool(false), #"temp")),
+                    SExpr::bool(true)),
         );
         let result = expand(
             &introduce(&let_syntax_expr.coerce_to_syntax()),
@@ -586,23 +582,23 @@ mod tests {
         );
         let expected = sexpr!(
             (
-                SExpr::new_id("lambda", [Bindings::CORE_SCOPE, 1]),
-                (SExpr::new_id("temp", [Bindings::CORE_SCOPE, 1, 2])),
+                SExpr::id("lambda", [Bindings::CORE_SCOPE, 1]),
+                (SExpr::id("temp", [Bindings::CORE_SCOPE, 1, 2])),
                 (
                     (
-                        SExpr::new_id("lambda", [Bindings::CORE_SCOPE, 1, 3]),
-                        (SExpr::new_id("temp", [Bindings::CORE_SCOPE, 1, 3, 4])),
+                        SExpr::id("lambda", [Bindings::CORE_SCOPE, 1, 3]),
+                        (SExpr::id("temp", [Bindings::CORE_SCOPE, 1, 3, 4])),
                         (
-                            SExpr::new_id("if", [Bindings::CORE_SCOPE, 1, 3, 4]),
-                            SExpr::new_id("temp", [Bindings::CORE_SCOPE, 1, 3, 4]),
-                            SExpr::new_id("temp", [Bindings::CORE_SCOPE, 1, 3, 4]),
-                            SExpr::new_id("temp", [Bindings::CORE_SCOPE, 1, 2, 4])
+                            SExpr::id("if", [Bindings::CORE_SCOPE, 1, 3, 4]),
+                            SExpr::id("temp", [Bindings::CORE_SCOPE, 1, 3, 4]),
+                            SExpr::id("temp", [Bindings::CORE_SCOPE, 1, 3, 4]),
+                            SExpr::id("temp", [Bindings::CORE_SCOPE, 1, 2, 4])
                         )
                     ),
-                    SExpr::new_bool(false)
+                    SExpr::bool(false)
                 ),
             ),
-            SExpr::new_bool(true),
+            SExpr::bool(true),
         );
         assert_eq!(result, expected);
 
