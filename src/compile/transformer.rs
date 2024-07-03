@@ -240,26 +240,26 @@ mod tests {
     fn test_and_transformer_base_case() {
         #[rustfmt::skip]
         let transformer = Transformer::new(&introduce(&sexpr!(
-            S(syntax-rules),
+            #"syntax-rules",
             (),
-            ((S(_)), SExpr::new_bool(false))
+            ((#"_"), SExpr::new_bool(false))
         )));
 
         assert_eq!(
-            transformer.transform(&introduce(&sexpr!(S(and)))).unwrap(),
+            transformer.transform(&introduce(&sexpr!(#"and"))).unwrap(),
             SExpr::new_bool(false)
         );
 
         #[rustfmt::skip]
         let transformer = Transformer::new(&introduce(&sexpr!(
-            S(syntax-rules),
+            #"syntax-rules",
             (),
-            ((S(_), S(e)), S(e))
+            ((#"_", #"e"), #"e")
         )));
 
         assert_eq!(
             transformer
-                .transform(&introduce(&sexpr!(S(and), S(x))))
+                .transform(&introduce(&sexpr!(#"and", #"x")))
                 .unwrap(),
             introduce(&SExpr::new_symbol("x"))
         );
@@ -269,31 +269,31 @@ mod tests {
     fn test_and_transformer_recursive_case() {
         #[rustfmt::skip]
         let transformer = Transformer::new(&introduce(&sexpr!(
-            S(syntax-rules),
+            #"syntax-rules",
             (),
-            ((S(_), S(e1), S(e2), S(...)),
-             (S(if), S(e1),
-                     (S(and), S(e2), S(...)),
+            ((#"_", #"e1", #"e2", #"..."),
+             (#"if", #"e1",
+                     (#"and", #"e2", #"..."),
                      SExpr::new_bool(false)))
         )));
 
         assert_eq!(
             transformer
-                .transform(&introduce(&sexpr!(S(and), S(a), S(b))))
+                .transform(&introduce(&sexpr!(#"and", #"a", #"b")))
                 .unwrap(),
-            introduce(&sexpr!(S(if), S(a), (S(and), S(b)), SExpr::new_bool(false)))
+            introduce(&sexpr!(#"if", #"a", (#"and", #"b"), SExpr::new_bool(false)))
         );
         assert_eq!(
             transformer
-                .transform(&introduce(&sexpr!(S(and), S(a), S(b), S(c))))
+                .transform(&introduce(&sexpr!(#"and", #"a", #"b", #"c")))
                 .unwrap(),
-            introduce(&sexpr!(S(if), S(a), (S(and), S(b), S(c)), SExpr::new_bool(false)))
+            introduce(&sexpr!(#"if", #"a", (#"and", #"b", #"c"), SExpr::new_bool(false)))
         );
         assert_eq!(
             transformer
-                .transform(&introduce(&sexpr!(S(and), S(a), S(b), S(c), S(d))))
+                .transform(&introduce(&sexpr!(#"and", #"a", #"b", #"c", #"d")))
                 .unwrap(),
-            introduce(&sexpr!(S(if), S(a), (S(and), S(b), S(c), S(d)), SExpr::new_bool(false)))
+            introduce(&sexpr!(#"if", #"a", (#"and", #"b", #"c", #"d"), SExpr::new_bool(false)))
         );
     }
 
@@ -301,42 +301,42 @@ mod tests {
     fn test_and_transformer() {
         #[rustfmt::skip]
         let transformer = Transformer::new(&introduce(&sexpr!(
-            S(syntax-rules),
+            #"syntax-rules",
             (),
-            ((S(_)), SExpr::new_bool(false)),
-            ((S(_), S(e)), S(e)),
-            ((S(_), S(e1), S(e2), S(...)),
-             (S(if), S(e1),
-                     (S(and), S(e2), S(...)),
+            ((#"_"), SExpr::new_bool(false)),
+            ((#"_", #"e"), #"e"),
+            ((#"_", #"e1", #"e2", #"..."),
+             (#"if", #"e1",
+                     (#"and", #"e2", #"..."),
                      SExpr::new_bool(false)))
         )));
         assert_eq!(
-            transformer.transform(&introduce(&sexpr!(S(and)))).unwrap(),
+            transformer.transform(&introduce(&sexpr!(#"and"))).unwrap(),
             SExpr::new_bool(false)
         );
         assert_eq!(
             transformer
-                .transform(&introduce(&sexpr!(S(and), S(a))))
+                .transform(&introduce(&sexpr!(#"and", #"a")))
                 .unwrap(),
             introduce(&SExpr::new_symbol("a"))
         );
         assert_eq!(
             transformer
-                .transform(&introduce(&sexpr!(S(and), S(a), S(b))))
+                .transform(&introduce(&sexpr!(#"and", #"a", #"b")))
                 .unwrap(),
-            introduce(&sexpr!(S(if), S(a), (S(and), S(b)), SExpr::new_bool(false)))
+            introduce(&sexpr!(#"if", #"a", (#"and", #"b"), SExpr::new_bool(false)))
         );
         assert_eq!(
             transformer
-                .transform(&introduce(&sexpr!(S(and), S(a), S(b), S(c))))
+                .transform(&introduce(&sexpr!(#"and", #"a", #"b", #"c")))
                 .unwrap(),
-            introduce(&sexpr!(S(if), S(a), (S(and), S(b), S(c)), SExpr::new_bool(false)))
+            introduce(&sexpr!(#"if", #"a", (#"and", #"b", #"c"), SExpr::new_bool(false)))
         );
         assert_eq!(
             transformer
-                .transform(&introduce(&sexpr!(S(and), S(a), S(b), S(c), S(d))))
+                .transform(&introduce(&sexpr!(#"and", #"a", #"b", #"c", #"d")))
                 .unwrap(),
-            introduce(&sexpr!(S(if), S(a), (S(and), S(b), S(c), S(d)), SExpr::new_bool(false)))
+            introduce(&sexpr!(#"if", #"a", (#"and", #"b", #"c", #"d"), SExpr::new_bool(false)))
         );
     }
 }

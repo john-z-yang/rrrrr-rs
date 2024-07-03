@@ -2,7 +2,7 @@
 mod compile;
 
 fn main() {
-    let lambda_expr = sexpr!(S(lambda), (S(x), S(y)), (S(foo), S(x), S(y)));
+    let lambda_expr = sexpr!(#"lambda", (#"x", #"y"), (#"foo", #"x", #"y"));
 
     println!("created expression:\n  {}", lambda_expr);
 

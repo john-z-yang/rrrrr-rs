@@ -14,10 +14,9 @@ macro_rules! sexpr {
             sexpr!($($($rest)*)?)
         )
     };
-    (S($($symbol:tt)*) $(, $($rest:tt)*)?) => {{
-        let symbol = stringify!($($symbol)*).chars();
+    (#$symbol:literal $(, $($rest:tt)*)?) => {{
         $crate::compile::syntax::SExpr::new_cons(
-            $crate::compile::syntax::SExpr::new_symbol(symbol.as_str()),
+            $crate::compile::syntax::SExpr::new_symbol($symbol),
             sexpr!($($($rest)*)?)
         )
     }};

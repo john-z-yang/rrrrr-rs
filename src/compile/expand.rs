@@ -134,7 +134,7 @@ mod tests {
     fn test_expand_lambda() {
         let mut bindings = Bindings::new();
         let mut env = HashMap::<Symbol, Transformer>::new();
-        let lambda_expr = sexpr!(S(lambda), (S(x), S(y)), (S(cons), S(x), S(y)),);
+        let lambda_expr = sexpr!(#"lambda", (#"x", #"y"), (#"cons", #"x", #"y"),);
         let left = expand(
             &introduce(&lambda_expr.coerce_to_syntax()),
             &mut bindings,
@@ -160,10 +160,10 @@ mod tests {
         let mut bindings = Bindings::new();
         let mut env = HashMap::<Symbol, Transformer>::new();
         let lambda_expr = sexpr!(
-            S(lambda),
-            (S(x)),
-            (S(lambda), (S(y)), (S(cons), S(x), S(y))),
-            (S(cons), S(x), S(x))
+            #"lambda",
+            (#"x"),
+            (#"lambda", (#"y"), (#"cons", #"x", #"y")),
+            (#"cons", #"x", #"x")
         );
         let result = expand(
             &introduce(&lambda_expr.coerce_to_syntax()),
@@ -213,13 +213,13 @@ mod tests {
         bindings.add_binding(&Id::new("and", [Bindings::CORE_SCOPE]), &Symbol::new("and"));
 
         let transformer = Transformer::new(&introduce(&sexpr!(
-            S(syntax-rules),
+            #"syntax-rules",
             (),
-            ((S(_)), SExpr::new_bool(false)),
-            ((S(_), S(e)), S(e)),
-            ((S(_), S(e1), S(e2), S(...)),
-             (S(if), S(e1),
-                     (S(and), S(e2), S(...)),
+            ((#"_"), SExpr::new_bool(false)),
+            ((#"_", #"e"), #"e"),
+            ((#"_", #"e1", #"e2", #"..."),
+             (#"if", #"e1",
+                     (#"and", #"e2", #"..."),
                      SExpr::new_bool(false))),
         )));
 
@@ -230,7 +230,7 @@ mod tests {
             transformer,
         )]);
 
-        let sexpr = sexpr!(S(and));
+        let sexpr = sexpr!(#"and");
         let result = expand(
             &introduce(&sexpr.coerce_to_syntax()),
             &mut bindings,
@@ -247,13 +247,13 @@ mod tests {
         bindings.add_binding(&Id::new("and", [Bindings::CORE_SCOPE]), &Symbol::new("and"));
 
         let transformer = Transformer::new(&introduce(&sexpr!(
-            S(syntax-rules),
+            #"syntax-rules",
             (),
-            ((S(_)), SExpr::new_bool(false)),
-            ((S(_), S(e)), S(e)),
-            ((S(_), S(e1), S(e2), S(...)),
-             (S(if), S(e1),
-                     (S(and), S(e2), S(...)),
+            ((#"_"), SExpr::new_bool(false)),
+            ((#"_", #"e"), #"e"),
+            ((#"_", #"e1", #"e2", #"..."),
+             (#"if", #"e1",
+                     (#"and", #"e2", #"..."),
                      SExpr::new_bool(false))),
         )));
 
@@ -264,7 +264,7 @@ mod tests {
             transformer,
         )]);
 
-        let sexpr = introduce(&sexpr!(S(and), S(list)));
+        let sexpr = introduce(&sexpr!(#"and", #"list"));
         let result = expand(&introduce(&sexpr), &mut bindings, &mut env);
         let expected = SExpr::new_id("list", [Bindings::CORE_SCOPE]);
         assert_eq!(result, expected);
@@ -277,13 +277,13 @@ mod tests {
         bindings.add_binding(&Id::new("and", [Bindings::CORE_SCOPE]), &Symbol::new("and"));
 
         let transformer = Transformer::new(&introduce(&sexpr!(
-            S(syntax-rules),
+            #"syntax-rules",
             (),
-            ((S(_)), SExpr::new_bool(false)),
-            ((S(_), S(e)), S(e)),
-            ((S(_), S(e1), S(e2), S(...)),
-             (S(if), S(e1),
-                     (S(and), S(e2), S(...)),
+            ((#"_"), SExpr::new_bool(false)),
+            ((#"_", #"e"), #"e"),
+            ((#"_", #"e1", #"e2", #"..."),
+             (#"if", #"e1",
+                     (#"and", #"e2", #"..."),
                      SExpr::new_bool(false))),
         )));
 
@@ -294,7 +294,7 @@ mod tests {
             transformer,
         )]);
 
-        let sexpr = sexpr!(S(and), S(list), S(list));
+        let sexpr = sexpr!(#"and", #"list", #"list");
         let result = expand(&introduce(&sexpr), &mut bindings, &mut env);
         let expected = sexpr!(
             SExpr::new_id("if", [Bindings::CORE_SCOPE, 1]),
@@ -312,13 +312,13 @@ mod tests {
         bindings.add_binding(&Id::new("and", [Bindings::CORE_SCOPE]), &Symbol::new("and"));
 
         let transformer = Transformer::new(&introduce(&sexpr!(
-            S(syntax-rules),
+            #"syntax-rules",
             (),
-            ((S(_)), SExpr::new_bool(false)),
-            ((S(_), S(e)), S(e)),
-            ((S(_), S(e1), S(e2), S(...)),
-             (S(if), S(e1),
-                     (S(and), S(e2), S(...)),
+            ((#"_"), SExpr::new_bool(false)),
+            ((#"_", #"e"), #"e"),
+            ((#"_", #"e1", #"e2", #"..."),
+             (#"if", #"e1",
+                     (#"and", #"e2", #"..."),
                      SExpr::new_bool(false))),
         )));
 
@@ -330,7 +330,7 @@ mod tests {
         )]);
 
         let sexpr = sexpr!(
-            S(and),
+            #"and",
             SExpr::new_bool(true),
             SExpr::new_bool(true),
             SExpr::new_bool(true),
@@ -379,9 +379,9 @@ mod tests {
 
         #[rustfmt::skip]
         let transformer = Transformer::new(&introduce(&sexpr!(
-            S(syntax-rules),
+            #"syntax-rules",
             (),
-            ((S(_), S(body)), (S(lambda), (S(x)), S(body))),
+            ((#"_", #"body"), (#"lambda", (#"x"), #"body")),
         )));
 
         let mut env = HashMap::from([(
@@ -391,7 +391,7 @@ mod tests {
             transformer,
         )]);
 
-        let sexpr = sexpr!(S(my-macro), S(x));
+        let sexpr = sexpr!(#"my-macro", #"x");
         let result = expand(&introduce(&sexpr), &mut bindings, &mut env);
         let expected = sexpr!(
             SExpr::new_id("lambda", [Bindings::CORE_SCOPE, 1]),
@@ -432,13 +432,13 @@ mod tests {
         );
 
         let transformer = Transformer::new(&introduce(&sexpr!(
-            S(syntax-rules),
+            #"syntax-rules",
             (),
-            ((S(_)), SExpr::new_bool(false)),
-            ((S(_), S(e)), S(e)),
-            ((S(_), S(e1), S(e2), S(...)),
-             ((S(lambda), (S(temp)),
-                (S(if), S(temp), S(temp), (S(my-or), S(e2), S(...)))), S(e1)),
+            ((#"_"), SExpr::new_bool(false)),
+            ((#"_", #"e"), #"e"),
+            ((#"_", #"e1", #"e2", #"..."),
+             ((#"lambda", (#"temp"),
+                (#"if", #"temp", #"temp", (#"my-or", #"e2", #"..."))), #"e1"),
         ))));
 
         let mut env = HashMap::from([(
@@ -451,9 +451,9 @@ mod tests {
         #[rustfmt::skip]
         let sexpr = sexpr!(
             (
-                S(lambda),
-                (S(temp)),
-                (S(my-or), SExpr::new_bool(false), S(temp))
+                #"lambda",
+                (#"temp"),
+                (#"my-or", SExpr::new_bool(false), #"temp")
             ),
             SExpr::new_bool(true),
         );
@@ -548,11 +548,11 @@ mod tests {
         let mut bindings = Bindings::new();
         let mut env = HashMap::<Symbol, Transformer>::new();
         let let_syntax_expr = sexpr!(
-            S(let-syntax),
-                ((S(one),
-                    (S(syntax-rules), (),
-                        ((S(_)), SExpr::new_num(1))))),
-                (S(one))
+            #"let-syntax",
+                ((#"one",
+                    (#"syntax-rules", (),
+                        ((#"_"), SExpr::new_num(1))))),
+                (#"one")
         );
         let result = expand(
             &introduce(&let_syntax_expr.coerce_to_syntax()),
@@ -568,17 +568,17 @@ mod tests {
         let mut bindings = Bindings::new();
         let mut env = HashMap::<Symbol, Transformer>::new();
         let let_syntax_expr = sexpr!(
-            S(let-syntax),
-                ((S(or),
-                    (S(syntax-rules), (),
-                    ((S(_)), SExpr::new_bool(false)),
-                    ((S(_), S(e)), S(e)),
-                    ((S(_), S(e1), S(e2), S(...)),
-                    ((S(lambda), (S(temp)),
-                        (S(if), S(temp), S(temp), (S(or), S(e2), S(...)))), S(e1)))))),
-                    ((S(lambda),
-                        (S(temp)),
-                        (S(or), SExpr::new_bool(false), S(temp))),
+            #"let-syntax",
+                ((#"or",
+                    (#"syntax-rules", (),
+                    ((#"_"), SExpr::new_bool(false)),
+                    ((#"_", #"e"), #"e"),
+                    ((#"_", #"e1", #"e2", #"..."),
+                    ((#"lambda", (#"temp"),
+                        (#"if", #"temp", #"temp", (#"or", #"e2", #"..."))), #"e1"))))),
+                    ((#"lambda",
+                        (#"temp"),
+                        (#"or", SExpr::new_bool(false), #"temp")),
                     SExpr::new_bool(true)),
         );
         let result = expand(
