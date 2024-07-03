@@ -238,7 +238,6 @@ mod tests {
 
     #[test]
     fn test_and_transformer_base_case() {
-        #[rustfmt::skip]
         let transformer = Transformer::new(&introduce(&sexpr!(
             #"syntax-rules",
             (),
@@ -250,7 +249,6 @@ mod tests {
             SExpr::new_bool(false)
         );
 
-        #[rustfmt::skip]
         let transformer = Transformer::new(&introduce(&sexpr!(
             #"syntax-rules",
             (),
@@ -267,7 +265,6 @@ mod tests {
 
     #[test]
     fn test_and_transformer_recursive_case() {
-        #[rustfmt::skip]
         let transformer = Transformer::new(&introduce(&sexpr!(
             #"syntax-rules",
             (),
@@ -299,7 +296,6 @@ mod tests {
 
     #[test]
     fn test_and_transformer() {
-        #[rustfmt::skip]
         let transformer = Transformer::new(&introduce(&sexpr!(
             #"syntax-rules",
             (),
@@ -308,7 +304,7 @@ mod tests {
             ((#"_", #"e1", #"e2", #"..."),
              (#"if", #"e1",
                      (#"and", #"e2", #"..."),
-                     SExpr::new_bool(false)))
+                     SExpr::new_bool(false))),
         )));
         assert_eq!(
             transformer.transform(&introduce(&sexpr!(#"and"))).unwrap(),

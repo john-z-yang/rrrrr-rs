@@ -377,7 +377,6 @@ mod tests {
             &Symbol::new("my-macro"),
         );
 
-        #[rustfmt::skip]
         let transformer = Transformer::new(&introduce(&sexpr!(
             #"syntax-rules",
             (),
@@ -448,7 +447,6 @@ mod tests {
             transformer,
         )]);
 
-        #[rustfmt::skip]
         let sexpr = sexpr!(
             (
                 #"lambda",
