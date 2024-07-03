@@ -44,8 +44,8 @@ macro_rules! match_sexpr {
         (($($inner:tt)*) $(, $($rest:tt)*)?) = $targ:expr => $($handler:tt)*
     ) => {
         if let $crate::compile::syntax::SExpr::Cons(ref cons) = $targ {
-            match_sexpr! {($($inner)*) = cons.car => {
-                match_sexpr! {($($($rest)*)?) = cons.cdr =>
+            match_sexpr! {($($inner)*) = cons.car.as_ref() => {
+                match_sexpr! {($($($rest)*)?) = cons.cdr.as_ref() =>
                     $($handler)*
                 }
             }}
@@ -81,7 +81,7 @@ macro_rules! match_sexpr {
         (_ $(, $($rest:tt)*)?) = $targ:expr => $($handler:tt)*
     ) => {
         if let $crate::compile::syntax::SExpr::Cons(ref cons) = $targ {
-            match_sexpr! {($($($rest)*)?) = cons.cdr =>
+            match_sexpr! {($($($rest)*)?) = cons.cdr.as_ref() =>
                 $($handler)*
             }
         };
@@ -93,15 +93,15 @@ macro_rules! match_sexpr {
     ) => {
         if let $crate::compile::syntax::SExpr::Cons(ref cons) = $targ {
             let symbol = $crate::compile::syntax::Symbol::new($symbol);
-            if let $crate::compile::syntax::SExpr::Symbol(ref sym) = &cons.car {
+            if let $crate::compile::syntax::SExpr::Symbol(ref sym) = cons.car.as_ref() {
                 if *sym == symbol {
-                    match_sexpr! {($($($rest)*)?) = cons.cdr =>
+                    match_sexpr! {($($($rest)*)?) = cons.cdr.as_ref() =>
                         $($handler)*
                     }
                 }
-            } else if let $crate::compile::syntax::SExpr::Id(ref id) = &cons.car {
+            } else if let $crate::compile::syntax::SExpr::Id(ref id) = cons.car.as_ref() {
                 if id.symbol == symbol {
-                    match_sexpr! {($($($rest)*)?) = cons.cdr =>
+                    match_sexpr! {($($($rest)*)?) = cons.cdr.as_ref() =>
                         $($handler)*
                     }
                 }
@@ -115,8 +115,8 @@ macro_rules! match_sexpr {
     ) => {
         if let $crate::compile::syntax::SExpr::Cons(ref cons) = $targ {
             #[allow(irrefutable_let_patterns)]
-            if let $pat = &cons.car {
-                match_sexpr! {($($($rest)*)?) = cons.cdr =>
+            if let $pat = cons.car.as_ref() {
+                match_sexpr! {($($($rest)*)?) = cons.cdr.as_ref() =>
                     $($handler)*
                 }
             }
@@ -126,14 +126,14 @@ macro_rules! match_sexpr {
 
 pub fn first(sexpr: &SExpr) -> Option<SExpr> {
     match sexpr {
-        SExpr::Cons(cons) => Some(cons.car.clone()),
+        SExpr::Cons(cons) => Some((*cons.car).clone()),
         _ => None,
     }
 }
 
 pub fn last(sexpr: &SExpr) -> Option<SExpr> {
     match sexpr {
-        SExpr::Cons(cons) if matches!(cons.cdr, SExpr::Nil) => Some(cons.car.clone()),
+        SExpr::Cons(cons) if matches!(*cons.cdr, SExpr::Nil) => Some(cons.car.as_ref().clone()),
         SExpr::Cons(cons) => last(&cons.cdr),
         _ => None,
     }
@@ -144,7 +144,7 @@ pub fn nth(sexpr: &SExpr, idx: usize) -> Option<SExpr> {
         return None;
     };
     if idx == 0 {
-        Some(cons.car.clone())
+        Some(cons.car.as_ref().clone())
     } else {
         nth(&cons.cdr, idx - 1)
     }

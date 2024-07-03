@@ -147,7 +147,7 @@ impl SyntaxRule {
                 }
             }
             SExpr::Cons(pattern) => {
-                match &pattern.car {
+                match pattern.car.as_ref() {
                     SExpr::Id(id) if id.symbol.0 == "..." => {
                         bindings.insert(id.clone(), sexpr.clone());
                     }
@@ -177,7 +177,7 @@ impl SyntaxRule {
     fn _render_template(template: &SExpr, bindings: &HashMap<Id, SExpr>) -> SExpr {
         match template {
             SExpr::Id(pattern) => bindings.get(pattern).unwrap_or(template).clone(),
-            SExpr::Cons(pattern) => match &pattern.car {
+            SExpr::Cons(pattern) => match pattern.car.as_ref() {
                 SExpr::Id(id) if id.symbol.0 == "..." => bindings.get(id).unwrap().clone(),
                 _ => SExpr::new_cons(
                     Self::_render_template(&pattern.car, bindings),

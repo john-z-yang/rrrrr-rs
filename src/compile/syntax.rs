@@ -6,7 +6,7 @@ use super::bindings::{ScopeId, Scopes};
 #[derive(Debug, PartialEq, Clone)]
 pub enum SExpr {
     Id(Id),
-    Cons(Box<Cons>),
+    Cons(Cons),
     Symbol(Symbol),
     Nil,
     Bool(Bool),
@@ -21,8 +21,8 @@ pub struct Id {
 
 #[derive(Debug, PartialEq, Clone)]
 pub struct Cons {
-    pub car: SExpr,
-    pub cdr: SExpr,
+    pub car: Box<SExpr>,
+    pub cdr: Box<SExpr>,
 }
 
 #[derive(Debug, PartialEq, Eq, Clone, Hash)]
@@ -69,9 +69,16 @@ impl Id {
 }
 
 impl Cons {
+    pub fn new(car: SExpr, cdr: SExpr) -> Self {
+        Cons {
+            car: Box::new(car),
+            cdr: Box::new(cdr),
+        }
+    }
+
     fn fmt_list(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "{}", self.car)?;
-        match &self.cdr {
+        match self.cdr.as_ref() {
             SExpr::Nil => {
                 write!(f, ")")
             }
@@ -131,7 +138,7 @@ impl From<Id> for SExpr {
 
 impl From<Cons> for SExpr {
     fn from(value: Cons) -> Self {
-        SExpr::Cons(Box::new(value))
+        SExpr::Cons(value)
     }
 }
 
@@ -162,7 +169,7 @@ impl TryFrom<SExpr> for Cons {
     type Error = ();
     fn try_from(value: SExpr) -> Result<Self, Self::Error> {
         if let SExpr::Cons(cons) = value {
-            Ok(*cons)
+            Ok(cons)
         } else {
             Err(())
         }
@@ -200,7 +207,7 @@ impl SExpr {
     }
 
     pub fn new_cons(car: SExpr, cdr: SExpr) -> Self {
-        Self::Cons(Box::new(Cons { car, cdr }))
+        Self::Cons(Cons::new(car, cdr))
     }
 
     pub fn new_symbol(symbol: &str) -> Self {
