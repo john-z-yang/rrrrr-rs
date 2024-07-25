@@ -7,7 +7,7 @@ use crate::compile::{sexpr::Num, src_loc::SourceLoc};
 
 use super::{compliation_error::CompliationError, token::Token};
 
-pub fn scan(source: &str) -> Result<Vec<Token>, CompliationError> {
+pub fn tokenize(source: &str) -> Result<Vec<Token>, CompliationError> {
     struct Lexer<'source> {
         source: &'source str,
         it: Peekable<Enumerate<Chars<'source>>>,
@@ -160,11 +160,11 @@ pub fn scan(source: &str) -> Result<Vec<Token>, CompliationError> {
 
 #[cfg(test)]
 mod tests {
-    use crate::compile::{lex::scan, sexpr::Num, src_loc::SourceLoc, token::Token};
+    use crate::compile::{lex::tokenize, sexpr::Num, src_loc::SourceLoc, token::Token};
 
     #[test]
     fn test_scan_empty() {
-        assert_eq!(scan("").unwrap(), vec![Token::EoF()]);
+        assert_eq!(tokenize("").unwrap(), vec![Token::EoF()]);
     }
 
     #[test]
@@ -175,7 +175,7 @@ mod tests {
 ; #
 \"\" 9.0001 0";
         assert_eq!(
-            scan(src).unwrap(),
+            tokenize(src).unwrap(),
             vec![
                 Token::QuasiQuote(SourceLoc {
                     line: 0,

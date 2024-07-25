@@ -4,7 +4,7 @@ extern crate rustyline;
 use rustyline::error::ReadlineError;
 use rustyline::Editor;
 
-use compile::lex::scan;
+use compile::lex::tokenize;
 mod compile;
 
 fn main() {
@@ -17,7 +17,7 @@ fn main() {
             Ok(line) => {
                 rl.add_history_entry(line.as_str());
                 if line.is_empty() {
-                    println!("{:?}", scan(&lines));
+                    println!("{:?}", tokenize(&lines));
                     lines.clear();
                     break;
                 }
