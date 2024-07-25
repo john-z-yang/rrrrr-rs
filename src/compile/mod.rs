@@ -1,5 +1,9 @@
 pub mod bindings;
+pub mod compliation_error;
 pub mod expand;
+pub mod lex;
 pub mod sexpr;
+pub mod src_loc;
+pub mod token;
 pub mod transformer;
 pub mod util;

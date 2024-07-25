@@ -115,13 +115,13 @@ mod tests {
 
     #[test]
     fn test_introduce() {
-        let list = sexpr!(SExpr::symbol("cons"), SExpr::num(0), SExpr::num(1));
+        let list = sexpr!(SExpr::symbol("cons"), SExpr::num(0.0), SExpr::num(1.0));
         assert_eq!(
             introduce(&list),
             sexpr!(
                 SExpr::id("cons", [Bindings::CORE_SCOPE]),
-                SExpr::num(0),
-                SExpr::num(1),
+                SExpr::num(0.0),
+                SExpr::num(1.0),
             )
         );
     }
@@ -545,7 +545,7 @@ mod tests {
             #"letrec-syntax",
                 ((#"one",
                     (#"syntax-rules", (),
-                        ((#"_"), SExpr::num(1))))),
+                        ((#"_"), SExpr::num(1.0))))),
                 (#"one")
         );
         let result = expand(
@@ -553,7 +553,7 @@ mod tests {
             &mut bindings,
             &mut env,
         );
-        let expected = SExpr::num(1);
+        let expected = SExpr::num(1.0);
         assert_eq!(result, expected);
     }
 
