@@ -48,14 +48,14 @@ pub fn tokenize(source: &str) -> Result<Vec<Token>, CompliationError> {
                 '`' => self.add_token(Token::QuasiQuote(self.get_src_loc())),
                 '|' => self.add_token(Token::Pipe(self.get_src_loc())),
                 ',' => {
-                    if self.consume_if('@') {
+                    if self.advance_if('@') {
                         self.add_token(Token::CommaAt(self.get_src_loc()))
                     } else {
                         self.add_token(Token::Comma(self.get_src_loc()))
                     }
                 }
                 '#' => self
-                    .consume_if('(')
+                    .advance_if('(')
                     .then(|| self.add_token(Token::HashLParen(self.get_src_loc())))
                     .ok_or_else(|| self.emit_err("Expecting '(' after '#'"))?,
                 ';' => {
@@ -122,7 +122,7 @@ pub fn tokenize(source: &str) -> Result<Vec<Token>, CompliationError> {
         fn look_ahead(&mut self) -> Option<char> {
             self.it.peek().map(|(_, c)| c).copied()
         }
-        fn consume_if(&mut self, c: char) -> bool {
+        fn advance_if(&mut self, c: char) -> bool {
             self.it
                 .next_if(|(_, next)| c == *next)
                 .map(|(pos, _)| {
