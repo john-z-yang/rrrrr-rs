@@ -4,7 +4,7 @@ use std::{
 };
 
 use crate::compile::{
-    sexpr::{Num, Symbol},
+    sexpr::{Bool, Char, Num, Symbol},
     src_loc::SourceLoc,
 };
 
@@ -50,27 +50,37 @@ pub fn tokenize(source: &str) -> Result<Vec<Token>, CompliationError> {
                 '|' => self.add_token(Token::Pipe(self.get_src_loc())),
                 '\'' => self.add_token(Token::Quote(self.get_src_loc())),
                 '.' => {
-                    if self.advance_if('.') {
-                        if let Some('.') = self.look_ahead() {
-                            self.add_token(Token::Id(Symbol::new("..."), self.get_src_loc()))
-                        } else {
-                            Err(self.emit_err("Expecting '.' after '..'"))?
-                        }
+                    let token = if !self.advance_if('.') {
+                        Token::Dot(self.get_src_loc())
+                    } else if self.look_ahead() == Some('.') {
+                        Token::Id(Symbol::new("..."), self.get_src_loc())
                     } else {
-                        self.add_token(Token::Dot(self.get_src_loc()))
-                    }
+                        Err(self.emit_err("Expecting '.' after '..'"))?
+                    };
+                    self.add_token(token);
                 }
                 ',' => {
-                    if self.advance_if('@') {
-                        self.add_token(Token::CommaAt(self.get_src_loc()))
+                    let token = if self.advance_if('@') {
+                        Token::CommaAt(self.get_src_loc())
                     } else {
-                        self.add_token(Token::Comma(self.get_src_loc()))
-                    }
+                        Token::Comma(self.get_src_loc())
+                    };
+                    self.add_token(token);
                 }
-                '#' => self
-                    .advance_if('(')
-                    .then(|| self.add_token(Token::HashLParen(self.get_src_loc())))
-                    .ok_or_else(|| self.emit_err("Expecting '(' after '#'"))?,
+                '#' => {
+                    let token = if self.advance_if('t') {
+                        Token::Bool(Bool(true), self.get_src_loc())
+                    } else if self.advance_if('f') {
+                        Token::Bool(Bool(false), self.get_src_loc())
+                    } else if self.advance_if('(') {
+                        Token::HashLParen(self.get_src_loc())
+                    } else if self.advance_if('\\') && self.look_ahead().is_some() {
+                        Token::Char(Char(self.advance()), self.get_src_loc())
+                    } else {
+                        Err(self.emit_err("Expectin 't', 'f', '(' or character literal after '#'"))?
+                    };
+                    self.add_token(token);
+                }
                 ';' => {
                     self.advance_until(&|c| if c == '\n' { true } else { false });
                 }
@@ -214,7 +224,7 @@ pub fn tokenize(source: &str) -> Result<Vec<Token>, CompliationError> {
 mod tests {
     use crate::compile::{
         lex::tokenize,
-        sexpr::{Num, Symbol},
+        sexpr::{Bool, Char, Num, Symbol},
         src_loc::SourceLoc,
         token::Token,
     };
@@ -231,7 +241,7 @@ mod tests {
 \"ab\" ; #
 ; #
 \"\" 9.0001 0 -3 -42.00 -100 some-symbol <=? list->vector ;
-2";
+2 #t #\\ ";
         assert_eq!(
             tokenize(src).unwrap(),
             vec![
@@ -346,6 +356,22 @@ mod tests {
                         line: 5,
                         col: 82,
                         width: 1
+                    }
+                ),
+                Token::Bool(
+                    Bool(true),
+                    SourceLoc {
+                        line: 5,
+                        col: 84,
+                        width: 2
+                    }
+                ),
+                Token::Char(
+                    Char(' '),
+                    SourceLoc {
+                        line: 5,
+                        col: 87,
+                        width: 3
                     }
                 ),
                 Token::EoF()

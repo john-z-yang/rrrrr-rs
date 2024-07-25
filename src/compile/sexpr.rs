@@ -13,6 +13,7 @@ pub enum SExpr {
     Num(Num),
     Char(Char),
     Str(Str),
+    Vector(Vector),
 }
 
 #[derive(PartialEq, Clone, Eq, Hash)]
@@ -41,6 +42,9 @@ pub struct Char(pub char);
 
 #[derive(Debug, PartialEq, Clone)]
 pub struct Str(pub String);
+
+#[derive(Debug, PartialEq, Clone)]
+pub struct Vector(pub Vec<SExpr>);
 
 impl Id {
     pub fn new<const N: usize>(symbol: &str, scopes: [ScopeId; N]) -> Self {
@@ -129,6 +133,11 @@ impl fmt::Debug for SExpr {
             SExpr::Str(string) => {
                 write!(f, "\"{:?}\"", string)
             }
+            SExpr::Vector(vector) => {
+                write!(f, "#(")?;
+                vector.0.iter().try_for_each(|e| write!(f, "{:?}", e))?;
+                write!(f, ")")
+            }
         }
     }
 }
@@ -176,6 +185,11 @@ impl fmt::Display for SExpr {
             }
             SExpr::Str(string) => {
                 write!(f, "\"{:?}\"", string)
+            }
+            SExpr::Vector(vector) => {
+                write!(f, "#(")?;
+                vector.0.iter().try_for_each(|e| write!(f, "{}", e))?;
+                write!(f, ")")
             }
         }
     }
