@@ -19,10 +19,10 @@ fn main() {
                 if line.is_empty() {
                     println!("{:?}", tokenize(&lines));
                     lines.clear();
-                    break;
+                } else {
+                    lines.push_str(&line);
+                    lines.push_str("\n");
                 }
-                lines.push_str(&line);
-                lines.push_str("\n");
             }
             Err(ReadlineError::Eof) => {
                 println!("Farewell.");
