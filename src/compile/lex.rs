@@ -66,7 +66,7 @@ pub fn tokenize(source: &str) -> Result<Vec<Token>, CompliationError> {
                         self.advance();
                     }
                 }
-                '0'..='9' => self.parse_num()?,
+                '0'..='9' | '-' => self.parse_num()?,
                 '"' => self.parse_string()?,
                 c => Err(self.emit_err(&format!("Unexpeted character: '{}'", c)))?,
             };
@@ -163,17 +163,17 @@ mod tests {
     use crate::compile::{lex::tokenize, sexpr::Num, src_loc::SourceLoc, token::Token};
 
     #[test]
-    fn test_scan_empty() {
+    fn test_tokenize_empty() {
         assert_eq!(tokenize("").unwrap(), vec![Token::EoF()]);
     }
 
     #[test]
-    fn test_scan_multiline() {
+    fn test_tokenize_multiline() {
         let src = "`(#())
 ; #
 \"ab\" ; #
 ; #
-\"\" 9.0001 0";
+\"\" 9.0001 0 -3 -42.00 -100";
         assert_eq!(
             tokenize(src).unwrap(),
             vec![
@@ -232,6 +232,30 @@ mod tests {
                         line: 4,
                         col: 34,
                         width: 1
+                    }
+                ),
+                Token::Num(
+                    Num(-3.0),
+                    SourceLoc {
+                        line: 4,
+                        col: 36,
+                        width: 2
+                    }
+                ),
+                Token::Num(
+                    Num(-42.0),
+                    SourceLoc {
+                        line: 4,
+                        col: 39,
+                        width: 6
+                    }
+                ),
+                Token::Num(
+                    Num(-100.0),
+                    SourceLoc {
+                        line: 4,
+                        col: 46,
+                        width: 4
                     }
                 ),
                 Token::EoF()
