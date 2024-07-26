@@ -210,7 +210,7 @@ impl Transformer {
                 } else {
                     unreachable!("Expected symbols in syntax transformer literals");
                 }
-            }, &literals_list);
+            }, literals_list);
 
             let mut syntax_rules = Vec::<SyntaxRule>::new();
             for_each(|rule_pair| {
@@ -234,32 +234,48 @@ impl Transformer {
 
 #[cfg(test)]
 mod tests {
-    use crate::{compile::expand::introduce, sexpr};
+    use crate::compile::{expand::introduce, lex::tokenize, parse::parse};
 
     use super::*;
 
     #[test]
     fn test_and_transformer_base_case() {
-        let transformer = Transformer::new(&introduce(&sexpr!(
-            #"syntax-rules",
-            (),
-            ((#"_"), SExpr::bool(false))
-        )));
-
-        assert_eq!(
-            transformer.transform(&introduce(&sexpr!(#"and"))).unwrap(),
-            SExpr::bool(false)
-        );
-
-        let transformer = Transformer::new(&introduce(&sexpr!(
-            #"syntax-rules",
-            (),
-            ((#"_", #"e"), #"e")
-        )));
+        let transformer = Transformer::new(&introduce(
+            &parse(
+                &tokenize(
+                    r#"
+                    (syntax-rules ()
+                      ((_) #f))
+                "#,
+                )
+                .unwrap(),
+            )
+            .unwrap(),
+        ));
 
         assert_eq!(
             transformer
-                .transform(&introduce(&sexpr!(#"and", #"x")))
+                .transform(&introduce(&parse(&tokenize("(and)").unwrap()).unwrap()))
+                .unwrap(),
+            SExpr::bool(false)
+        );
+
+        let transformer = Transformer::new(&introduce(
+            &parse(
+                &tokenize(
+                    r#"
+                    (syntax-rules ()
+                      ((_ e) e))
+                "#,
+                )
+                .unwrap(),
+            )
+            .unwrap(),
+        ));
+
+        assert_eq!(
+            transformer
+                .transform(&introduce(&parse(&tokenize("(and x)").unwrap()).unwrap()))
                 .unwrap(),
             introduce(&SExpr::id("x", []))
         );
@@ -267,74 +283,93 @@ mod tests {
 
     #[test]
     fn test_and_transformer_recursive_case() {
-        let transformer = Transformer::new(&introduce(&sexpr!(
-            #"syntax-rules",
-            (),
-            ((#"_", #"e1", #"e2", #"..."),
-             (#"if", #"e1",
-                     (#"and", #"e2", #"..."),
-                     SExpr::bool(false)))
-        )));
+        let transformer = Transformer::new(&introduce(
+            &parse(
+                &tokenize(
+                    r#"
+                    (syntax-rules ()
+                      ((_ e1 e2 ...) (if e1 (and e2 ...) #f)))
+                "#,
+                )
+                .unwrap(),
+            )
+            .unwrap(),
+        ));
 
         assert_eq!(
             transformer
-                .transform(&introduce(&sexpr!(#"and", #"a", #"b")))
+                .transform(&introduce(&parse(&tokenize("(and a b)").unwrap()).unwrap()))
                 .unwrap(),
-            introduce(&sexpr!(#"if", #"a", (#"and", #"b"), SExpr::bool(false)))
+            introduce(&parse(&tokenize("(if a (and b) #f)").unwrap()).unwrap())
         );
         assert_eq!(
             transformer
-                .transform(&introduce(&sexpr!(#"and", #"a", #"b", #"c")))
+                .transform(&introduce(
+                    &parse(&tokenize("(and a b c)").unwrap()).unwrap()
+                ))
                 .unwrap(),
-            introduce(&sexpr!(#"if", #"a", (#"and", #"b", #"c"), SExpr::bool(false)))
+            introduce(&parse(&tokenize("(if a (and b c) #f)").unwrap()).unwrap())
         );
         assert_eq!(
             transformer
-                .transform(&introduce(&sexpr!(#"and", #"a", #"b", #"c", #"d")))
+                .transform(&introduce(
+                    &parse(&tokenize("(and a b c d)").unwrap()).unwrap()
+                ))
                 .unwrap(),
-            introduce(&sexpr!(#"if", #"a", (#"and", #"b", #"c", #"d"), SExpr::bool(false)))
+            introduce(&parse(&tokenize("(if a (and b c d) #f)").unwrap()).unwrap())
         );
     }
 
     #[test]
     fn test_and_transformer() {
-        let transformer = Transformer::new(&introduce(&sexpr!(
-            #"syntax-rules",
-            (),
-            ((#"_"), SExpr::bool(false)),
-            ((#"_", #"e"), #"e"),
-            ((#"_", #"e1", #"e2", #"..."),
-             (#"if", #"e1",
-                     (#"and", #"e2", #"..."),
-                     SExpr::bool(false))),
-        )));
+        let transformer = Transformer::new(&introduce(
+            &parse(
+                &tokenize(
+                    r#"
+                    (syntax-rules ()
+                      ((_) #f)
+                      ((_ e) e)
+                      ((_ e1 e2 ...)
+                       (if e1 (and e2 ...) #f)))
+                "#,
+                )
+                .unwrap(),
+            )
+            .unwrap(),
+        ));
         assert_eq!(
-            transformer.transform(&introduce(&sexpr!(#"and"))).unwrap(),
+            transformer
+                .transform(&introduce(&parse(&tokenize("(and)").unwrap()).unwrap()))
+                .unwrap(),
             SExpr::bool(false)
         );
         assert_eq!(
             transformer
-                .transform(&introduce(&sexpr!(#"and", #"a")))
+                .transform(&introduce(&parse(&tokenize("(and a)").unwrap()).unwrap()))
                 .unwrap(),
             introduce(&SExpr::id("a", []))
         );
         assert_eq!(
             transformer
-                .transform(&introduce(&sexpr!(#"and", #"a", #"b")))
+                .transform(&introduce(&parse(&tokenize("(and a b)").unwrap()).unwrap()))
                 .unwrap(),
-            introduce(&sexpr!(#"if", #"a", (#"and", #"b"), SExpr::bool(false)))
+            introduce(&parse(&tokenize("(if a (and b) #f)").unwrap()).unwrap())
         );
         assert_eq!(
             transformer
-                .transform(&introduce(&sexpr!(#"and", #"a", #"b", #"c")))
+                .transform(&introduce(
+                    &parse(&tokenize("(and a b c)").unwrap()).unwrap()
+                ))
                 .unwrap(),
-            introduce(&sexpr!(#"if", #"a", (#"and", #"b", #"c"), SExpr::bool(false)))
+            introduce(&parse(&tokenize("(if a (and b c) #f)").unwrap()).unwrap())
         );
         assert_eq!(
             transformer
-                .transform(&introduce(&sexpr!(#"and", #"a", #"b", #"c", #"d")))
+                .transform(&introduce(
+                    &parse(&tokenize("(and a b c d)").unwrap()).unwrap()
+                ))
                 .unwrap(),
-            introduce(&sexpr!(#"if", #"a", (#"and", #"b", #"c", #"d"), SExpr::bool(false)))
+            introduce(&parse(&tokenize("(if a (and b c d) #f)").unwrap()).unwrap())
         );
     }
 }

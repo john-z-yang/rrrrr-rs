@@ -17,12 +17,6 @@ macro_rules! sexpr {
             sexpr!($($($rest)*)?)
         )
     };
-    (#$symbol:literal $(, $($rest:tt)*)?) => {{
-        $crate::compile::sexpr::SExpr::cons(
-            $crate::compile::sexpr::SExpr::id($symbol, []),
-            sexpr!($($($rest)*)?)
-        )
-    }};
     ($first:expr $(, $($rest:tt)*)?) => {
         $crate::compile::sexpr::SExpr::cons($first, sexpr!($($($rest)*)?))
     };
@@ -122,25 +116,6 @@ pub fn first(sexpr: &SExpr) -> Option<SExpr> {
     match sexpr {
         SExpr::Cons(cons) => Some((*cons.car).clone()),
         _ => None,
-    }
-}
-
-pub fn last(sexpr: &SExpr) -> Option<SExpr> {
-    match sexpr {
-        SExpr::Cons(cons) if matches!(*cons.cdr, SExpr::Nil) => Some(cons.car.as_ref().clone()),
-        SExpr::Cons(cons) => last(&cons.cdr),
-        _ => None,
-    }
-}
-
-pub fn nth(sexpr: &SExpr, idx: usize) -> Option<SExpr> {
-    let SExpr::Cons(cons) = sexpr else {
-        return None;
-    };
-    if idx == 0 {
-        Some(cons.car.as_ref().clone())
-    } else {
-        nth(&cons.cdr, idx - 1)
     }
 }
 

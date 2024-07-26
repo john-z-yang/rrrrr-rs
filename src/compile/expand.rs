@@ -107,15 +107,34 @@ fn expand_letrec_syntax(sexpr: &SExpr, bindings: &mut Bindings, env: &mut Env) -
 mod tests {
 
     use crate::{
-        compile::util::{last, nth},
+        compile::{lex::tokenize, parse::parse},
         sexpr,
     };
+
+    fn last(sexpr: &SExpr) -> Option<SExpr> {
+        match sexpr {
+            SExpr::Cons(cons) if matches!(*cons.cdr, SExpr::Nil) => Some(cons.car.as_ref().clone()),
+            SExpr::Cons(cons) => last(&cons.cdr),
+            _ => None,
+        }
+    }
+
+    fn nth(sexpr: &SExpr, idx: usize) -> Option<SExpr> {
+        let SExpr::Cons(cons) = sexpr else {
+            return None;
+        };
+        if idx == 0 {
+            Some(cons.car.as_ref().clone())
+        } else {
+            nth(&cons.cdr, idx - 1)
+        }
+    }
 
     use super::*;
 
     #[test]
     fn test_introduce() {
-        let list = sexpr!(SExpr::id("cons", []), SExpr::num(0.0), SExpr::num(1.0));
+        let list = parse(&tokenize("(cons 0 1)").unwrap()).unwrap();
         assert_eq!(
             introduce(&list),
             sexpr!(
@@ -130,7 +149,7 @@ mod tests {
     fn test_expand_lambda() {
         let mut bindings = Bindings::new();
         let mut env = HashMap::<Symbol, Transformer>::new();
-        let lambda_expr = sexpr!(#"lambda", (#"x", #"y"), (#"cons", #"x", #"y"),);
+        let lambda_expr = parse(&tokenize("(lambda (x y) (cons x y))").unwrap()).unwrap();
         let left = expand(&introduce(&lambda_expr), &mut bindings, &mut env);
         let right = sexpr!(
             SExpr::id("lambda", [Bindings::CORE_SCOPE]),
@@ -151,12 +170,17 @@ mod tests {
     fn test_expand_lambda_recursive() {
         let mut bindings = Bindings::new();
         let mut env = HashMap::<Symbol, Transformer>::new();
-        let lambda_expr = sexpr!(
-            #"lambda",
-            (#"x"),
-            (#"lambda", (#"y"), (#"cons", #"x", #"y")),
-            (#"cons", #"x", #"x")
-        );
+        let lambda_expr = parse(
+            &tokenize(
+                r#"
+                (lambda (x)
+                  (lambda (y) (cons x y))
+                  (cons x x))
+                "#,
+            )
+            .unwrap(),
+        )
+        .unwrap();
         let result = expand(&introduce(&lambda_expr), &mut bindings, &mut env);
         let expected = sexpr!(
             SExpr::id("lambda", [Bindings::CORE_SCOPE]),
@@ -183,9 +207,17 @@ mod tests {
     fn test_expand_atoms() {
         let mut bindings = Bindings::new();
         let mut env = HashMap::<Symbol, Transformer>::new();
-        let lambda_expr = sexpr!(SExpr::bool(false));
+        let sexpr = parse(
+            &tokenize(
+                r#"
+                (#f)
+                "#,
+            )
+            .unwrap(),
+        )
+        .unwrap();
         assert_eq!(
-            expand(&introduce(&lambda_expr), &mut bindings, &mut env),
+            expand(&introduce(&sexpr), &mut bindings, &mut env),
             sexpr!(SExpr::bool(false))
         );
     }
@@ -196,16 +228,21 @@ mod tests {
 
         bindings.add_binding(&Id::new("and", [Bindings::CORE_SCOPE]), &Symbol::new("and"));
 
-        let transformer = Transformer::new(&introduce(&sexpr!(
-            #"syntax-rules",
-            (),
-            ((#"_"), SExpr::bool(false)),
-            ((#"_", #"e"), #"e"),
-            ((#"_", #"e1", #"e2", #"..."),
-             (#"if", #"e1",
-                     (#"and", #"e2", #"..."),
-                     SExpr::bool(false))),
-        )));
+        let transformer = Transformer::new(&introduce(
+            &parse(
+                &tokenize(
+                    r#"
+                    (syntax-rules ()
+                      ((_) #f)
+                      ((_ e) e)
+                      ((_ e1 e2 ...)
+                       (if e1 (and e2 ...) #f)))
+                "#,
+                )
+                .unwrap(),
+            )
+            .unwrap(),
+        ));
 
         let mut env = HashMap::from([(
             bindings
@@ -214,7 +251,7 @@ mod tests {
             transformer,
         )]);
 
-        let sexpr = sexpr!(#"and");
+        let sexpr = parse(&tokenize("(and)").unwrap()).unwrap();
         let result = expand(&introduce(&sexpr), &mut bindings, &mut env);
         let expected = SExpr::bool(false);
         assert_eq!(result, expected);
@@ -226,16 +263,21 @@ mod tests {
 
         bindings.add_binding(&Id::new("and", [Bindings::CORE_SCOPE]), &Symbol::new("and"));
 
-        let transformer = Transformer::new(&introduce(&sexpr!(
-            #"syntax-rules",
-            (),
-            ((#"_"), SExpr::bool(false)),
-            ((#"_", #"e"), #"e"),
-            ((#"_", #"e1", #"e2", #"..."),
-             (#"if", #"e1",
-                     (#"and", #"e2", #"..."),
-                     SExpr::bool(false))),
-        )));
+        let transformer = Transformer::new(&introduce(
+            &parse(
+                &tokenize(
+                    r#"
+                    (syntax-rules ()
+                      ((_) #f)
+                      ((_ e) e)
+                      ((_ e1 e2 ...)
+                       (if e1 (and e2 ...) #f)))
+                "#,
+                )
+                .unwrap(),
+            )
+            .unwrap(),
+        ));
 
         let mut env = HashMap::from([(
             bindings
@@ -244,7 +286,7 @@ mod tests {
             transformer,
         )]);
 
-        let sexpr = introduce(&sexpr!(#"and", #"list"));
+        let sexpr = introduce(&parse(&tokenize("(and list)").unwrap()).unwrap());
         let result = expand(&introduce(&sexpr), &mut bindings, &mut env);
         let expected = SExpr::id("list", [Bindings::CORE_SCOPE]);
         assert_eq!(result, expected);
@@ -256,16 +298,21 @@ mod tests {
 
         bindings.add_binding(&Id::new("and", [Bindings::CORE_SCOPE]), &Symbol::new("and"));
 
-        let transformer = Transformer::new(&introduce(&sexpr!(
-            #"syntax-rules",
-            (),
-            ((#"_"), SExpr::bool(false)),
-            ((#"_", #"e"), #"e"),
-            ((#"_", #"e1", #"e2", #"..."),
-             (#"if", #"e1",
-                     (#"and", #"e2", #"..."),
-                     SExpr::bool(false))),
-        )));
+        let transformer = Transformer::new(&introduce(
+            &parse(
+                &tokenize(
+                    r#"
+                    (syntax-rules ()
+                      ((_) #f)
+                      ((_ e) e)
+                      ((_ e1 e2 ...)
+                       (if e1 (and e2 ...) #f)))
+                "#,
+                )
+                .unwrap(),
+            )
+            .unwrap(),
+        ));
 
         let mut env = HashMap::from([(
             bindings
@@ -274,7 +321,7 @@ mod tests {
             transformer,
         )]);
 
-        let sexpr = sexpr!(#"and", #"list", #"list");
+        let sexpr = parse(&tokenize("(and list list)").unwrap()).unwrap();
         let result = expand(&introduce(&sexpr), &mut bindings, &mut env);
         let expected = sexpr!(
             SExpr::id("if", [Bindings::CORE_SCOPE, 1]),
@@ -291,16 +338,21 @@ mod tests {
 
         bindings.add_binding(&Id::new("and", [Bindings::CORE_SCOPE]), &Symbol::new("and"));
 
-        let transformer = Transformer::new(&introduce(&sexpr!(
-            #"syntax-rules",
-            (),
-            ((#"_"), SExpr::bool(false)),
-            ((#"_", #"e"), #"e"),
-            ((#"_", #"e1", #"e2", #"..."),
-             (#"if", #"e1",
-                     (#"and", #"e2", #"..."),
-                     SExpr::bool(false))),
-        )));
+        let transformer = Transformer::new(&introduce(
+            &parse(
+                &tokenize(
+                    r#"
+                    (syntax-rules ()
+                      ((_) #f)
+                      ((_ e) e)
+                      ((_ e1 e2 ...)
+                       (if e1 (and e2 ...) #f)))
+                "#,
+                )
+                .unwrap(),
+            )
+            .unwrap(),
+        ));
 
         let mut env = HashMap::from([(
             bindings
@@ -309,13 +361,7 @@ mod tests {
             transformer,
         )]);
 
-        let sexpr = sexpr!(
-            #"and",
-            SExpr::bool(true),
-            SExpr::bool(true),
-            SExpr::bool(true),
-            SExpr::bool(true),
-        );
+        let sexpr = parse(&tokenize("(and #t #t #t #t)").unwrap()).unwrap();
         // (and t t t t)
         // (if t (and t t t) f)
         // (if t (if t (and t t) f) f)
@@ -357,11 +403,18 @@ mod tests {
             &Symbol::new("my-macro"),
         );
 
-        let transformer = Transformer::new(&introduce(&sexpr!(
-            #"syntax-rules",
-            (),
-            ((#"_", #"body"), (#"lambda", (#"x"), #"body")),
-        )));
+        let transformer = Transformer::new(&introduce(
+            &parse(
+                &tokenize(
+                    r#"
+                    (syntax-rules ()
+                      ((_ body) (lambda (x) body)))
+                "#,
+                )
+                .unwrap(),
+            )
+            .unwrap(),
+        ));
 
         let mut env = HashMap::from([(
             bindings
@@ -370,7 +423,7 @@ mod tests {
             transformer,
         )]);
 
-        let sexpr = sexpr!(#"my-macro", #"x");
+        let sexpr = parse(&tokenize("(my-macro x)").unwrap()).unwrap();
         let result = expand(&introduce(&sexpr), &mut bindings, &mut env);
         let expected = sexpr!(
             SExpr::id("lambda", [Bindings::CORE_SCOPE, 1]),
@@ -410,15 +463,21 @@ mod tests {
             &Symbol::new("my-or"),
         );
 
-        let transformer = Transformer::new(&introduce(&sexpr!(
-            #"syntax-rules",
-            (),
-            ((#"_"), SExpr::bool(false)),
-            ((#"_", #"e"), #"e"),
-            ((#"_", #"e1", #"e2", #"..."),
-             ((#"lambda", (#"temp"),
-                (#"if", #"temp", #"temp", (#"my-or", #"e2", #"..."))), #"e1"),
-        ))));
+        let transformer = Transformer::new(&introduce(
+            &parse(
+                &tokenize(
+                    r#"
+                    (syntax-rules ()
+                      ((_) #f)
+                      ((_ e) e)
+                      ((_ e1 e2 ...)
+                       ((lambda (temp) (if temp temp (my-or e2 ...))) e1)))
+                "#,
+                )
+                .unwrap(),
+            )
+            .unwrap(),
+        ));
 
         let mut env = HashMap::from([(
             bindings
@@ -427,14 +486,7 @@ mod tests {
             transformer,
         )]);
 
-        let sexpr = sexpr!(
-            (
-                #"lambda",
-                (#"temp"),
-                (#"my-or", SExpr::bool(false), #"temp")
-            ),
-            SExpr::bool(true),
-        );
+        let sexpr = parse(&tokenize("((lambda (temp) (my-or #f temp)) #t)").unwrap()).unwrap();
         let result = expand(&introduce(&sexpr), &mut bindings, &mut env);
 
         let expected = sexpr!(
@@ -525,13 +577,18 @@ mod tests {
     fn test_expand_let_syntax_to_num() {
         let mut bindings = Bindings::new();
         let mut env = HashMap::<Symbol, Transformer>::new();
-        let let_syntax_expr = sexpr!(
-            #"letrec-syntax",
-                ((#"one",
-                    (#"syntax-rules", (),
-                        ((#"_"), SExpr::num(1.0))))),
-                (#"one")
-        );
+        let let_syntax_expr = &parse(
+            &tokenize(
+                r#"
+                (letrec-syntax
+                    ((one (syntax-rules ()
+                            ((_) 1))))
+                  (one))
+                "#,
+            )
+            .unwrap(),
+        )
+        .unwrap();
         let result = expand(&introduce(&let_syntax_expr), &mut bindings, &mut env);
         let expected = SExpr::num(1.0);
         assert_eq!(result, expected);
@@ -541,20 +598,25 @@ mod tests {
     fn test_expand_let_syntax_via_or_macro() {
         let mut bindings = Bindings::new();
         let mut env = HashMap::<Symbol, Transformer>::new();
-        let let_syntax_expr = sexpr!(
-            #"letrec-syntax",
-                ((#"or",
-                    (#"syntax-rules", (),
-                    ((#"_"), SExpr::bool(false)),
-                    ((#"_", #"e"), #"e"),
-                    ((#"_", #"e1", #"e2", #"..."),
-                    ((#"lambda", (#"temp"),
-                        (#"if", #"temp", #"temp", (#"or", #"e2", #"..."))), #"e1"))))),
-                    ((#"lambda",
-                        (#"temp"),
-                        (#"or", SExpr::bool(false), #"temp")),
-                    SExpr::bool(true)),
-        );
+        let let_syntax_expr = &parse(
+            &tokenize(
+                r#"
+                (letrec-syntax
+                  ((or (syntax-rules ()
+                            ((_) #f)
+                            ((_ e) e)
+                            ((_ e1 e2 ...)
+                             ((lambda (temp)
+                               (if temp
+                                  temp
+                                   (or e2 ...)))
+                              e1)))))
+                   ((lambda (temp) (or #f temp)) #t))
+                "#,
+            )
+            .unwrap(),
+        )
+        .unwrap();
         let result = expand(&introduce(&let_syntax_expr), &mut bindings, &mut env);
         let expected = sexpr!(
             (

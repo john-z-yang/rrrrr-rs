@@ -423,9 +423,7 @@ mod tests {
     fn test_add_scope() {
         let list = sexpr!(
             SExpr::id("a", [1]),
-            SExpr::num(0.0),
-            (SExpr::num(1.0), (SExpr::id("b", [0, 1]))),
-            SExpr::num(2.0),
+            (SExpr::id("b", [0, 1])),
             (SExpr::id("c", [0])),
             SExpr::id("d", [0, 1]),
         );
@@ -433,9 +431,7 @@ mod tests {
             list.add_scope(0).add_scope(2),
             sexpr!(
                 SExpr::id("a", [0, 1, 2]),
-                SExpr::num(0.0),
-                (SExpr::num(1.0), (SExpr::id("b", [0, 1, 2])),),
-                SExpr::num(2.0),
+                (SExpr::id("b", [0, 1, 2])),
                 (SExpr::id("c", [0, 2])),
                 SExpr::id("d", [0, 1, 2])
             )
@@ -446,9 +442,7 @@ mod tests {
     fn test_flip_scope() {
         let list = sexpr!(
             SExpr::id("a", [1]),
-            SExpr::num(0.0),
-            (SExpr::num(1.0), (SExpr::id("b", [0, 1]))),
-            SExpr::num(2.0),
+            (SExpr::id("b", [0, 1])),
             (SExpr::id("c", [0])),
             SExpr::id("d", [0, 1]),
         );
@@ -456,9 +450,7 @@ mod tests {
             list.flip_scope(0),
             sexpr!(
                 SExpr::id("a", [0, 1]),
-                SExpr::num(0.0),
-                (SExpr::num(1.0), (SExpr::id("b", [1]))),
-                SExpr::num(2.0),
+                (SExpr::id("b", [1])),
                 (SExpr::id("c", [])),
                 SExpr::id("d", [1]),
             )
