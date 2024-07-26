@@ -1,3 +1,5 @@
+use std::fmt;
+
 use super::{
     sexpr::{Bool, Char, Num, Str, Symbol},
     src_loc::SourceLoc,
@@ -42,5 +44,27 @@ impl Token {
             Token::EoF(source_loc) => source_loc,
         }
         .clone()
+    }
+}
+
+impl fmt::Display for Token {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Token::Id(symbol, _) => write!(f, "{}", symbol),
+            Token::Bool(bool, _) => write!(f, "{}", bool),
+            Token::Num(num, _) => write!(f, "{}", num),
+            Token::Char(char, _) => write!(f, "{}", char),
+            Token::Str(str, _) => write!(f, "{}", str),
+            Token::HashLParen(_) => write!(f, "#("),
+            Token::CommaAt(_) => write!(f, ",@"),
+            Token::Comma(_) => write!(f, ","),
+            Token::LParen(_) => write!(f, "("),
+            Token::RParen(_) => write!(f, ")"),
+            Token::Quote(_) => write!(f, "'"),
+            Token::Dot(_) => write!(f, "."),
+            Token::QuasiQuote(_) => write!(f, "`"),
+            Token::Pipe(_) => write!(f, "|"),
+            Token::EoF(_) => write!(f, "EoF"),
+        }
     }
 }

@@ -12,10 +12,9 @@ use super::{compliation_error::CompliationError, token::Token};
 
 pub fn tokenize(source: &str) -> Result<Vec<Token>, CompliationError> {
     struct Lexer<'source> {
-        source: &'source str,
         it: Peekable<Enumerate<Chars<'source>>>,
-        start: usize,
-        cur: usize,
+        cur: String,
+        col: usize,
         line: usize,
         tokens: Vec<Token>,
     }
@@ -23,20 +22,19 @@ pub fn tokenize(source: &str) -> Result<Vec<Token>, CompliationError> {
     impl Lexer<'_> {
         fn new(source: &str) -> Lexer {
             Lexer {
-                source,
                 it: source.chars().enumerate().peekable(),
-                start: 0,
-                cur: 0,
+                cur: String::new(),
+                col: 0,
                 line: 0,
                 tokens: vec![],
             }
         }
         fn scan(&mut self) -> Result<Vec<Token>, CompliationError> {
             while self.look_ahead().is_some() {
-                self.start = self.cur;
+                self.cur.clear();
                 self.scan_token()?;
             }
-            self.start = self.cur;
+            self.cur.clear();
             self.tokens.push(Token::EoF(self.get_src_loc()));
             Ok(self.tokens.clone())
         }
@@ -94,10 +92,7 @@ pub fn tokenize(source: &str) -> Result<Vec<Token>, CompliationError> {
         }
         fn parse_id(&mut self) -> Result<(), CompliationError> {
             self.advance_until(&|c| !Self::is_id_subsequent(c));
-            self.add_token(Token::Id(
-                Symbol::new(&self.source[self.start..self.cur]),
-                self.get_src_loc(),
-            ));
+            self.add_token(Token::Id(Symbol::new(&self.cur), self.get_src_loc()));
             Ok(())
         }
         fn parse_num(&mut self) -> Result<(), CompliationError> {
@@ -108,10 +103,9 @@ pub fn tokenize(source: &str) -> Result<Vec<Token>, CompliationError> {
                 self.advance_until(&|c| !c.is_ascii_digit());
             }
 
-            let sub_str = self.source[self.start..self.cur].to_string();
             self.add_token(Token::Num(
-                Num(sub_str.parse().map_err(|_| {
-                    self.emit_err(&format!("Invalid number representation: {}", sub_str))
+                Num(self.cur.parse().map_err(|_| {
+                    self.emit_err(&format!("Invalid number representation: {}", self.cur))
                 })?),
                 self.get_src_loc(),
             ));
@@ -124,7 +118,7 @@ pub fn tokenize(source: &str) -> Result<Vec<Token>, CompliationError> {
             };
             self.advance();
             self.add_token(Token::Str(
-                Str(self.source[self.start + 1..self.cur - 1].to_string()),
+                Str(self.cur[1..self.cur.len() - 1].to_string()),
                 self.get_src_loc(),
             ));
             Ok(())
@@ -145,8 +139,9 @@ pub fn tokenize(source: &str) -> Result<Vec<Token>, CompliationError> {
         fn advance_if(&mut self, c: char) -> bool {
             self.it
                 .next_if(|(_, next)| c == *next)
-                .map(|(pos, _)| {
-                    self.cur = pos + 1;
+                .map(|(pos, c)| {
+                    self.col = pos + 1;
+                    self.cur.push(c);
                     true
                 })
                 .unwrap_or(false)
@@ -156,7 +151,8 @@ pub fn tokenize(source: &str) -> Result<Vec<Token>, CompliationError> {
         }
         fn advance(&mut self) -> char {
             let (pos, c) = self.it.next().unwrap();
-            self.cur = pos + 1;
+            self.col = pos + 1;
+            self.cur.push(c);
             c
         }
         fn add_token(&mut self, token: Token) {
@@ -165,8 +161,8 @@ pub fn tokenize(source: &str) -> Result<Vec<Token>, CompliationError> {
         fn get_src_loc(&self) -> SourceLoc {
             SourceLoc {
                 line: self.line,
-                col: self.start,
-                width: self.cur - self.start,
+                col: self.col - self.cur.len(),
+                width: self.cur.len(),
             }
         }
         fn is_id_initial(c: char) -> bool {

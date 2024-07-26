@@ -2,25 +2,28 @@ use std::{iter::Peekable, slice::Iter};
 
 use super::{compliation_error::CompliationError, sexpr::SExpr, token::Token};
 use crate::compile::sexpr::Id;
-use crate::compile::src_loc::SourceLoc;
 use crate::sexpr;
 
 pub fn parse(tokens: &[Token]) -> Result<SExpr, CompliationError> {
     struct Parser<'tokens> {
         it: Peekable<Iter<'tokens, Token>>,
+        cur: &'tokens Token,
     }
 
     impl Parser<'_> {
         fn new(tokens: &[Token]) -> Parser {
+            assert_ne!(tokens.len(), 0, "Token stream must have at least 1 token");
             Parser {
                 it: tokens.iter().peekable(),
+                cur: &tokens[0],
             }
         }
         fn parse(&mut self) -> Result<SExpr, CompliationError> {
             let res = self.parse_datum()?;
-            match self.advance() {
-                Token::EoF(_) => Ok(res),
-                _ => Err(self.emit_err("Expected EoF")),
+            match self.look_ahead() {
+                Some(Token::EoF(_)) => Ok(res),
+                Some(token) => Err(self.emit_err("Expecting EoF", token)),
+                None => unreachable!("parse is expecting token stream to end with the EoF token"),
             }
         }
         fn parse_datum(&mut self) -> Result<SExpr, CompliationError> {
@@ -32,7 +35,16 @@ pub fn parse(tokens: &[Token]) -> Result<SExpr, CompliationError> {
                     | Token::Char(_, _)
                     | Token::Str(_, _),
                 ) => Ok(self.parse_atom()),
-                _ => self.parse_compound(),
+                Some(
+                    Token::LParen(_)
+                    | Token::HashLParen(_)
+                    | Token::Quote(_)
+                    | Token::QuasiQuote(_)
+                    | Token::Comma(_)
+                    | Token::CommaAt(_),
+                ) => self.parse_compound(),
+                Some(token) => Err(self.emit_err("Expecting a datum", token)),
+                _ => unreachable!("parse_datum is expecting at least 1 token to look ahead"),
             }
         }
         fn parse_atom(&mut self) -> SExpr {
@@ -63,8 +75,7 @@ pub fn parse(tokens: &[Token]) -> Result<SExpr, CompliationError> {
                             | Token::CommaAt(_)
                     )
                 ),
-                "parse_list is expecting either '(' or an abbreviation prefix, but got: {:?}",
-                self.look_ahead()
+                "parse_list is expecting either '(' or an abbreviation prefix",
             );
 
             if matches!(
@@ -82,18 +93,30 @@ pub fn parse(tokens: &[Token]) -> Result<SExpr, CompliationError> {
                 }
                 elements.push(self.parse_datum()?);
             }
-            if matches!(self.look_ahead(), Some(Token::Dot(_))) {
-                self.advance();
-                elements.push(self.parse_datum()?);
-                if !matches!(self.look_ahead(), Some(Token::RParen(_))) {
-                    Err(self.emit_err("Expected ')' after dotted datum"))?
+            match self.look_ahead() {
+                Some(Token::Dot(_)) => {
+                    elements.push(self.parse_dot_notation()?);
+                    Ok(SExpr::make_improper_list(&elements))
                 }
-                Ok(SExpr::make_improper_list(&elements))
-            } else if matches!(self.look_ahead(), Some(Token::RParen(_))) {
-                self.advance();
-                Ok(SExpr::make_list(&elements))
-            } else {
-                Err(self.emit_err("Expected ')' to close '('"))?
+                Some(Token::RParen(_)) => {
+                    self.advance();
+                    Ok(SExpr::make_list(&elements))
+                }
+                Some(token) => Err(self.emit_err("Expected ')' to close '('", token)),
+                None => {
+                    unreachable!("parse_datum is expecting token stream to end with the EoF token")
+                }
+            }
+        }
+        fn parse_dot_notation(&mut self) -> Result<SExpr, CompliationError> {
+            assert!(
+                matches!(self.advance(), Token::Dot(_)),
+                "parse_dot_notation is expecting the '.' token"
+            );
+            match self.look_ahead() {
+                Some(Token::RParen(_)) => Ok(self.parse_datum()?),
+                Some(token) => Err(self.emit_err("Expected ')' after dotted datum", token)),
+                None => unreachable!("parse_datum is expecting at least 1 token to look ahead"),
             }
         }
         fn parse_abbreviation(&mut self) -> Result<SExpr, CompliationError> {
@@ -123,26 +146,27 @@ pub fn parse(tokens: &[Token]) -> Result<SExpr, CompliationError> {
                 }
                 elements.push(self.parse_datum()?);
             }
-            if matches!(self.look_ahead(), Some(Token::RParen(_))) {
-                self.advance();
-                Ok(SExpr::from(&*elements))
-            } else {
-                Err(self.emit_err("Expected ')' to close '#('"))?
+            match self.look_ahead() {
+                Some(Token::RParen(_)) => {
+                    self.advance();
+                    Ok(SExpr::from(&*elements))
+                }
+                Some(token) => Err(self.emit_err("Expected ')' to close '#('", token)),
+                None => unreachable!("parse_datum is expecting at least 1 token to look ahead"),
             }
         }
-        fn look_ahead(&mut self) -> Option<&Token> {
-            self.it.peek().copied()
+        fn look_ahead(&mut self) -> Option<Token> {
+            self.it.peek().copied().cloned()
         }
         fn advance(&mut self) -> &Token {
-            self.it.next().unwrap()
+            let token = self.it.next().unwrap();
+            self.cur = token;
+            token
         }
-        fn get_src_loc(&mut self) -> SourceLoc {
-            (*self.it.peek().unwrap()).get_src_loc()
-        }
-        fn emit_err(&mut self, reason: &str) -> CompliationError {
+        fn emit_err(&self, reason: &str, token: Token) -> CompliationError {
             CompliationError {
-                source_loc: self.get_src_loc(),
-                reason: reason.to_owned(),
+                source_loc: token.get_src_loc(),
+                reason: format!("{}, but got: {}", reason.to_owned(), token),
             }
         }
     }
