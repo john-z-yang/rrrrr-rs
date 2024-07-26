@@ -127,10 +127,10 @@ impl fmt::Debug for SExpr {
                 write!(f, "'{:?}'", char)
             }
             SExpr::Str(string) => {
-                write!(f, "\"{:?}\"", string)
+                write!(f, "{:?}", string)
             }
             SExpr::Vector(vector) => {
-                write!(f, "\"{:?}\"", vector)
+                write!(f, "{:?}", vector)
             }
         }
     }
@@ -172,15 +172,13 @@ impl fmt::Display for SExpr {
                 write!(f, "{}", num)
             }
             SExpr::Char(char) => {
-                write!(f, "'{:?}'", char)
+                write!(f, "{}", char)
             }
             SExpr::Str(str) => {
                 write!(f, "{}", str)
             }
             SExpr::Vector(vector) => {
-                write!(f, "#(")?;
-                vector.0.iter().try_for_each(|e| write!(f, "{}", e))?;
-                write!(f, ")")
+                write!(f, "{}", vector)
             }
         }
     }
@@ -219,7 +217,7 @@ impl fmt::Display for Num {
 
 impl fmt::Display for Char {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "{}", self.0)
+        write!(f, "#\\{}", self.0)
     }
 }
 
@@ -231,7 +229,14 @@ impl fmt::Display for Str {
 
 impl fmt::Display for Vector {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "{:?}", self.0)
+        write!(f, "#(")?;
+        for e in self.0.iter().take(1) {
+            write!(f, "{}", e)?;
+        }
+        for e in self.0.iter().skip(1) {
+            write!(f, " {}", e)?;
+        }
+        write!(f, ")")
     }
 }
 
