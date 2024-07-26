@@ -106,6 +106,12 @@ impl Symbol {
     }
 }
 
+impl Vector {
+    pub fn new(slice: &[SExpr]) -> Self {
+        Vector(slice.to_vec())
+    }
+}
+
 impl fmt::Debug for SExpr {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
@@ -134,9 +140,7 @@ impl fmt::Debug for SExpr {
                 write!(f, "\"{:?}\"", string)
             }
             SExpr::Vector(vector) => {
-                write!(f, "#(")?;
-                vector.0.iter().try_for_each(|e| write!(f, "{:?}", e))?;
-                write!(f, ")")
+                write!(f, "\"{:?}\"", vector)
             }
         }
     }
@@ -183,8 +187,8 @@ impl fmt::Display for SExpr {
             SExpr::Char(char) => {
                 write!(f, "'{:?}'", char)
             }
-            SExpr::Str(string) => {
-                write!(f, "\"{:?}\"", string)
+            SExpr::Str(str) => {
+                write!(f, "{}", str)
             }
             SExpr::Vector(vector) => {
                 write!(f, "#(")?;
@@ -226,6 +230,24 @@ impl fmt::Display for Num {
     }
 }
 
+impl fmt::Display for Char {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "{}", self.0)
+    }
+}
+
+impl fmt::Display for Str {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "{:?}", self.0)
+    }
+}
+
+impl fmt::Display for Vector {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "{:?}", self.0)
+    }
+}
+
 impl From<Id> for SExpr {
     fn from(value: Id) -> Self {
         SExpr::Id(value)
@@ -247,6 +269,30 @@ impl From<Symbol> for SExpr {
 impl From<Bool> for SExpr {
     fn from(value: Bool) -> Self {
         SExpr::Bool(value)
+    }
+}
+
+impl From<Num> for SExpr {
+    fn from(value: Num) -> Self {
+        SExpr::Num(value)
+    }
+}
+
+impl From<Char> for SExpr {
+    fn from(value: Char) -> Self {
+        SExpr::Char(value)
+    }
+}
+
+impl From<Str> for SExpr {
+    fn from(value: Str) -> Self {
+        SExpr::Str(value)
+    }
+}
+
+impl From<Vector> for SExpr {
+    fn from(value: Vector) -> Self {
+        SExpr::Vector(value)
     }
 }
 
@@ -295,13 +341,6 @@ impl TryFrom<SExpr> for Bool {
 }
 
 impl SExpr {
-    pub fn new<T>(value: T) -> SExpr
-    where
-        T: Into<SExpr>,
-    {
-        value.into()
-    }
-
     pub fn id<const N: usize>(symbol: &str, scopes: [ScopeId; N]) -> Self {
         Self::Id(Id {
             symbol: Symbol::new(symbol),
@@ -327,6 +366,10 @@ impl SExpr {
 
     pub fn num(val: f32) -> Self {
         Self::Num(Num(val))
+    }
+
+    pub fn vector(val: &[Self]) -> Self {
+        Self::Vector(Vector::new(val))
     }
 
     pub fn coerce_to_syntax(&self) -> Self {
@@ -384,6 +427,26 @@ impl SExpr {
             scopes
         };
         self.adjust_scope(&op)
+    }
+
+    pub fn make_list(slice: &[Self]) -> Self {
+        if slice.is_empty() {
+            Self::Nil
+        } else {
+            Self::cons(slice[0].clone(), SExpr::make_list(&slice[1..]))
+        }
+    }
+
+    pub fn make_improper_list(slice: &[Self]) -> Self {
+        assert!(
+            slice.len() > 1,
+            "improper list has to have more than 1 elements"
+        );
+        if slice.len() == 2 {
+            Self::cons(slice[0].clone(), slice[1].clone())
+        } else {
+            Self::cons(slice[0].clone(), SExpr::make_improper_list(&slice[1..]))
+        }
     }
 }
 

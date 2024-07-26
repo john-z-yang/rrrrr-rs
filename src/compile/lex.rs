@@ -4,7 +4,7 @@ use std::{
 };
 
 use crate::compile::{
-    sexpr::{Bool, Char, Num, Symbol},
+    sexpr::{Bool, Char, Num, Str, Symbol},
     src_loc::SourceLoc,
 };
 
@@ -32,11 +32,12 @@ pub fn tokenize(source: &str) -> Result<Vec<Token>, CompliationError> {
             }
         }
         fn scan(&mut self) -> Result<Vec<Token>, CompliationError> {
-            while self.it.peek().is_some() {
+            while self.look_ahead().is_some() {
                 self.start = self.cur;
                 self.scan_token()?;
             }
-            self.tokens.push(Token::EoF());
+            self.start = self.cur;
+            self.tokens.push(Token::EoF(self.get_src_loc()));
             Ok(self.tokens.clone())
         }
         fn scan_token(&mut self) -> Result<(), CompliationError> {
@@ -52,7 +53,7 @@ pub fn tokenize(source: &str) -> Result<Vec<Token>, CompliationError> {
                 '.' => {
                     let token = if !self.advance_if('.') {
                         Token::Dot(self.get_src_loc())
-                    } else if self.look_ahead() == Some('.') {
+                    } else if self.advance_if('.') {
                         Token::Id(Symbol::new("..."), self.get_src_loc())
                     } else {
                         Err(self.emit_err("Expecting '.' after '..'"))?
@@ -82,7 +83,7 @@ pub fn tokenize(source: &str) -> Result<Vec<Token>, CompliationError> {
                     self.add_token(token);
                 }
                 ';' => {
-                    self.advance_until(&|c| if c == '\n' { true } else { false });
+                    self.advance_until(&|c| c == '\n');
                 }
                 '0'..='9' | '-' => self.parse_num()?,
                 '"' => self.parse_string()?,
@@ -92,12 +93,7 @@ pub fn tokenize(source: &str) -> Result<Vec<Token>, CompliationError> {
             Ok(())
         }
         fn parse_id(&mut self) -> Result<(), CompliationError> {
-            while let Some(c) = self.look_ahead() {
-                if !Self::is_id_subsequent(c) {
-                    break;
-                }
-                self.advance();
-            }
+            self.advance_until(&|c| !Self::is_id_subsequent(c));
             self.add_token(Token::Id(
                 Symbol::new(&self.source[self.start..self.cur]),
                 self.get_src_loc(),
@@ -105,17 +101,11 @@ pub fn tokenize(source: &str) -> Result<Vec<Token>, CompliationError> {
             Ok(())
         }
         fn parse_num(&mut self) -> Result<(), CompliationError> {
-            self.advance_until(&|c| match c {
-                '0'..='9' => false,
-                _ => true,
-            });
+            self.advance_until(&|c| !c.is_ascii_digit());
 
             if self.look_ahead() == Some('.') {
                 self.advance();
-                self.advance_until(&|c| match c {
-                    '0'..='9' => false,
-                    _ => true,
-                });
+                self.advance_until(&|c| !c.is_ascii_digit());
             }
 
             let sub_str = self.source[self.start..self.cur].to_string();
@@ -128,13 +118,13 @@ pub fn tokenize(source: &str) -> Result<Vec<Token>, CompliationError> {
             Ok(())
         }
         fn parse_string(&mut self) -> Result<(), CompliationError> {
-            self.advance_until(&|c| if c == '"' { true } else { false });
+            self.advance_until(&|c| c == '"');
             if self.look_ahead().is_none() {
                 Err(self.emit_err("Unterminated string"))?;
             };
             self.advance();
-            self.add_token(Token::String(
-                self.source[self.start + 1..self.cur - 1].to_string(),
+            self.add_token(Token::Str(
+                Str(self.source[self.start + 1..self.cur - 1].to_string()),
                 self.get_src_loc(),
             ));
             Ok(())
@@ -180,7 +170,7 @@ pub fn tokenize(source: &str) -> Result<Vec<Token>, CompliationError> {
             }
         }
         fn is_id_initial(c: char) -> bool {
-            match c {
+            matches!(c,
                 'A'..='Z'
                 | 'a'..='z'
                 | '!'
@@ -198,9 +188,8 @@ pub fn tokenize(source: &str) -> Result<Vec<Token>, CompliationError> {
                 | '_'
                 | '~'
                 | '+'
-                | '-' => true,
-                _ => false,
-            }
+                | '-'
+            )
         }
         fn is_id_subsequent(c: char) -> bool {
             match c {
@@ -210,7 +199,6 @@ pub fn tokenize(source: &str) -> Result<Vec<Token>, CompliationError> {
         }
         fn emit_err(&self, reason: &str) -> CompliationError {
             CompliationError {
-                source: self.source.to_string(),
                 source_loc: self.get_src_loc(),
                 reason: reason.to_owned(),
             }
@@ -224,14 +212,21 @@ pub fn tokenize(source: &str) -> Result<Vec<Token>, CompliationError> {
 mod tests {
     use crate::compile::{
         lex::tokenize,
-        sexpr::{Bool, Char, Num, Symbol},
+        sexpr::{Bool, Char, Num, Str, Symbol},
         src_loc::SourceLoc,
         token::Token,
     };
 
     #[test]
     fn test_tokenize_empty() {
-        assert_eq!(tokenize("").unwrap(), vec![Token::EoF()]);
+        assert_eq!(
+            tokenize("").unwrap(),
+            vec![Token::EoF(SourceLoc {
+                line: 0,
+                col: 0,
+                width: 0
+            })]
+        );
     }
 
     #[test]
@@ -241,7 +236,7 @@ mod tests {
 \"ab\" ; #
 ; #
 \"\" 9.0001 0 -3 -42.00 -100 some-symbol <=? list->vector ;
-2 #t #\\ ";
+2 #t #\\ (...)";
         assert_eq!(
             tokenize(src).unwrap(),
             vec![
@@ -270,16 +265,16 @@ mod tests {
                     col: 5,
                     width: 1
                 }),
-                Token::String(
-                    "ab".to_string(),
+                Token::Str(
+                    Str("ab".to_string()),
                     SourceLoc {
                         line: 2,
                         col: 11,
                         width: 4
                     }
                 ),
-                Token::String(
-                    "".to_string(),
+                Token::Str(
+                    Str("".to_string()),
                     SourceLoc {
                         line: 4,
                         col: 24,
@@ -374,7 +369,29 @@ mod tests {
                         width: 3
                     }
                 ),
-                Token::EoF()
+                Token::LParen(SourceLoc {
+                    line: 5,
+                    col: 90,
+                    width: 1
+                }),
+                Token::Id(
+                    Symbol::new("..."),
+                    SourceLoc {
+                        line: 5,
+                        col: 91,
+                        width: 3
+                    }
+                ),
+                Token::RParen(SourceLoc {
+                    line: 5,
+                    col: 94,
+                    width: 1
+                }),
+                Token::EoF(SourceLoc {
+                    line: 5,
+                    col: 95,
+                    width: 0
+                })
             ]
         );
     }
