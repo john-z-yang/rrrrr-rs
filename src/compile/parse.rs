@@ -1,6 +1,7 @@
 use std::{iter::Peekable, slice::Iter};
 
 use super::{compliation_error::CompliationError, sexpr::SExpr, token::Token};
+use crate::compile::sexpr::Id;
 use crate::compile::src_loc::SourceLoc;
 use crate::sexpr;
 
@@ -101,10 +102,10 @@ pub fn parse(tokens: &[Token]) -> Result<SExpr, CompliationError> {
         }
         fn parse_prefix(&mut self) -> SExpr {
             match self.advance() {
-                Token::Quote(_) => SExpr::id("quote", []),
-                Token::QuasiQuote(_) => SExpr::id("quasiquote", []),
-                Token::Comma(_) => SExpr::id("unquote", []),
-                Token::CommaAt(_) => SExpr::id("unquote-splicing", []),
+                Token::Quote(_) => SExpr::from(Id::new("quote", [])),
+                Token::QuasiQuote(_) => SExpr::from(Id::new("quasiquote", [])),
+                Token::Comma(_) => SExpr::from(Id::new("unquote", [])),
+                Token::CommaAt(_) => SExpr::from(Id::new("unquote-splicing", [])),
                 _ => unreachable!(
                     "parse_abbreviation is only expecting tokens for abbreviated prefix"
                 ),
@@ -124,7 +125,7 @@ pub fn parse(tokens: &[Token]) -> Result<SExpr, CompliationError> {
             }
             if matches!(self.look_ahead(), Some(Token::RParen(_))) {
                 self.advance();
-                Ok(SExpr::vector(&elements))
+                Ok(SExpr::from(&*elements))
             } else {
                 Err(self.emit_err("Expected ')' to close '#('"))?
             }

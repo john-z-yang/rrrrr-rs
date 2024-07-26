@@ -257,7 +257,7 @@ mod tests {
             transformer
                 .transform(&introduce(&parse(&tokenize("(and)").unwrap()).unwrap()))
                 .unwrap(),
-            SExpr::bool(false)
+            SExpr::from(false)
         );
 
         let transformer = Transformer::new(&introduce(
@@ -277,7 +277,7 @@ mod tests {
             transformer
                 .transform(&introduce(&parse(&tokenize("(and x)").unwrap()).unwrap()))
                 .unwrap(),
-            introduce(&SExpr::id("x", []))
+            introduce(&SExpr::from(Id::new("x", [])))
         );
     }
 
@@ -341,13 +341,13 @@ mod tests {
             transformer
                 .transform(&introduce(&parse(&tokenize("(and)").unwrap()).unwrap()))
                 .unwrap(),
-            SExpr::bool(false)
+            SExpr::from(false)
         );
         assert_eq!(
             transformer
                 .transform(&introduce(&parse(&tokenize("(and a)").unwrap()).unwrap()))
                 .unwrap(),
-            introduce(&SExpr::id("a", []))
+            introduce(&SExpr::from(Id::new("a", [])))
         );
         assert_eq!(
             transformer

@@ -138,9 +138,9 @@ mod tests {
         assert_eq!(
             introduce(&list),
             sexpr!(
-                SExpr::id("cons", [Bindings::CORE_SCOPE]),
-                SExpr::num(0.0),
-                SExpr::num(1.0),
+                SExpr::from(Id::new("cons", [Bindings::CORE_SCOPE])),
+                SExpr::from(0.0),
+                SExpr::from(1.0),
             )
         );
     }
@@ -152,15 +152,15 @@ mod tests {
         let lambda_expr = parse(&tokenize("(lambda (x y) (cons x y))").unwrap()).unwrap();
         let left = expand(&introduce(&lambda_expr), &mut bindings, &mut env);
         let right = sexpr!(
-            SExpr::id("lambda", [Bindings::CORE_SCOPE]),
+            SExpr::from(Id::new("lambda", [Bindings::CORE_SCOPE])),
             (
-                SExpr::id("x", [Bindings::CORE_SCOPE, 1]),
-                SExpr::id("y", [Bindings::CORE_SCOPE, 1]),
+                SExpr::from(Id::new("x", [Bindings::CORE_SCOPE, 1])),
+                SExpr::from(Id::new("y", [Bindings::CORE_SCOPE, 1])),
             ),
             (
-                SExpr::id("cons", [Bindings::CORE_SCOPE, 1]),
-                SExpr::id("x", [Bindings::CORE_SCOPE, 1]),
-                SExpr::id("y", [Bindings::CORE_SCOPE, 1]),
+                SExpr::from(Id::new("cons", [Bindings::CORE_SCOPE, 1])),
+                SExpr::from(Id::new("x", [Bindings::CORE_SCOPE, 1])),
+                SExpr::from(Id::new("y", [Bindings::CORE_SCOPE, 1])),
             ),
         );
         assert_eq!(left, right);
@@ -183,21 +183,21 @@ mod tests {
         .unwrap();
         let result = expand(&introduce(&lambda_expr), &mut bindings, &mut env);
         let expected = sexpr!(
-            SExpr::id("lambda", [Bindings::CORE_SCOPE]),
-            (SExpr::id("x", [Bindings::CORE_SCOPE, 1])),
+            SExpr::from(Id::new("lambda", [Bindings::CORE_SCOPE])),
+            (SExpr::from(Id::new("x", [Bindings::CORE_SCOPE, 1]))),
             (
-                SExpr::id("lambda", [Bindings::CORE_SCOPE, 1]),
-                (SExpr::id("y", [Bindings::CORE_SCOPE, 1, 2])),
+                SExpr::from(Id::new("lambda", [Bindings::CORE_SCOPE, 1])),
+                (SExpr::from(Id::new("y", [Bindings::CORE_SCOPE, 1, 2]))),
                 (
-                    SExpr::id("cons", [Bindings::CORE_SCOPE, 1, 2]),
-                    SExpr::id("x", [Bindings::CORE_SCOPE, 1, 2]),
-                    SExpr::id("y", [Bindings::CORE_SCOPE, 1, 2]),
+                    SExpr::from(Id::new("cons", [Bindings::CORE_SCOPE, 1, 2])),
+                    SExpr::from(Id::new("x", [Bindings::CORE_SCOPE, 1, 2])),
+                    SExpr::from(Id::new("y", [Bindings::CORE_SCOPE, 1, 2])),
                 )
             ),
             (
-                SExpr::id("cons", [Bindings::CORE_SCOPE, 1]),
-                SExpr::id("x", [Bindings::CORE_SCOPE, 1]),
-                SExpr::id("x", [Bindings::CORE_SCOPE, 1]),
+                SExpr::from(Id::new("cons", [Bindings::CORE_SCOPE, 1])),
+                SExpr::from(Id::new("x", [Bindings::CORE_SCOPE, 1])),
+                SExpr::from(Id::new("x", [Bindings::CORE_SCOPE, 1])),
             ),
         );
         assert_eq!(result, expected);
@@ -218,7 +218,7 @@ mod tests {
         .unwrap();
         assert_eq!(
             expand(&introduce(&sexpr), &mut bindings, &mut env),
-            sexpr!(SExpr::bool(false))
+            sexpr!(SExpr::from(false))
         );
     }
 
@@ -253,7 +253,7 @@ mod tests {
 
         let sexpr = parse(&tokenize("(and)").unwrap()).unwrap();
         let result = expand(&introduce(&sexpr), &mut bindings, &mut env);
-        let expected = SExpr::bool(false);
+        let expected = SExpr::from(false);
         assert_eq!(result, expected);
     }
 
@@ -288,7 +288,7 @@ mod tests {
 
         let sexpr = introduce(&parse(&tokenize("(and list)").unwrap()).unwrap());
         let result = expand(&introduce(&sexpr), &mut bindings, &mut env);
-        let expected = SExpr::id("list", [Bindings::CORE_SCOPE]);
+        let expected = SExpr::from(Id::new("list", [Bindings::CORE_SCOPE]));
         assert_eq!(result, expected);
     }
 
@@ -324,10 +324,10 @@ mod tests {
         let sexpr = parse(&tokenize("(and list list)").unwrap()).unwrap();
         let result = expand(&introduce(&sexpr), &mut bindings, &mut env);
         let expected = sexpr!(
-            SExpr::id("if", [Bindings::CORE_SCOPE, 1]),
-            SExpr::id("list", [Bindings::CORE_SCOPE]),
-            SExpr::id("list", [Bindings::CORE_SCOPE]),
-            SExpr::bool(false),
+            SExpr::from(Id::new("if", [Bindings::CORE_SCOPE, 1])),
+            SExpr::from(Id::new("list", [Bindings::CORE_SCOPE])),
+            SExpr::from(Id::new("list", [Bindings::CORE_SCOPE])),
+            SExpr::from(false),
         );
         assert_eq!(result, expected);
     }
@@ -369,20 +369,20 @@ mod tests {
         // (if t (if t (if t t f) f) f) f)
         let result = expand(&introduce(&sexpr), &mut bindings, &mut env);
         let expected = sexpr!(
-            SExpr::id("if", [Bindings::CORE_SCOPE, 1]),
-            SExpr::bool(true),
+            SExpr::from(Id::new("if", [Bindings::CORE_SCOPE, 1])),
+            SExpr::from(true),
             (
-                SExpr::id("if", [Bindings::CORE_SCOPE, 2]),
-                SExpr::bool(true),
+                SExpr::from(Id::new("if", [Bindings::CORE_SCOPE, 2])),
+                SExpr::from(true),
                 (
-                    SExpr::id("if", [Bindings::CORE_SCOPE, 3]),
-                    SExpr::bool(true),
-                    SExpr::bool(true),
-                    SExpr::bool(false),
+                    SExpr::from(Id::new("if", [Bindings::CORE_SCOPE, 3])),
+                    SExpr::from(true),
+                    SExpr::from(true),
+                    SExpr::from(false),
                 ),
-                SExpr::bool(false),
+                SExpr::from(false),
             ),
-            SExpr::bool(false),
+            SExpr::from(false),
         );
         assert_eq!(result, expected);
         assert_eq!(
@@ -426,9 +426,9 @@ mod tests {
         let sexpr = parse(&tokenize("(my-macro x)").unwrap()).unwrap();
         let result = expand(&introduce(&sexpr), &mut bindings, &mut env);
         let expected = sexpr!(
-            SExpr::id("lambda", [Bindings::CORE_SCOPE, 1]),
-            (SExpr::id("x", [Bindings::CORE_SCOPE, 1, 2])),
-            SExpr::id("x", [Bindings::CORE_SCOPE, 2]),
+            SExpr::from(Id::new("lambda", [Bindings::CORE_SCOPE, 1])),
+            (SExpr::from(Id::new("x", [Bindings::CORE_SCOPE, 1, 2]))),
+            SExpr::from(Id::new("x", [Bindings::CORE_SCOPE, 2])),
         );
         assert_eq!(result, expected);
         assert_ne!(
@@ -491,23 +491,23 @@ mod tests {
 
         let expected = sexpr!(
             (
-                SExpr::id("lambda", [Bindings::CORE_SCOPE]),
-                (SExpr::id("temp", [Bindings::CORE_SCOPE, 1])),
+                SExpr::from(Id::new("lambda", [Bindings::CORE_SCOPE])),
+                (SExpr::from(Id::new("temp", [Bindings::CORE_SCOPE, 1]))),
                 (
                     (
-                        SExpr::id("lambda", [Bindings::CORE_SCOPE, 2]),
-                        (SExpr::id("temp", [Bindings::CORE_SCOPE, 2, 3])),
+                        SExpr::from(Id::new("lambda", [Bindings::CORE_SCOPE, 2])),
+                        (SExpr::from(Id::new("temp", [Bindings::CORE_SCOPE, 2, 3]))),
                         (
-                            SExpr::id("if", [Bindings::CORE_SCOPE, 2, 3]),
-                            SExpr::id("temp", [Bindings::CORE_SCOPE, 0, 2, 3]),
-                            SExpr::id("temp", [Bindings::CORE_SCOPE, 0, 2, 3]),
-                            SExpr::id("temp", [Bindings::CORE_SCOPE, 1, 3]),
+                            SExpr::from(Id::new("if", [Bindings::CORE_SCOPE, 2, 3])),
+                            SExpr::from(Id::new("temp", [Bindings::CORE_SCOPE, 0, 2, 3])),
+                            SExpr::from(Id::new("temp", [Bindings::CORE_SCOPE, 0, 2, 3])),
+                            SExpr::from(Id::new("temp", [Bindings::CORE_SCOPE, 1, 3])),
                         )
                     ),
-                    SExpr::bool(false)
+                    SExpr::from(false)
                 )
             ),
-            SExpr::bool(true),
+            SExpr::from(true),
         );
 
         assert_eq!(result, expected);
@@ -590,7 +590,7 @@ mod tests {
         )
         .unwrap();
         let result = expand(&introduce(&let_syntax_expr), &mut bindings, &mut env);
-        let expected = SExpr::num(1.0);
+        let expected = SExpr::from(1.0);
         assert_eq!(result, expected);
     }
 
@@ -620,23 +620,23 @@ mod tests {
         let result = expand(&introduce(&let_syntax_expr), &mut bindings, &mut env);
         let expected = sexpr!(
             (
-                SExpr::id("lambda", [Bindings::CORE_SCOPE, 1]),
-                (SExpr::id("temp", [Bindings::CORE_SCOPE, 1, 2])),
+                SExpr::from(Id::new("lambda", [Bindings::CORE_SCOPE, 1])),
+                (SExpr::from(Id::new("temp", [Bindings::CORE_SCOPE, 1, 2]))),
                 (
                     (
-                        SExpr::id("lambda", [Bindings::CORE_SCOPE, 1, 3]),
-                        (SExpr::id("temp", [Bindings::CORE_SCOPE, 1, 3, 4])),
+                        SExpr::from(Id::new("lambda", [Bindings::CORE_SCOPE, 1, 3])),
+                        (SExpr::from(Id::new("temp", [Bindings::CORE_SCOPE, 1, 3, 4]))),
                         (
-                            SExpr::id("if", [Bindings::CORE_SCOPE, 1, 3, 4]),
-                            SExpr::id("temp", [Bindings::CORE_SCOPE, 1, 3, 4]),
-                            SExpr::id("temp", [Bindings::CORE_SCOPE, 1, 3, 4]),
-                            SExpr::id("temp", [Bindings::CORE_SCOPE, 1, 2, 4])
+                            SExpr::from(Id::new("if", [Bindings::CORE_SCOPE, 1, 3, 4])),
+                            SExpr::from(Id::new("temp", [Bindings::CORE_SCOPE, 1, 3, 4])),
+                            SExpr::from(Id::new("temp", [Bindings::CORE_SCOPE, 1, 3, 4])),
+                            SExpr::from(Id::new("temp", [Bindings::CORE_SCOPE, 1, 2, 4]))
                         )
                     ),
-                    SExpr::bool(false)
+                    SExpr::from(false)
                 ),
             ),
-            SExpr::bool(true),
+            SExpr::from(true),
         );
         assert_eq!(result, expected);
 

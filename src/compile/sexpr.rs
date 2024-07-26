@@ -105,12 +105,6 @@ impl Symbol {
     }
 }
 
-impl Vector {
-    pub fn new(slice: &[SExpr]) -> Self {
-        Vector(slice.to_vec())
-    }
-}
-
 impl fmt::Debug for SExpr {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
@@ -292,6 +286,36 @@ impl From<Vector> for SExpr {
     }
 }
 
+impl From<bool> for SExpr {
+    fn from(value: bool) -> Self {
+        SExpr::Bool(Bool(value))
+    }
+}
+
+impl From<f32> for SExpr {
+    fn from(value: f32) -> Self {
+        SExpr::Num(Num(value))
+    }
+}
+
+impl From<char> for SExpr {
+    fn from(value: char) -> Self {
+        SExpr::Char(Char(value))
+    }
+}
+
+impl From<String> for SExpr {
+    fn from(value: String) -> Self {
+        SExpr::Str(Str(value))
+    }
+}
+
+impl From<&[SExpr]> for SExpr {
+    fn from(value: &[SExpr]) -> Self {
+        SExpr::Vector(Vector(value.to_vec()))
+    }
+}
+
 impl TryFrom<SExpr> for Id {
     type Error = ();
     fn try_from(value: SExpr) -> Result<Self, Self::Error> {
@@ -326,11 +350,11 @@ impl TryFrom<SExpr> for Bool {
 }
 
 impl SExpr {
-    pub fn id<const N: usize>(symbol: &str, scopes: [ScopeId; N]) -> Self {
-        Self::Id(Id {
-            symbol: Symbol::new(symbol),
-            scopes: Scopes::from(scopes),
-        })
+    pub fn from<T>(value: T) -> Self
+    where
+        T: Into<SExpr>,
+    {
+        value.into()
     }
 
     pub fn cons<T, U>(car: T, cdr: U) -> Self
@@ -339,18 +363,6 @@ impl SExpr {
         U: Into<SExpr>,
     {
         Self::Cons(Cons::new(car, cdr))
-    }
-
-    pub fn bool(val: bool) -> Self {
-        Self::Bool(Bool(val))
-    }
-
-    pub fn num(val: f32) -> Self {
-        Self::Num(Num(val))
-    }
-
-    pub fn vector(val: &[Self]) -> Self {
-        Self::Vector(Vector::new(val))
     }
 
     fn adjust_scope<F>(&self, op: &F) -> Self
@@ -422,18 +434,18 @@ mod tests {
     #[test]
     fn test_add_scope() {
         let list = sexpr!(
-            SExpr::id("a", [1]),
-            (SExpr::id("b", [0, 1])),
-            (SExpr::id("c", [0])),
-            SExpr::id("d", [0, 1]),
+            SExpr::from(Id::new("a", [1])),
+            (SExpr::from(Id::new("b", [0, 1]))),
+            (SExpr::from(Id::new("c", [0]))),
+            SExpr::from(Id::new("d", [0, 1])),
         );
         assert_eq!(
             list.add_scope(0).add_scope(2),
             sexpr!(
-                SExpr::id("a", [0, 1, 2]),
-                (SExpr::id("b", [0, 1, 2])),
-                (SExpr::id("c", [0, 2])),
-                SExpr::id("d", [0, 1, 2])
+                SExpr::from(Id::new("a", [0, 1, 2])),
+                (SExpr::from(Id::new("b", [0, 1, 2]))),
+                (SExpr::from(Id::new("c", [0, 2]))),
+                SExpr::from(Id::new("d", [0, 1, 2]))
             )
         )
     }
@@ -441,18 +453,18 @@ mod tests {
     #[test]
     fn test_flip_scope() {
         let list = sexpr!(
-            SExpr::id("a", [1]),
-            (SExpr::id("b", [0, 1])),
-            (SExpr::id("c", [0])),
-            SExpr::id("d", [0, 1]),
+            SExpr::from(Id::new("a", [1])),
+            (SExpr::from(Id::new("b", [0, 1]))),
+            (SExpr::from(Id::new("c", [0]))),
+            SExpr::from(Id::new("d", [0, 1])),
         );
         assert_eq!(
             list.flip_scope(0),
             sexpr!(
-                SExpr::id("a", [0, 1]),
-                (SExpr::id("b", [1])),
-                (SExpr::id("c", [])),
-                SExpr::id("d", [1]),
+                SExpr::from(Id::new("a", [0, 1])),
+                (SExpr::from(Id::new("b", [1]))),
+                (SExpr::from(Id::new("c", []))),
+                SExpr::from(Id::new("d", [1])),
             )
         )
     }
