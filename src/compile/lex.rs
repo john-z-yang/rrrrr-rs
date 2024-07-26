@@ -54,7 +54,7 @@ pub fn tokenize(source: &str) -> Result<Vec<Token>, CompliationError> {
                     } else if self.advance_if('.') {
                         Token::Id(Symbol::new("..."), self.get_src_loc())
                     } else {
-                        Err(self.emit_err("Expecting '.' after '..'"))?
+                        return Err(self.emit_err("Expecting '.' after '..'"));
                     };
                     self.add_token(token);
                 }
@@ -76,7 +76,9 @@ pub fn tokenize(source: &str) -> Result<Vec<Token>, CompliationError> {
                     } else if self.advance_if('\\') && self.look_ahead().is_some() {
                         Token::Char(Char(self.advance()), self.get_src_loc())
                     } else {
-                        Err(self.emit_err("Expectin 't', 'f', '(' or character literal after '#'"))?
+                        return Err(
+                            self.emit_err("Expectin 't', 'f', '(' or character literal after '#'")
+                        );
                     };
                     self.add_token(token);
                 }
@@ -114,7 +116,7 @@ pub fn tokenize(source: &str) -> Result<Vec<Token>, CompliationError> {
         fn parse_string(&mut self) -> Result<(), CompliationError> {
             self.advance_until(&|c| c == '"');
             if self.look_ahead().is_none() {
-                Err(self.emit_err("Unterminated string"))?;
+                return Err(self.emit_err("Unterminated string"));
             };
             self.advance();
             self.add_token(Token::Str(
@@ -158,13 +160,6 @@ pub fn tokenize(source: &str) -> Result<Vec<Token>, CompliationError> {
         fn add_token(&mut self, token: Token) {
             self.tokens.push(token);
         }
-        fn get_src_loc(&self) -> SourceLoc {
-            SourceLoc {
-                line: self.line,
-                col: self.col - self.cur.len(),
-                width: self.cur.len(),
-            }
-        }
         fn is_id_initial(c: char) -> bool {
             matches!(c,
                 'A'..='Z'
@@ -191,6 +186,13 @@ pub fn tokenize(source: &str) -> Result<Vec<Token>, CompliationError> {
             match c {
                 '0'..='9' | '+' | '-' | '.' | '@' => true,
                 c => Self::is_id_initial(c),
+            }
+        }
+        fn get_src_loc(&self) -> SourceLoc {
+            SourceLoc {
+                line: self.line,
+                col: self.col - self.cur.len(),
+                width: self.cur.len(),
             }
         }
         fn emit_err(&self, reason: &str) -> CompliationError {
