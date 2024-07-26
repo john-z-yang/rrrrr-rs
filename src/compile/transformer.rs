@@ -205,12 +205,12 @@ impl Transformer {
         match_sexpr! {(#"syntax-rules", (literals_list @ ..), rules @ ..) = spec =>
             let mut literals = HashSet::<Symbol>::new();
             for_each(|literal| {
-                if let SExpr::Symbol(sym) = literal{
-                    literals.insert(sym.clone());
+                if let SExpr::Id(Id { symbol, scopes: _ }) = literal{
+                    literals.insert(symbol.clone());
                 } else {
                     unreachable!("Expected symbols in syntax transformer literals");
                 }
-            }, &literals_list.coerce_to_datum());
+            }, &literals_list);
 
             let mut syntax_rules = Vec::<SyntaxRule>::new();
             for_each(|rule_pair| {
@@ -261,7 +261,7 @@ mod tests {
             transformer
                 .transform(&introduce(&sexpr!(#"and", #"x")))
                 .unwrap(),
-            introduce(&SExpr::symbol("x"))
+            introduce(&SExpr::id("x", []))
         );
     }
 
@@ -316,7 +316,7 @@ mod tests {
             transformer
                 .transform(&introduce(&sexpr!(#"and", #"a")))
                 .unwrap(),
-            introduce(&SExpr::symbol("a"))
+            introduce(&SExpr::id("a", []))
         );
         assert_eq!(
             transformer

@@ -101,10 +101,10 @@ pub fn parse(tokens: &[Token]) -> Result<SExpr, CompliationError> {
         }
         fn parse_prefix(&mut self) -> SExpr {
             match self.advance() {
-                Token::Quote(_) => SExpr::symbol("quote"),
-                Token::QuasiQuote(_) => SExpr::symbol("quasiquote"),
-                Token::Comma(_) => SExpr::symbol("unquote"),
-                Token::CommaAt(_) => SExpr::symbol("unquote-splicing"),
+                Token::Quote(_) => SExpr::id("quote", []),
+                Token::QuasiQuote(_) => SExpr::id("quasiquote", []),
+                Token::Comma(_) => SExpr::id("unquote", []),
+                Token::CommaAt(_) => SExpr::id("unquote-splicing", []),
                 _ => unreachable!(
                     "parse_abbreviation is only expecting tokens for abbreviated prefix"
                 ),

@@ -7,7 +7,6 @@ use super::bindings::{ScopeId, Scopes};
 pub enum SExpr {
     Id(Id),
     Cons(Cons),
-    Symbol(Symbol),
     Nil,
     Bool(Bool),
     Num(Num),
@@ -121,9 +120,6 @@ impl fmt::Debug for SExpr {
             SExpr::Cons(cons) => {
                 write!(f, "{:?}", cons)
             }
-            SExpr::Symbol(symbol) => {
-                write!(f, "{:?}", symbol)
-            }
             SExpr::Nil => {
                 write!(f, "()")
             }
@@ -171,9 +167,6 @@ impl fmt::Display for SExpr {
             }
             SExpr::Cons(cons) => {
                 write!(f, "{}", cons)
-            }
-            SExpr::Symbol(symbol) => {
-                write!(f, "{}", symbol)
             }
             SExpr::Nil => {
                 write!(f, "()")
@@ -262,7 +255,10 @@ impl From<Cons> for SExpr {
 
 impl From<Symbol> for SExpr {
     fn from(value: Symbol) -> Self {
-        SExpr::Symbol(value)
+        SExpr::Id(Id {
+            scopes: BTreeSet::from([]),
+            symbol: value,
+        })
     }
 }
 
@@ -318,17 +314,6 @@ impl TryFrom<SExpr> for Cons {
     }
 }
 
-impl TryFrom<SExpr> for Symbol {
-    type Error = ();
-    fn try_from(value: SExpr) -> Result<Self, Self::Error> {
-        if let SExpr::Symbol(symbol) = value {
-            Ok(symbol)
-        } else {
-            Err(())
-        }
-    }
-}
-
 impl TryFrom<SExpr> for Bool {
     type Error = ();
     fn try_from(value: SExpr) -> Result<Self, Self::Error> {
@@ -356,10 +341,6 @@ impl SExpr {
         Self::Cons(Cons::new(car, cdr))
     }
 
-    pub fn symbol(symbol: &str) -> Self {
-        Self::Symbol(Symbol::new(symbol))
-    }
-
     pub fn bool(val: bool) -> Self {
         Self::Bool(Bool(val))
     }
@@ -370,24 +351,6 @@ impl SExpr {
 
     pub fn vector(val: &[Self]) -> Self {
         Self::Vector(Vector::new(val))
-    }
-
-    pub fn coerce_to_syntax(&self) -> Self {
-        match self {
-            Self::Symbol(Symbol(symbol)) => SExpr::id(symbol, []),
-            Self::Cons(cons) => {
-                Self::cons(cons.car.coerce_to_syntax(), cons.cdr.coerce_to_syntax())
-            }
-            _ => self.clone(),
-        }
-    }
-
-    pub fn coerce_to_datum(&self) -> Self {
-        match self {
-            Self::Id(Id { symbol, scopes: _ }) => Self::Symbol(symbol.clone()),
-            Self::Cons(cons) => Self::cons(cons.car.coerce_to_datum(), cons.cdr.coerce_to_datum()),
-            _ => self.clone(),
-        }
     }
 
     fn adjust_scope<F>(&self, op: &F) -> Self
@@ -498,53 +461,6 @@ mod tests {
                 SExpr::num(2.0),
                 (SExpr::id("c", [])),
                 SExpr::id("d", [1]),
-            )
-        )
-    }
-
-    #[test]
-    fn test_syntax_coercion() {
-        assert_eq!(SExpr::symbol("a").coerce_to_syntax(), SExpr::id("a", []),);
-        let list = sexpr!(
-            SExpr::symbol("a"),
-            SExpr::num(0.0),
-            (SExpr::num(1.0), (SExpr::symbol("b"))),
-            SExpr::num(2.0),
-            (SExpr::symbol("c")),
-            SExpr::id("d", [0, 1]),
-        );
-        assert_eq!(
-            list.coerce_to_syntax(),
-            sexpr!(
-                SExpr::id("a", []),
-                SExpr::num(0.0),
-                (SExpr::num(1.0), (SExpr::id("b", []))),
-                SExpr::num(2.0),
-                (SExpr::id("c", [])),
-                SExpr::id("d", [0, 1])
-            )
-        )
-    }
-
-    #[test]
-    fn test_datum_coercion() {
-        let list = sexpr!(
-            SExpr::id("a", []),
-            SExpr::num(0.0),
-            (SExpr::num(1.0), (SExpr::id("b", []))),
-            SExpr::num(2.0),
-            (SExpr::id("c", [])),
-            SExpr::id("d", [0, 1])
-        );
-        assert_eq!(
-            list.coerce_to_datum(),
-            sexpr!(
-                SExpr::symbol("a"),
-                SExpr::num(0.0),
-                (SExpr::num(1.0), (SExpr::symbol("b"))),
-                SExpr::num(2.0),
-                (SExpr::symbol("c")),
-                SExpr::symbol("d")
             )
         )
     }

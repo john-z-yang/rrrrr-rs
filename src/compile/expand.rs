@@ -11,11 +11,11 @@ use crate::{compile::util::for_each, match_sexpr, sexpr};
 type Env = HashMap<Symbol, Transformer>;
 
 pub fn introduce(sexpr: &SExpr) -> SExpr {
-    sexpr.coerce_to_syntax().add_scope(Bindings::CORE_SCOPE)
+    sexpr.add_scope(Bindings::CORE_SCOPE)
 }
 
 pub fn expand(sexpr: &SExpr, bindings: &mut Bindings, env: &mut Env) -> SExpr {
-    if let SExpr::Symbol(_) | SExpr::Nil = sexpr {
+    if let SExpr::Nil = sexpr {
         panic!("Bad syntax");
     };
     if let SExpr::Id(id) = sexpr {
@@ -115,7 +115,7 @@ mod tests {
 
     #[test]
     fn test_introduce() {
-        let list = sexpr!(SExpr::symbol("cons"), SExpr::num(0.0), SExpr::num(1.0));
+        let list = sexpr!(SExpr::id("cons", []), SExpr::num(0.0), SExpr::num(1.0));
         assert_eq!(
             introduce(&list),
             sexpr!(
@@ -131,11 +131,7 @@ mod tests {
         let mut bindings = Bindings::new();
         let mut env = HashMap::<Symbol, Transformer>::new();
         let lambda_expr = sexpr!(#"lambda", (#"x", #"y"), (#"cons", #"x", #"y"),);
-        let left = expand(
-            &introduce(&lambda_expr.coerce_to_syntax()),
-            &mut bindings,
-            &mut env,
-        );
+        let left = expand(&introduce(&lambda_expr), &mut bindings, &mut env);
         let right = sexpr!(
             SExpr::id("lambda", [Bindings::CORE_SCOPE]),
             (
@@ -161,11 +157,7 @@ mod tests {
             (#"lambda", (#"y"), (#"cons", #"x", #"y")),
             (#"cons", #"x", #"x")
         );
-        let result = expand(
-            &introduce(&lambda_expr.coerce_to_syntax()),
-            &mut bindings,
-            &mut env,
-        );
+        let result = expand(&introduce(&lambda_expr), &mut bindings, &mut env);
         let expected = sexpr!(
             SExpr::id("lambda", [Bindings::CORE_SCOPE]),
             (SExpr::id("x", [Bindings::CORE_SCOPE, 1])),
@@ -193,11 +185,7 @@ mod tests {
         let mut env = HashMap::<Symbol, Transformer>::new();
         let lambda_expr = sexpr!(SExpr::bool(false));
         assert_eq!(
-            expand(
-                &introduce(&lambda_expr.coerce_to_syntax()),
-                &mut bindings,
-                &mut env
-            ),
+            expand(&introduce(&lambda_expr), &mut bindings, &mut env),
             sexpr!(SExpr::bool(false))
         );
     }
@@ -227,11 +215,7 @@ mod tests {
         )]);
 
         let sexpr = sexpr!(#"and");
-        let result = expand(
-            &introduce(&sexpr.coerce_to_syntax()),
-            &mut bindings,
-            &mut env,
-        );
+        let result = expand(&introduce(&sexpr), &mut bindings, &mut env);
         let expected = SExpr::bool(false);
         assert_eq!(result, expected);
     }
@@ -548,11 +532,7 @@ mod tests {
                         ((#"_"), SExpr::num(1.0))))),
                 (#"one")
         );
-        let result = expand(
-            &introduce(&let_syntax_expr.coerce_to_syntax()),
-            &mut bindings,
-            &mut env,
-        );
+        let result = expand(&introduce(&let_syntax_expr), &mut bindings, &mut env);
         let expected = SExpr::num(1.0);
         assert_eq!(result, expected);
     }
@@ -575,11 +555,7 @@ mod tests {
                         (#"or", SExpr::bool(false), #"temp")),
                     SExpr::bool(true)),
         );
-        let result = expand(
-            &introduce(&let_syntax_expr.coerce_to_syntax()),
-            &mut bindings,
-            &mut env,
-        );
+        let result = expand(&introduce(&let_syntax_expr), &mut bindings, &mut env);
         let expected = sexpr!(
             (
                 SExpr::id("lambda", [Bindings::CORE_SCOPE, 1]),

@@ -19,7 +19,7 @@ macro_rules! sexpr {
     };
     (#$symbol:literal $(, $($rest:tt)*)?) => {{
         $crate::compile::sexpr::SExpr::cons(
-            $crate::compile::sexpr::SExpr::symbol($symbol),
+            $crate::compile::sexpr::SExpr::id($symbol, []),
             sexpr!($($($rest)*)?)
         )
     }};
@@ -93,13 +93,7 @@ macro_rules! match_sexpr {
     ) => {
         if let $crate::compile::sexpr::SExpr::Cons(ref cons) = $targ {
             let symbol = $crate::compile::sexpr::Symbol::new($symbol);
-            if let $crate::compile::sexpr::SExpr::Symbol(ref sym) = cons.car.as_ref() {
-                if *sym == symbol {
-                    match_sexpr! {($($($rest)*)?) = cons.cdr.as_ref() =>
-                        $($handler)*
-                    }
-                }
-            } else if let $crate::compile::sexpr::SExpr::Id(ref id) = cons.car.as_ref() {
+            if let $crate::compile::sexpr::SExpr::Id(ref id) = cons.car.as_ref() {
                 if id.symbol == symbol {
                     match_sexpr! {($($($rest)*)?) = cons.cdr.as_ref() =>
                         $($handler)*
