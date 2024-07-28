@@ -19,16 +19,18 @@ impl CompliationError {
         println!("Error: {}", self.reason);
         println!(" --> {}:", self.source_loc);
         println!("  |");
+        let col = self.source_loc.idx
+            - source
+                .lines()
+                .take(self.source_loc.line)
+                .map(|line| line.len() + 1)
+                .sum::<usize>();
         let lines_iter = source.lines().skip(self.source_loc.line);
         let mut line_no = self.source_loc.line;
         let mut width_remaining = self.source_loc.width;
         for line in lines_iter {
             let highlight = if line_no == self.source_loc.line {
-                format!(
-                    "{}{}",
-                    " ".repeat(self.source_loc.col),
-                    "^".repeat(line.len() - self.source_loc.col)
-                )
+                format!("{}{}", " ".repeat(col), "^".repeat(line.len() - col))
             } else {
                 "^".repeat(line.len())
             };
