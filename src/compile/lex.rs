@@ -28,23 +28,17 @@ pub fn tokenize(source: &str) -> Result<Vec<Token>, CompliationError> {
         }
         fn scan(&mut self) -> Result<Vec<Token>, CompliationError> {
             while self.look_ahead().is_some() {
-                self.cur.clear();
-                if let Some(token) = self.scan_token()? {
-                    self.push_token(token)
-                }
+                let res = self.scan_token()?;
+                self.advance(res);
             }
-            self.cur.clear();
             self.tokens.push(Token::EoF(self.get_src_loc()));
             Ok(self.tokens.clone())
         }
         fn scan_token(&mut self) -> Result<Option<Token>, CompliationError> {
-            Ok(match self.advance() {
-                ' ' | '\r' | '\t' => {
-                    self.parse_blank();
-                    None
-                }
-                '\n' => {
-                    self.parse_newline();
+            Ok(match self.consume() {
+                ' ' | '\r' | '\t' | '\n' => None,
+                ';' => {
+                    self.consume_until(&|c| c == '\n');
                     None
                 }
                 '(' => Some(Token::LParen(self.get_src_loc())),
@@ -52,35 +46,31 @@ pub fn tokenize(source: &str) -> Result<Vec<Token>, CompliationError> {
                 '`' => Some(Token::QuasiQuote(self.get_src_loc())),
                 '|' => Some(Token::Pipe(self.get_src_loc())),
                 '\'' => Some(Token::Quote(self.get_src_loc())),
-                '.' => Some(if !self.advance_if('.') {
+                '.' => Some(if !self.consume_if('.') {
                     Token::Dot(self.get_src_loc())
-                } else if self.advance_if('.') {
+                } else if self.consume_if('.') {
                     Token::Id(Symbol::new("..."), self.get_src_loc())
                 } else {
                     return Err(self.emit_err("Expecting '.' after '..'"));
                 }),
-                ',' => Some(if self.advance_if('@') {
+                ',' => Some(if self.consume_if('@') {
                     Token::CommaAt(self.get_src_loc())
                 } else {
                     Token::Comma(self.get_src_loc())
                 }),
-                '#' => Some(if self.advance_if('t') {
+                '#' => Some(if self.consume_if('t') {
                     Token::Bool(Bool(true), self.get_src_loc())
-                } else if self.advance_if('f') {
+                } else if self.consume_if('f') {
                     Token::Bool(Bool(false), self.get_src_loc())
-                } else if self.advance_if('(') {
+                } else if self.consume_if('(') {
                     Token::HashLParen(self.get_src_loc())
-                } else if self.advance_if('\\') && self.look_ahead().is_some() {
-                    Token::Char(Char(self.advance()), self.get_src_loc())
+                } else if self.consume_if('\\') && self.look_ahead().is_some() {
+                    Token::Char(Char(self.consume()), self.get_src_loc())
                 } else {
                     return Err(
                         self.emit_err("Expectin 't', 'f', '(' or character literal after '#'")
                     );
                 }),
-                ';' => {
-                    self.advance_until(&|c| c == '\n');
-                    None
-                }
                 '0'..='9' | '-' => Some(self.parse_num()?),
                 '"' => Some(self.parse_string()?),
                 c if Self::is_id_initial(c) => Some(self.parse_id()?),
@@ -88,11 +78,11 @@ pub fn tokenize(source: &str) -> Result<Vec<Token>, CompliationError> {
             })
         }
         fn parse_num(&mut self) -> Result<Token, CompliationError> {
-            self.advance_until(&|c| !c.is_ascii_digit());
+            self.consume_until(&|c| !c.is_ascii_digit());
 
             if self.look_ahead() == Some('.') {
-                self.advance();
-                self.advance_until(&|c| !c.is_ascii_digit());
+                self.consume();
+                self.consume_until(&|c| !c.is_ascii_digit());
             }
 
             Ok(Token::Num(
@@ -103,7 +93,7 @@ pub fn tokenize(source: &str) -> Result<Vec<Token>, CompliationError> {
             ))
         }
         fn parse_id(&mut self) -> Result<Token, CompliationError> {
-            self.advance_until(&|c| !Self::is_id_subsequent(c));
+            self.consume_until(&|c| !Self::is_id_subsequent(c));
             Ok(Token::Id(Symbol::new(&self.cur), self.get_src_loc()))
         }
         fn parse_string(&mut self) -> Result<Token, CompliationError> {
@@ -112,18 +102,18 @@ pub fn tokenize(source: &str) -> Result<Vec<Token>, CompliationError> {
                     '"' if !matches!(self.cur.chars().last(), Some('\\')) => break,
                     _ => (),
                 }
-                self.advance();
+                self.consume();
             }
             if self.look_ahead().is_none() {
                 return Err(self.emit_err("Unterminated string"));
             };
-            self.advance();
+            self.consume();
             Ok(Token::Str(
                 Str(self.cur[1..self.cur.len() - 1].to_string()),
                 self.get_src_loc(),
             ))
         }
-        fn advance_until<F>(&mut self, f: &F)
+        fn consume_until<F>(&mut self, f: &F)
         where
             F: Fn(char) -> bool,
         {
@@ -132,10 +122,10 @@ pub fn tokenize(source: &str) -> Result<Vec<Token>, CompliationError> {
                     _ if f(c) => break,
                     _ => (),
                 }
-                self.advance();
+                self.consume();
             }
         }
-        fn advance_if(&mut self, c: char) -> bool {
+        fn consume_if(&mut self, c: char) -> bool {
             self.it
                 .next_if(|next| c == *next)
                 .map(|c| {
@@ -147,24 +137,22 @@ pub fn tokenize(source: &str) -> Result<Vec<Token>, CompliationError> {
         fn look_ahead(&mut self) -> Option<char> {
             self.it.peek().copied()
         }
-        fn advance(&mut self) -> char {
+        fn consume(&mut self) -> char {
             let c = self.it.next().unwrap();
             self.cur.push(c);
             c
         }
-        fn push_token(&mut self, token: Token) {
-            if let Token::Str(_, _) = token {
-                let num_lines = self.cur.lines().count() - 1;
-                self.line += num_lines;
-                if num_lines > 1 {
-                    self.col = self.cur.lines().last().unwrap().len();
-                } else {
-                    self.col += self.cur.len();
-                }
+        fn advance(&mut self, token: Option<Token>) {
+            if let Some(token) = token {
+                self.tokens.push(token)
+            }
+            let num_lines = self.cur.chars().filter(|c| *c == '\n').count();
+            self.line += num_lines;
+            if num_lines > 0 {
+                self.col = self.cur.lines().last().unwrap().len();
             } else {
                 self.col += self.cur.len();
             }
-            self.tokens.push(token);
             self.cur.clear();
         }
         fn is_id_initial(c: char) -> bool {
@@ -201,13 +189,6 @@ pub fn tokenize(source: &str) -> Result<Vec<Token>, CompliationError> {
                 col: self.col,
                 width: self.cur.len(),
             }
-        }
-        fn parse_blank(&mut self) {
-            self.col += 1;
-        }
-        fn parse_newline(&mut self) {
-            self.line += 1;
-            self.col = 0;
         }
         fn emit_err(&self, reason: &str) -> CompliationError {
             CompliationError {
