@@ -221,6 +221,7 @@ pub fn tokenize(source: &str) -> Result<Vec<Token>, CompliationError> {
 #[cfg(test)]
 mod tests {
     use crate::compile::{
+        compliation_error::CompliationError,
         lex::tokenize,
         sexpr::{Bool, Char, Num, Str, Symbol},
         src_loc::SourceLoc,
@@ -424,5 +425,47 @@ mod tests {
                 })
             ]
         );
+    }
+
+    #[test]
+    fn test_tokenize_unterminated_single_line_string() {
+        assert!(matches!(
+            tokenize("\""),
+            Err(CompliationError {
+                source_loc: SourceLoc {
+                    line: 0,
+                    col: 0,
+                    width: 1
+                },
+                reason: _
+            })
+        ));
+
+        assert!(matches!(
+            tokenize("1   \""),
+            Err(CompliationError {
+                source_loc: SourceLoc {
+                    line: 0,
+                    col: 4,
+                    width: 1
+                },
+                reason: _
+            })
+        ));
+    }
+
+    #[test]
+    fn test_tokenize_unterminated_multiline_string() {
+        assert!(matches!(
+            tokenize("\"\n123\n456\n\" \"\n123\n456\n"),
+            Err(CompliationError {
+                source_loc: SourceLoc {
+                    line: 3,
+                    col: 2,
+                    width: 10
+                },
+                reason: _
+            })
+        ));
     }
 }
