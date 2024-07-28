@@ -18,7 +18,7 @@ fn main() {
     let _ = rl.load_history("history.txt");
     let mut lines = String::new();
     loop {
-        let readline = rl.readline(if lines.is_empty() { "lisp> " } else { " ... " });
+        let readline = rl.readline(if lines.is_empty() { "lisp> " } else { "  ... " });
         match readline {
             Ok(line) => {
                 rl.add_history_entry(line.as_str());
