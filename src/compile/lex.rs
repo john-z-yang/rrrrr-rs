@@ -29,7 +29,9 @@ pub fn tokenize(source: &str) -> Result<Vec<Token>, CompliationError> {
         fn scan(&mut self) -> Result<Vec<Token>, CompliationError> {
             while self.look_ahead().is_some() {
                 self.cur.clear();
-                self.scan_token()?.map(|token| self.push_token(token));
+                if let Some(token) = self.scan_token()? {
+                    self.push_token(token)
+                }
             }
             self.cur.clear();
             self.tokens.push(Token::EoF(self.get_src_loc()));
@@ -143,7 +145,7 @@ pub fn tokenize(source: &str) -> Result<Vec<Token>, CompliationError> {
                 .unwrap_or(false)
         }
         fn look_ahead(&mut self) -> Option<char> {
-            self.it.peek().map(|c| c).copied()
+            self.it.peek().copied()
         }
         fn advance(&mut self) -> char {
             let c = self.it.next().unwrap();

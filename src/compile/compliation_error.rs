@@ -15,14 +15,14 @@ impl fmt::Display for CompliationError {
 }
 
 impl CompliationError {
-    pub fn pprint_with_source(&self, source: &String) {
+    pub fn pprint_with_source(&self, source: &str) {
         println!("Error: {}", self.reason);
         println!(" --> {}:", self.source_loc);
         println!("  |");
-        let mut lines_iter = source.lines().skip(self.source_loc.line);
+        let lines_iter = source.lines().skip(self.source_loc.line);
         let mut line_no = self.source_loc.line;
         let mut width_remaining = self.source_loc.width;
-        while let Some(line) = lines_iter.next() {
+        for line in lines_iter {
             let highlight = if line_no == self.source_loc.line {
                 format!(
                     "{}{}",
