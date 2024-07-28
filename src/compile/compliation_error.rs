@@ -17,24 +17,29 @@ impl fmt::Display for CompliationError {
 impl CompliationError {
     pub fn pprint_with_source(&self, source: &String) {
         println!("Error: {}", self.reason);
-        println!("  --> {}:\n", self.source_loc);
-        let mut line_iter = source.lines().skip(self.source_loc.line);
+        println!(" --> {}:", self.source_loc);
+        println!("  |");
+        let mut lines_iter = source.lines().skip(self.source_loc.line);
         let mut line_no = self.source_loc.line;
         let mut width_remaining = self.source_loc.width;
-        while width_remaining > 0 {
-            let line_text = line_iter.next().unwrap();
+        while let Some(line) = lines_iter.next() {
             let highlight = if line_no == self.source_loc.line {
                 format!(
                     "{}{}",
                     " ".repeat(self.source_loc.col),
-                    "^".repeat(line_text.len() - self.source_loc.col)
+                    "^".repeat(line.len() - self.source_loc.col)
                 )
             } else {
-                "^".repeat(line_text.len())
+                "^".repeat(line.len())
             };
-            println!("{} | {}\n    {}\n", line_no, line_text, highlight);
+            println!("{} | {}\n  | {}", line_no, line, highlight);
             line_no += 1;
             width_remaining -= highlight.chars().filter(|c| *c == '^').count();
+            if width_remaining == 0 {
+                break;
+            }
+            width_remaining -= 1;
         }
+        println!();
     }
 }

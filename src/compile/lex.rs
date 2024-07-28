@@ -1,7 +1,4 @@
-use std::{
-    iter::{Enumerate, Peekable},
-    str::Chars,
-};
+use std::{iter::Peekable, str::Chars};
 
 use crate::compile::{
     sexpr::{Bool, Char, Num, Str, Symbol},
@@ -12,7 +9,7 @@ use super::{compliation_error::CompliationError, token::Token};
 
 pub fn tokenize(source: &str) -> Result<Vec<Token>, CompliationError> {
     struct Lexer<'source> {
-        it: Peekable<Enumerate<Chars<'source>>>,
+        it: Peekable<Chars<'source>>,
         cur: String,
         col: usize,
         line: usize,
@@ -22,7 +19,7 @@ pub fn tokenize(source: &str) -> Result<Vec<Token>, CompliationError> {
     impl Lexer<'_> {
         fn new(source: &str) -> Lexer {
             Lexer {
-                it: source.chars().enumerate().peekable(),
+                it: source.chars().peekable(),
                 cur: String::new(),
                 col: 0,
                 line: 0,
@@ -32,72 +29,63 @@ pub fn tokenize(source: &str) -> Result<Vec<Token>, CompliationError> {
         fn scan(&mut self) -> Result<Vec<Token>, CompliationError> {
             while self.look_ahead().is_some() {
                 self.cur.clear();
-                self.scan_token()?;
+                self.scan_token()?.map(|token| self.push_token(token));
             }
             self.cur.clear();
             self.tokens.push(Token::EoF(self.get_src_loc()));
             Ok(self.tokens.clone())
         }
-        fn scan_token(&mut self) -> Result<(), CompliationError> {
-            let c = self.advance();
-            match c {
-                ' ' | '\r' | '\t' => (),
-                '\n' => self.new_line(),
-                '(' => self.add_token(Token::LParen(self.get_src_loc())),
-                ')' => self.add_token(Token::RParen(self.get_src_loc())),
-                '`' => self.add_token(Token::QuasiQuote(self.get_src_loc())),
-                '|' => self.add_token(Token::Pipe(self.get_src_loc())),
-                '\'' => self.add_token(Token::Quote(self.get_src_loc())),
-                '.' => {
-                    let token = if !self.advance_if('.') {
-                        Token::Dot(self.get_src_loc())
-                    } else if self.advance_if('.') {
-                        Token::Id(Symbol::new("..."), self.get_src_loc())
-                    } else {
-                        return Err(self.emit_err("Expecting '.' after '..'"));
-                    };
-                    self.add_token(token);
+        fn scan_token(&mut self) -> Result<Option<Token>, CompliationError> {
+            Ok(match self.advance() {
+                ' ' | '\r' | '\t' => {
+                    self.parse_blank();
+                    None
                 }
-                ',' => {
-                    let token = if self.advance_if('@') {
-                        Token::CommaAt(self.get_src_loc())
-                    } else {
-                        Token::Comma(self.get_src_loc())
-                    };
-                    self.add_token(token);
+                '\n' => {
+                    self.parse_newline();
+                    None
                 }
-                '#' => {
-                    let token = if self.advance_if('t') {
-                        Token::Bool(Bool(true), self.get_src_loc())
-                    } else if self.advance_if('f') {
-                        Token::Bool(Bool(false), self.get_src_loc())
-                    } else if self.advance_if('(') {
-                        Token::HashLParen(self.get_src_loc())
-                    } else if self.advance_if('\\') && self.look_ahead().is_some() {
-                        Token::Char(Char(self.advance()), self.get_src_loc())
-                    } else {
-                        return Err(
-                            self.emit_err("Expectin 't', 'f', '(' or character literal after '#'")
-                        );
-                    };
-                    self.add_token(token);
-                }
+                '(' => Some(Token::LParen(self.get_src_loc())),
+                ')' => Some(Token::RParen(self.get_src_loc())),
+                '`' => Some(Token::QuasiQuote(self.get_src_loc())),
+                '|' => Some(Token::Pipe(self.get_src_loc())),
+                '\'' => Some(Token::Quote(self.get_src_loc())),
+                '.' => Some(if !self.advance_if('.') {
+                    Token::Dot(self.get_src_loc())
+                } else if self.advance_if('.') {
+                    Token::Id(Symbol::new("..."), self.get_src_loc())
+                } else {
+                    return Err(self.emit_err("Expecting '.' after '..'"));
+                }),
+                ',' => Some(if self.advance_if('@') {
+                    Token::CommaAt(self.get_src_loc())
+                } else {
+                    Token::Comma(self.get_src_loc())
+                }),
+                '#' => Some(if self.advance_if('t') {
+                    Token::Bool(Bool(true), self.get_src_loc())
+                } else if self.advance_if('f') {
+                    Token::Bool(Bool(false), self.get_src_loc())
+                } else if self.advance_if('(') {
+                    Token::HashLParen(self.get_src_loc())
+                } else if self.advance_if('\\') && self.look_ahead().is_some() {
+                    Token::Char(Char(self.advance()), self.get_src_loc())
+                } else {
+                    return Err(
+                        self.emit_err("Expectin 't', 'f', '(' or character literal after '#'")
+                    );
+                }),
                 ';' => {
                     self.advance_until(&|c| c == '\n');
+                    None
                 }
-                '0'..='9' | '-' => self.parse_num()?,
-                '"' => self.parse_string()?,
-                c if Self::is_id_initial(c) => self.parse_id()?,
-                c => Err(self.emit_err(&format!("Unexpeted character: '{}'", c)))?,
-            };
-            Ok(())
+                '0'..='9' | '-' => Some(self.parse_num()?),
+                '"' => Some(self.parse_string()?),
+                c if Self::is_id_initial(c) => Some(self.parse_id()?),
+                c => return Err(self.emit_err(&format!("Unexpeted character: '{}'", c))),
+            })
         }
-        fn parse_id(&mut self) -> Result<(), CompliationError> {
-            self.advance_until(&|c| !Self::is_id_subsequent(c));
-            self.add_token(Token::Id(Symbol::new(&self.cur), self.get_src_loc()));
-            Ok(())
-        }
-        fn parse_num(&mut self) -> Result<(), CompliationError> {
+        fn parse_num(&mut self) -> Result<Token, CompliationError> {
             self.advance_until(&|c| !c.is_ascii_digit());
 
             if self.look_ahead() == Some('.') {
@@ -105,32 +93,33 @@ pub fn tokenize(source: &str) -> Result<Vec<Token>, CompliationError> {
                 self.advance_until(&|c| !c.is_ascii_digit());
             }
 
-            self.add_token(Token::Num(
+            Ok(Token::Num(
                 Num(self.cur.parse().map_err(|_| {
                     self.emit_err(&format!("Invalid number representation: {}", self.cur))
                 })?),
                 self.get_src_loc(),
-            ));
-            Ok(())
+            ))
         }
-        fn parse_string(&mut self) -> Result<(), CompliationError> {
-            self.advance_until(&|c| c == '"');
-            // while let Some(c) = self.look_ahead() {
-            //     match c {
-            //         '"' if self.cur.chars().last().unwrap() != '\\' => break,
-            //         _ => (),
-            //     }
-            //     self.advance();
-            // }
+        fn parse_id(&mut self) -> Result<Token, CompliationError> {
+            self.advance_until(&|c| !Self::is_id_subsequent(c));
+            Ok(Token::Id(Symbol::new(&self.cur), self.get_src_loc()))
+        }
+        fn parse_string(&mut self) -> Result<Token, CompliationError> {
+            while let Some(c) = self.look_ahead() {
+                match c {
+                    '"' if !matches!(self.cur.chars().last(), Some('\\')) => break,
+                    _ => (),
+                }
+                self.advance();
+            }
             if self.look_ahead().is_none() {
                 return Err(self.emit_err("Unterminated string"));
             };
             self.advance();
-            self.add_token(Token::Str(
+            Ok(Token::Str(
                 Str(self.cur[1..self.cur.len() - 1].to_string()),
                 self.get_src_loc(),
-            ));
-            Ok(())
+            ))
         }
         fn advance_until<F>(&mut self, f: &F)
         where
@@ -138,7 +127,6 @@ pub fn tokenize(source: &str) -> Result<Vec<Token>, CompliationError> {
         {
             while let Some(c) = self.look_ahead() {
                 match c {
-                    '\n' if !f(c) => self.new_line(),
                     _ if f(c) => break,
                     _ => (),
                 }
@@ -147,24 +135,33 @@ pub fn tokenize(source: &str) -> Result<Vec<Token>, CompliationError> {
         }
         fn advance_if(&mut self, c: char) -> bool {
             self.it
-                .next_if(|(_, next)| c == *next)
-                .map(|(pos, c)| {
-                    self.col += 1;
+                .next_if(|next| c == *next)
+                .map(|c| {
                     self.cur.push(c);
                     true
                 })
                 .unwrap_or(false)
         }
         fn look_ahead(&mut self) -> Option<char> {
-            self.it.peek().map(|(_, c)| c).copied()
+            self.it.peek().map(|c| c).copied()
         }
         fn advance(&mut self) -> char {
-            let (pos, c) = self.it.next().unwrap();
-            self.col += 1;
+            let c = self.it.next().unwrap();
             self.cur.push(c);
             c
         }
-        fn add_token(&mut self, token: Token) {
+        fn push_token(&mut self, token: Token) {
+            if let Token::Str(_, _) = token {
+                let num_lines = self.cur.lines().count() - 1;
+                self.line += num_lines;
+                if num_lines > 1 {
+                    self.col = self.cur.lines().last().unwrap().len();
+                } else {
+                    self.col += self.cur.len();
+                }
+            } else {
+                self.col += self.cur.len();
+            }
             self.tokens.push(token);
             self.cur.clear();
         }
@@ -199,11 +196,14 @@ pub fn tokenize(source: &str) -> Result<Vec<Token>, CompliationError> {
         fn get_src_loc(&self) -> SourceLoc {
             SourceLoc {
                 line: self.line,
-                col: self.col - self.cur.len(),
+                col: self.col,
                 width: self.cur.len(),
             }
         }
-        fn new_line(&mut self) {
+        fn parse_blank(&mut self) {
+            self.col += 1;
+        }
+        fn parse_newline(&mut self) {
             self.line += 1;
             self.col = 0;
         }
@@ -246,7 +246,11 @@ mod tests {
 \"ab\" ; #
 ; #
 \"\" 9.0001 0 -3 -42.00 -100 some-symbol <=? list->vector ;
-2 #t #\\ (...)";
+2 #t #\\ (...) \"
+
+  \"  \" 123
+    456
+\"";
         assert_eq!(
             tokenize(src).unwrap(),
             vec![
@@ -397,9 +401,25 @@ mod tests {
                     col: 12,
                     width: 1
                 }),
+                Token::Str(
+                    Str("\n\n  ".to_string()),
+                    SourceLoc {
+                        line: 5,
+                        col: 14,
+                        width: 6
+                    }
+                ),
+                Token::Str(
+                    Str(" 123\n    456\n".to_string()),
+                    SourceLoc {
+                        line: 7,
+                        col: 5,
+                        width: 15
+                    }
+                ),
                 Token::EoF(SourceLoc {
-                    line: 5,
-                    col: 13,
+                    line: 9,
+                    col: 1,
                     width: 0
                 })
             ]
