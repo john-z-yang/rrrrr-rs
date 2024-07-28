@@ -42,7 +42,7 @@ pub fn tokenize(source: &str) -> Result<Vec<Token>, CompliationError> {
             let c = self.advance();
             match c {
                 ' ' | '\r' | '\t' => (),
-                '\n' => self.line += 1,
+                '\n' => self.new_line(),
                 '(' => self.add_token(Token::LParen(self.get_src_loc())),
                 ')' => self.add_token(Token::RParen(self.get_src_loc())),
                 '`' => self.add_token(Token::QuasiQuote(self.get_src_loc())),
@@ -115,6 +115,13 @@ pub fn tokenize(source: &str) -> Result<Vec<Token>, CompliationError> {
         }
         fn parse_string(&mut self) -> Result<(), CompliationError> {
             self.advance_until(&|c| c == '"');
+            // while let Some(c) = self.look_ahead() {
+            //     match c {
+            //         '"' if self.cur.chars().last().unwrap() != '\\' => break,
+            //         _ => (),
+            //     }
+            //     self.advance();
+            // }
             if self.look_ahead().is_none() {
                 return Err(self.emit_err("Unterminated string"));
             };
@@ -131,7 +138,7 @@ pub fn tokenize(source: &str) -> Result<Vec<Token>, CompliationError> {
         {
             while let Some(c) = self.look_ahead() {
                 match c {
-                    '\n' if !f(c) => self.line += 1,
+                    '\n' if !f(c) => self.new_line(),
                     _ if f(c) => break,
                     _ => (),
                 }
@@ -142,7 +149,7 @@ pub fn tokenize(source: &str) -> Result<Vec<Token>, CompliationError> {
             self.it
                 .next_if(|(_, next)| c == *next)
                 .map(|(pos, c)| {
-                    self.col = pos + 1;
+                    self.col += 1;
                     self.cur.push(c);
                     true
                 })
@@ -153,12 +160,13 @@ pub fn tokenize(source: &str) -> Result<Vec<Token>, CompliationError> {
         }
         fn advance(&mut self) -> char {
             let (pos, c) = self.it.next().unwrap();
-            self.col = pos + 1;
+            self.col += 1;
             self.cur.push(c);
             c
         }
         fn add_token(&mut self, token: Token) {
             self.tokens.push(token);
+            self.cur.clear();
         }
         fn is_id_initial(c: char) -> bool {
             matches!(c,
@@ -194,6 +202,10 @@ pub fn tokenize(source: &str) -> Result<Vec<Token>, CompliationError> {
                 col: self.col - self.cur.len(),
                 width: self.cur.len(),
             }
+        }
+        fn new_line(&mut self) {
+            self.line += 1;
+            self.col = 0;
         }
         fn emit_err(&self, reason: &str) -> CompliationError {
             CompliationError {
@@ -267,7 +279,7 @@ mod tests {
                     Str("ab".to_string()),
                     SourceLoc {
                         line: 2,
-                        col: 11,
+                        col: 0,
                         width: 4
                     }
                 ),
@@ -275,7 +287,7 @@ mod tests {
                     Str("".to_string()),
                     SourceLoc {
                         line: 4,
-                        col: 24,
+                        col: 0,
                         width: 2
                     }
                 ),
@@ -283,7 +295,7 @@ mod tests {
                     Num(9.0001),
                     SourceLoc {
                         line: 4,
-                        col: 27,
+                        col: 3,
                         width: 6
                     }
                 ),
@@ -291,7 +303,7 @@ mod tests {
                     Num(0.0),
                     SourceLoc {
                         line: 4,
-                        col: 34,
+                        col: 10,
                         width: 1
                     }
                 ),
@@ -299,7 +311,7 @@ mod tests {
                     Num(-3.0),
                     SourceLoc {
                         line: 4,
-                        col: 36,
+                        col: 12,
                         width: 2
                     }
                 ),
@@ -307,7 +319,7 @@ mod tests {
                     Num(-42.0),
                     SourceLoc {
                         line: 4,
-                        col: 39,
+                        col: 15,
                         width: 6
                     }
                 ),
@@ -315,7 +327,7 @@ mod tests {
                     Num(-100.0),
                     SourceLoc {
                         line: 4,
-                        col: 46,
+                        col: 22,
                         width: 4
                     }
                 ),
@@ -323,7 +335,7 @@ mod tests {
                     Symbol::new("some-symbol"),
                     SourceLoc {
                         line: 4,
-                        col: 51,
+                        col: 27,
                         width: 11
                     }
                 ),
@@ -331,7 +343,7 @@ mod tests {
                     Symbol::new("<=?"),
                     SourceLoc {
                         line: 4,
-                        col: 63,
+                        col: 39,
                         width: 3
                     }
                 ),
@@ -339,7 +351,7 @@ mod tests {
                     Symbol::new("list->vector"),
                     SourceLoc {
                         line: 4,
-                        col: 67,
+                        col: 43,
                         width: 12
                     }
                 ),
@@ -347,7 +359,7 @@ mod tests {
                     Num(2.0),
                     SourceLoc {
                         line: 5,
-                        col: 82,
+                        col: 0,
                         width: 1
                     }
                 ),
@@ -355,7 +367,7 @@ mod tests {
                     Bool(true),
                     SourceLoc {
                         line: 5,
-                        col: 84,
+                        col: 2,
                         width: 2
                     }
                 ),
@@ -363,31 +375,31 @@ mod tests {
                     Char(' '),
                     SourceLoc {
                         line: 5,
-                        col: 87,
+                        col: 5,
                         width: 3
                     }
                 ),
                 Token::LParen(SourceLoc {
                     line: 5,
-                    col: 90,
+                    col: 8,
                     width: 1
                 }),
                 Token::Id(
                     Symbol::new("..."),
                     SourceLoc {
                         line: 5,
-                        col: 91,
+                        col: 9,
                         width: 3
                     }
                 ),
                 Token::RParen(SourceLoc {
                     line: 5,
-                    col: 94,
+                    col: 12,
                     width: 1
                 }),
                 Token::EoF(SourceLoc {
                     line: 5,
-                    col: 95,
+                    col: 13,
                     width: 0
                 })
             ]

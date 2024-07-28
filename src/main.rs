@@ -28,11 +28,15 @@ fn main() {
                             Ok(sexpr) => {
                                 let mut bindings = Bindings::new();
                                 let mut env = HashMap::<Symbol, Transformer>::new();
-                                print!("{}", expand(&introduce(&sexpr), &mut bindings, &mut env,));
+                                print!(
+                                    "{}",
+                                    expand(&introduce(&sexpr), &mut bindings, &mut env,)
+                                        .resole_all_bindings(&bindings)
+                                );
                             }
-                            Err(err) => println!("{:?}", err),
+                            Err(err) => err.pprint_with_source(&lines),
                         },
-                        Err(err) => println!("{:?}", err),
+                        Err(err) => err.pprint_with_source(&lines),
                     }
                     lines.clear();
                 } else {

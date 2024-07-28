@@ -1,7 +1,7 @@
 use std::collections::BTreeSet;
 use std::fmt;
 
-use super::bindings::{ScopeId, Scopes};
+use super::bindings::{Bindings, ScopeId, Scopes};
 
 #[derive(PartialEq, Clone)]
 pub enum SExpr {
@@ -407,6 +407,20 @@ impl SExpr {
             scopes
         };
         self.adjust_scope(&op)
+    }
+
+    pub fn resole_all_bindings(&self, bindings: &Bindings) -> Self {
+        match self {
+            SExpr::Id(id) => SExpr::from(Id {
+                symbol: bindings.resolve(id).unwrap(),
+                scopes: BTreeSet::from([Bindings::CORE_SCOPE]),
+            }),
+            SExpr::Cons(Cons { car, cdr }) => SExpr::cons(
+                car.resole_all_bindings(bindings),
+                cdr.resole_all_bindings(bindings),
+            ),
+            _ => self.clone(),
+        }
     }
 
     pub fn make_list(slice: &[Self]) -> Self {
