@@ -32,7 +32,7 @@ impl CompliationError {
             } else {
                 "^".repeat(line.len())
             };
-            println!("{} | {}\n  | {}", line_no, line, highlight);
+            println!("{} | {}\n  | {}", line_no + 1, line, highlight);
             line_no += 1;
             width_remaining -= highlight.chars().filter(|c| *c == '^').count();
             if width_remaining == 0 {
