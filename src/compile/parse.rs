@@ -48,7 +48,7 @@ pub fn parse(tokens: &[Token]) -> Result<SExpr, CompliationError> {
             }
         }
         fn parse_atom(&mut self) -> SExpr {
-            match self.advance() {
+            match self.consume() {
                 Token::Id(symbol, _) => symbol.clone().into(),
                 Token::Bool(bool, _) => bool.clone().into(),
                 Token::Num(num, _) => num.clone().into(),
@@ -85,7 +85,7 @@ pub fn parse(tokens: &[Token]) -> Result<SExpr, CompliationError> {
                 return self.parse_abbreviation();
             }
 
-            self.advance();
+            self.consume();
             let mut elements: Vec<SExpr> = vec![];
             while let Some(t) = self.look_ahead() {
                 if matches!(t, Token::RParen(_)) || matches!(t, Token::Dot(_)) {
@@ -99,7 +99,7 @@ pub fn parse(tokens: &[Token]) -> Result<SExpr, CompliationError> {
                     Ok(SExpr::make_improper_list(&elements))
                 }
                 Some(Token::RParen(_)) => {
-                    self.advance();
+                    self.consume();
                     Ok(SExpr::make_list(&elements))
                 }
                 Some(token) => Err(self.emit_err("Expected ')' to close '('", token)),
@@ -110,7 +110,7 @@ pub fn parse(tokens: &[Token]) -> Result<SExpr, CompliationError> {
         }
         fn parse_dot_notation(&mut self) -> Result<SExpr, CompliationError> {
             assert!(
-                matches!(self.advance(), Token::Dot(_)),
+                matches!(self.consume(), Token::Dot(_)),
                 "parse_dot_notation is expecting the '.' token"
             );
             match self.look_ahead() {
@@ -124,7 +124,7 @@ pub fn parse(tokens: &[Token]) -> Result<SExpr, CompliationError> {
             Ok(sexpr!(op, self.parse_datum()?))
         }
         fn parse_prefix(&mut self) -> SExpr {
-            match self.advance() {
+            match self.consume() {
                 Token::Quote(_) => SExpr::from(Id::new("quote", [])),
                 Token::QuasiQuote(_) => SExpr::from(Id::new("quasiquote", [])),
                 Token::Comma(_) => SExpr::from(Id::new("unquote", [])),
@@ -136,7 +136,7 @@ pub fn parse(tokens: &[Token]) -> Result<SExpr, CompliationError> {
         }
         fn parse_vector(&mut self) -> Result<SExpr, CompliationError> {
             assert!(
-                matches!(self.advance(), Token::HashLParen(_)),
+                matches!(self.consume(), Token::HashLParen(_)),
                 "parse_vector is expecting the '#(' token"
             );
             let mut elements: Vec<SExpr> = vec![];
@@ -148,7 +148,7 @@ pub fn parse(tokens: &[Token]) -> Result<SExpr, CompliationError> {
             }
             match self.look_ahead() {
                 Some(Token::RParen(_)) => {
-                    self.advance();
+                    self.consume();
                     Ok(SExpr::from(&*elements))
                 }
                 Some(token) => Err(self.emit_err("Expected ')' to close '#('", token)),
@@ -158,7 +158,7 @@ pub fn parse(tokens: &[Token]) -> Result<SExpr, CompliationError> {
         fn look_ahead(&mut self) -> Option<Token> {
             self.it.peek().copied().cloned()
         }
-        fn advance(&mut self) -> &Token {
+        fn consume(&mut self) -> &Token {
             let token = self.it.next().unwrap();
             self.cur = token;
             token
