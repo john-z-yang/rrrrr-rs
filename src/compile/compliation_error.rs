@@ -1,4 +1,4 @@
-use std::fmt;
+use std::{cmp::min, fmt};
 
 use super::src_loc::SourceLoc;
 
@@ -30,9 +30,13 @@ impl CompliationError {
         let mut width_remaining = self.source_loc.width;
         for line in lines_iter {
             let highlight = if line_no == self.source_loc.line {
-                format!("{}{}", " ".repeat(col), "^".repeat(line.len() - col))
+                format!(
+                    "{}{}",
+                    " ".repeat(col),
+                    "^".repeat(min(line.len() - col, width_remaining))
+                )
             } else {
-                "^".repeat(line.len())
+                "^".repeat(min(line.len() - col, width_remaining))
             };
             println!("{} | {}\n  | {}", line_no + 1, line, highlight);
             line_no += 1;
