@@ -112,30 +112,30 @@ macro_rules! match_sexpr {
     };
 }
 
-pub fn first(sexpr: &SExpr) -> Option<SExpr> {
-    match sexpr {
-        SExpr::Cons(cons) => Some((*cons.car).clone()),
-        _ => None,
-    }
-}
+// pub fn first(sexpr: &SExpr) -> Option<SExpr> {
+//     match sexpr {
+//         SExpr::Cons(cons) => Some((*cons.car).clone()),
+//         _ => None,
+//     }
+// }
 
-pub fn for_each<F>(mut op: F, sexpr: &SExpr)
-where
-    F: FnMut(&SExpr),
-{
-    if let SExpr::Cons(cons) = sexpr {
-        op(&cons.car);
-        for_each(op, &cons.cdr);
-    }
-}
+// pub fn for_each<F>(mut op: F, sexpr: &SExpr)
+// where
+//     F: FnMut(&SExpr),
+// {
+//     if let SExpr::Cons(cons) = sexpr {
+//         op(&cons.car);
+//         for_each(op, &cons.cdr);
+//     }
+// }
 
-pub fn map<F>(mut op: F, sexpr: &SExpr) -> SExpr
-where
-    F: FnMut(&SExpr) -> SExpr,
-{
-    match sexpr {
-        SExpr::Nil => SExpr::Nil,
-        SExpr::Cons(cons) => SExpr::cons(op(&cons.car), map(op, &cons.cdr)),
-        _ => op(sexpr),
-    }
-}
+// pub fn map<F>(mut op: F, sexpr: &SExpr) -> SExpr
+// where
+//     F: FnMut(&SExpr) -> SExpr,
+// {
+//     match sexpr {
+//         SExpr::Nil => SExpr::Nil,
+//         SExpr::Cons(cons) => SExpr::cons(op(&cons.car), map(op, &cons.cdr)),
+//         _ => op(sexpr),
+//     }
+// }

@@ -7,6 +7,25 @@ pub struct SourceLoc {
     pub width: usize,
 }
 
+impl SourceLoc {
+    pub fn combine(&self, other: &Self) -> Self {
+        let (before, after) = if other.idx < self.idx {
+            (other, self)
+        } else if other.idx > self.idx {
+            (self, other)
+        } else if other.width < self.idx {
+            (other, self)
+        } else {
+            (self, other)
+        };
+        SourceLoc {
+            line: before.line,
+            idx: before.idx,
+            width: after.idx - before.idx + after.width,
+        }
+    }
+}
+
 impl fmt::Display for SourceLoc {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "line: {}, idx: {}", self.line, self.idx)

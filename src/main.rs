@@ -1,12 +1,6 @@
 extern crate rustyline;
 
-use std::collections::HashMap;
-
-use compile::bindings::Bindings;
-use compile::expand::{expand, introduce};
 use compile::parse::parse;
-use compile::sexpr::Symbol;
-use compile::transformer::Transformer;
 use rustyline::error::ReadlineError;
 use rustyline::Editor;
 
@@ -26,13 +20,7 @@ fn main() {
                     match tokenize(&lines) {
                         Ok(tokens) => match parse(&tokens) {
                             Ok(sexpr) => {
-                                let mut bindings = Bindings::new();
-                                let mut env = HashMap::<Symbol, Transformer>::new();
-                                print!(
-                                    "{}",
-                                    expand(&introduce(&sexpr), &mut bindings, &mut env,)
-                                        .resole_all_bindings(&bindings)
-                                );
+                                print!("{}", sexpr);
                             }
                             Err(err) => err.pprint_with_source(&lines),
                         },
