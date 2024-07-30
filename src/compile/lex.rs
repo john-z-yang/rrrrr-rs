@@ -26,6 +26,7 @@ pub fn tokenize(source: &str) -> Result<Vec<Token>, CompliationError> {
                 tokens: vec![],
             }
         }
+
         fn scan(&mut self) -> Result<Vec<Token>, CompliationError> {
             while self.look_ahead().is_some() {
                 let res = self.scan_token()?;
@@ -34,6 +35,7 @@ pub fn tokenize(source: &str) -> Result<Vec<Token>, CompliationError> {
             self.tokens.push(Token::EoF(self.get_source_loc()));
             Ok(self.tokens.clone())
         }
+
         fn scan_token(&mut self) -> Result<Option<Token>, CompliationError> {
             Ok(match self.consume() {
                 ' ' | '\r' | '\t' | '\n' => None,
@@ -77,6 +79,7 @@ pub fn tokenize(source: &str) -> Result<Vec<Token>, CompliationError> {
                 c => return Err(self.emit_err(&format!("Unexpeted character: '{}'", c))),
             })
         }
+
         fn parse_num(&mut self) -> Result<Token, CompliationError> {
             self.consume_until(&|c| !c.is_ascii_digit());
 
@@ -92,10 +95,12 @@ pub fn tokenize(source: &str) -> Result<Vec<Token>, CompliationError> {
                 self.get_source_loc(),
             ))
         }
+
         fn parse_id(&mut self) -> Result<Token, CompliationError> {
             self.consume_until(&|c| !Self::is_id_subsequent(c));
             Ok(Token::Id(Symbol::new(&self.cur), self.get_source_loc()))
         }
+
         fn parse_string(&mut self) -> Result<Token, CompliationError> {
             while let Some(c) = self.look_ahead() {
                 match c {
@@ -113,6 +118,7 @@ pub fn tokenize(source: &str) -> Result<Vec<Token>, CompliationError> {
                 self.get_source_loc(),
             ))
         }
+
         fn consume_until<F>(&mut self, f: &F)
         where
             F: Fn(char) -> bool,
@@ -125,6 +131,7 @@ pub fn tokenize(source: &str) -> Result<Vec<Token>, CompliationError> {
                 self.consume();
             }
         }
+
         fn consume_if(&mut self, c: char) -> bool {
             self.it
                 .next_if(|next| c == *next)
@@ -134,14 +141,17 @@ pub fn tokenize(source: &str) -> Result<Vec<Token>, CompliationError> {
                 })
                 .unwrap_or(false)
         }
+
         fn look_ahead(&mut self) -> Option<char> {
             self.it.peek().copied()
         }
+
         fn consume(&mut self) -> char {
             let c = self.it.next().unwrap();
             self.cur.push(c);
             c
         }
+
         fn advance(&mut self, token: Option<Token>) {
             if let Some(token) = token {
                 self.tokens.push(token)
@@ -151,6 +161,7 @@ pub fn tokenize(source: &str) -> Result<Vec<Token>, CompliationError> {
             self.col += self.cur.len();
             self.cur.clear();
         }
+
         fn is_id_initial(c: char) -> bool {
             matches!(c,
                 'A'..='Z'
@@ -173,12 +184,14 @@ pub fn tokenize(source: &str) -> Result<Vec<Token>, CompliationError> {
                 | '-'
             )
         }
+
         fn is_id_subsequent(c: char) -> bool {
             match c {
                 '0'..='9' | '+' | '-' | '.' | '@' => true,
                 c => Self::is_id_initial(c),
             }
         }
+
         fn get_source_loc(&self) -> SourceLoc {
             SourceLoc {
                 line: self.line,
@@ -186,6 +199,7 @@ pub fn tokenize(source: &str) -> Result<Vec<Token>, CompliationError> {
                 width: self.cur.len(),
             }
         }
+
         fn emit_err(&self, reason: &str) -> CompliationError {
             CompliationError {
                 source_loc: self.get_source_loc(),
@@ -194,7 +208,7 @@ pub fn tokenize(source: &str) -> Result<Vec<Token>, CompliationError> {
         }
     }
 
-    return Lexer::new(source).scan();
+    Lexer::new(source).scan()
 }
 
 #[cfg(test)]
