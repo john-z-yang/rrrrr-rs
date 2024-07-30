@@ -1,15 +1,23 @@
-use super::sexpr::SExpr;
+use super::sexpr::{Cons, SExpr};
 
 #[macro_export]
 macro_rules! sexpr {
     () => {
-        $crate::compile::sexpr::SExpr::Nil
+        $crate::compile::sexpr::SExpr::Nil(SourceLoc {
+            line: 0,
+            idx: 0,
+            width: 1,
+        })
     };
     (..$expr:expr) => {
         $expr
     };
     (..#$symbol:literal) => {
-        $crate::compile::sexpr::SExpr::symbol($symbol)
+        $crate::compile::sexpr::SExpr::Id(Id::new($symbol), SourceLoc {
+            line: 0,
+            idx: 0,
+            width: 1,
+        })
     };
     (($($inner:tt)*) $(, $($rest:tt)*)?) => {
         $crate::compile::sexpr::SExpr::cons(
@@ -28,7 +36,7 @@ macro_rules! match_sexpr {
     (
         () = $targ:expr => $($handler:tt)*
     ) => {
-        if let $crate::compile::sexpr::SExpr::Nil = $targ {
+        if let $crate::compile::sexpr::SExpr::Nil(_) = $targ {
             $($handler)*
         }
     };
@@ -37,7 +45,7 @@ macro_rules! match_sexpr {
     (
         (($($inner:tt)*) $(, $($rest:tt)*)?) = $targ:expr => $($handler:tt)*
     ) => {
-        if let $crate::compile::sexpr::SExpr::Cons(ref cons) = $targ {
+        if let $crate::compile::sexpr::SExpr::Cons(ref cons, _) = $targ {
             match_sexpr! {($($inner)*) = cons.car.as_ref() => {
                 match_sexpr! {($($($rest)*)?) = cons.cdr.as_ref() =>
                     $($handler)*
@@ -50,9 +58,9 @@ macro_rules! match_sexpr {
     (
         (..) = $targ:expr => $($handler:tt)*
     ) => {
-        if let $crate::compile::sexpr::SExpr::Cons(_) = $targ {
+        if let $crate::compile::sexpr::SExpr::Cons(_, _) = $targ {
             $($handler)*
-        } else if let $crate::compile::sexpr::SExpr::Nil = $targ {
+        } else if let $crate::compile::sexpr::SExpr::Nil(_) = $targ {
             $($handler)*
         };
     };
@@ -61,10 +69,10 @@ macro_rules! match_sexpr {
     (
         ($id:ident @ ..) = $targ:expr => $($handler:tt)*
     ) => {
-        if let $crate::compile::sexpr::SExpr::Cons(_) = $targ {
+        if let $crate::compile::sexpr::SExpr::Cons(_, _) = $targ {
             let $id = &$targ;
             $($handler)*
-        } else if let $crate::compile::sexpr::SExpr::Nil = $targ {
+        } else if let $crate::compile::sexpr::SExpr::Nil(_) = $targ {
             let $id = &$targ;
             $($handler)*
         }
@@ -85,9 +93,9 @@ macro_rules! match_sexpr {
     (
         (# $symbol:literal $(, $($rest:tt)*)?) = $targ:expr => $($handler:tt)*
     ) => {
-        if let $crate::compile::sexpr::SExpr::Cons(ref cons) = $targ {
+        if let $crate::compile::sexpr::SExpr::Cons(ref cons, _) = $targ {
             let symbol = $crate::compile::sexpr::Symbol::new($symbol);
-            if let $crate::compile::sexpr::SExpr::Id(ref id) = cons.car.as_ref() {
+            if let $crate::compile::sexpr::SExpr::Id(ref id, _) = cons.car.as_ref() {
                 if id.symbol == symbol {
                     match_sexpr! {($($($rest)*)?) = cons.cdr.as_ref() =>
                         $($handler)*
@@ -101,7 +109,7 @@ macro_rules! match_sexpr {
     (
         ($pat:pat $(, $($rest:tt)*)?) = $targ:expr => $($handler:tt)*
     ) => {
-        if let $crate::compile::sexpr::SExpr::Cons(ref cons) = $targ {
+        if let $crate::compile::sexpr::SExpr::Cons(ref cons, _) = $targ {
             #[allow(irrefutable_let_patterns)]
             if let $pat = cons.car.as_ref() {
                 match_sexpr! {($($($rest)*)?) = cons.cdr.as_ref() =>
@@ -112,30 +120,32 @@ macro_rules! match_sexpr {
     };
 }
 
-// pub fn first(sexpr: &SExpr) -> Option<SExpr> {
-//     match sexpr {
-//         SExpr::Cons(cons) => Some((*cons.car).clone()),
-//         _ => None,
-//     }
-// }
+pub fn first(sexpr: &SExpr) -> Option<SExpr> {
+    match sexpr {
+        SExpr::Cons(cons, _) => Some((*cons.car).clone()),
+        _ => None,
+    }
+}
 
-// pub fn for_each<F>(mut op: F, sexpr: &SExpr)
-// where
-//     F: FnMut(&SExpr),
-// {
-//     if let SExpr::Cons(cons) = sexpr {
-//         op(&cons.car);
-//         for_each(op, &cons.cdr);
-//     }
-// }
+pub fn for_each<F>(mut op: F, sexpr: &SExpr)
+where
+    F: FnMut(&SExpr),
+{
+    if let SExpr::Cons(cons, _) = sexpr {
+        op(&cons.car);
+        for_each(op, &cons.cdr);
+    }
+}
 
-// pub fn map<F>(mut op: F, sexpr: &SExpr) -> SExpr
-// where
-//     F: FnMut(&SExpr) -> SExpr,
-// {
-//     match sexpr {
-//         SExpr::Nil => SExpr::Nil,
-//         SExpr::Cons(cons) => SExpr::cons(op(&cons.car), map(op, &cons.cdr)),
-//         _ => op(sexpr),
-//     }
-// }
+pub fn map<F>(mut op: F, sexpr: &SExpr) -> SExpr
+where
+    F: FnMut(&SExpr) -> SExpr,
+{
+    match sexpr {
+        SExpr::Nil(source_loc) => SExpr::Nil(*source_loc),
+        SExpr::Cons(cons, source_loc) => {
+            SExpr::Cons(Cons::new(op(&cons.car), map(op, &cons.cdr)), *source_loc)
+        }
+        _ => op(sexpr),
+    }
+}

@@ -1,7 +1,10 @@
 use std::{iter::Peekable, slice::Iter};
 
 use super::{compliation_error::CompliationError, sexpr::SExpr, token::Token};
-use crate::compile::sexpr::{Id, Vector};
+use crate::compile::{
+    sexpr::{Id, Vector},
+    src_loc::SourceLoc,
+};
 
 pub fn parse(tokens: &[Token]) -> Result<SExpr, CompliationError> {
     struct Parser<'tokens> {
@@ -62,13 +65,11 @@ pub fn parse(tokens: &[Token]) -> Result<SExpr, CompliationError> {
             );
 
             match self.consume() {
-                Token::Id(symbol, source_loc) => {
-                    SExpr::Id(Id::new(&symbol.0, []), source_loc.clone())
-                }
-                Token::Bool(bool, source_loc) => SExpr::Bool(bool.clone(), source_loc.clone()),
-                Token::Num(num, source_loc) => SExpr::Num(num.clone(), source_loc.clone()),
-                Token::Char(char, source_loc) => SExpr::Char(char.clone(), source_loc.clone()),
-                Token::Str(string, source_loc) => SExpr::Str(string.clone(), source_loc.clone()),
+                Token::Id(symbol, source_loc) => SExpr::Id(Id::new(&symbol.0, []), *source_loc),
+                Token::Bool(bool, source_loc) => SExpr::Bool(bool.clone(), *source_loc),
+                Token::Num(num, source_loc) => SExpr::Num(num.clone(), *source_loc),
+                Token::Char(char, source_loc) => SExpr::Char(char.clone(), *source_loc),
+                Token::Str(string, source_loc) => SExpr::Str(string.clone(), *source_loc),
                 _ => unreachable!("parse_atom is only expecting tokens for atomic values"),
             }
         }
@@ -109,15 +110,15 @@ pub fn parse(tokens: &[Token]) -> Result<SExpr, CompliationError> {
                         matches!(self.look_ahead(), Some(Token::RParen(_))),
                         "parse_list is expecting a ')' token after parse_dot_notation returns",
                     );
-                    Ok(SExpr::make_improper_list(
+                    Ok(Self::make_improper_list(
                         &elements,
-                        &start,
-                        &self.consume().get_src_loc(),
+                        start,
+                        self.consume().get_src_loc(),
                     ))
                 }
                 Some(Token::RParen(end)) => {
                     self.consume();
-                    Ok(SExpr::make_list(&elements, &start, &end))
+                    Ok(Self::make_list(&elements, start, end))
                 }
                 Some(token) => Err(self.emit_err("Expected ')' to close '('", token)),
                 None => {
@@ -142,10 +143,10 @@ pub fn parse(tokens: &[Token]) -> Result<SExpr, CompliationError> {
         }
         fn parse_abbreviation(&mut self) -> Result<SExpr, CompliationError> {
             let elements = [self.parse_prefix(), self.parse_datum()?];
-            Ok(SExpr::make_list(
+            Ok(Self::make_list(
                 &elements,
-                &elements[0].get_src_loc(),
-                &elements[1].get_src_loc(),
+                elements[0].get_src_loc(),
+                elements[1].get_src_loc(),
             ))
         }
         fn parse_prefix(&mut self) -> SExpr {
@@ -163,13 +164,11 @@ pub fn parse(tokens: &[Token]) -> Result<SExpr, CompliationError> {
             );
 
             match self.consume() {
-                Token::Quote(source_loc) => SExpr::Id(Id::new("quote", []), source_loc.clone()),
-                Token::QuasiQuote(source_loc) => {
-                    SExpr::Id(Id::new("quasiquote", []), source_loc.clone())
-                }
-                Token::Comma(source_loc) => SExpr::Id(Id::new("unquote", []), source_loc.clone()),
+                Token::Quote(source_loc) => SExpr::Id(Id::new("quote", []), *source_loc),
+                Token::QuasiQuote(source_loc) => SExpr::Id(Id::new("quasiquote", []), *source_loc),
+                Token::Comma(source_loc) => SExpr::Id(Id::new("unquote", []), *source_loc),
                 Token::CommaAt(source_loc) => {
-                    SExpr::Id(Id::new("unquote-splicing", []), source_loc.clone())
+                    SExpr::Id(Id::new("unquote-splicing", []), *source_loc)
                 }
                 _ => unreachable!(
                     "parse_abbreviation is only expecting tokens for abbreviated prefix"
@@ -192,11 +191,33 @@ pub fn parse(tokens: &[Token]) -> Result<SExpr, CompliationError> {
             match self.look_ahead() {
                 Some(Token::RParen(end)) => {
                     self.consume();
-                    Ok(SExpr::Vector(Vector(elements), start.combine(&end)))
+                    Ok(SExpr::Vector(Vector(elements), start.combine(end)))
                 }
                 Some(token) => Err(self.emit_err("Expected ')' to close '#('", token)),
                 None => unreachable!("parse_datum is expecting at least 1 token to look ahead"),
             }
+        }
+        pub fn make_list(elements: &[SExpr], start: SourceLoc, end: SourceLoc) -> SExpr {
+            let mut res = SExpr::Nil(end);
+            for element in elements.iter().rev() {
+                res = SExpr::cons(element.clone(), res);
+            }
+            res.update_src_loc(start.combine(res.get_src_loc()))
+        }
+        pub fn make_improper_list(slice: &[SExpr], start: SourceLoc, end: SourceLoc) -> SExpr {
+            assert!(
+                slice.len() >= 2,
+                "improper list has to have more than 2 element"
+            );
+            let mut iter = slice.iter().rev();
+            let cdr = iter.next().unwrap().clone();
+            let car = iter.next().unwrap().clone();
+            let mut res = SExpr::cons(car, cdr);
+            res = res.update_src_loc(res.get_src_loc().combine(end));
+            for element in iter {
+                res = SExpr::cons(element.clone(), res);
+            }
+            res.update_src_loc(start.combine(res.get_src_loc()))
         }
         fn look_ahead(&mut self) -> Option<Token> {
             self.it.peek().copied().cloned()
@@ -234,6 +255,36 @@ mod tests {
             idx: 0,
             width: 6,
         });
+
+        assert_eq!(parse(&tokenize(src).unwrap()).unwrap(), list)
+    }
+
+    #[test]
+    fn test_parse_list_of_symbol() {
+        let src = "(abc)";
+
+        let list = SExpr::Cons(
+            Cons {
+                car: Box::new(SExpr::Id(
+                    Id::new("abc", []),
+                    SourceLoc {
+                        line: 0,
+                        idx: 1,
+                        width: 3,
+                    },
+                )),
+                cdr: Box::new(SExpr::Nil(SourceLoc {
+                    line: 0,
+                    idx: 4,
+                    width: 1,
+                })),
+            },
+            SourceLoc {
+                line: 0,
+                idx: 0,
+                width: 5,
+            },
+        );
 
         assert_eq!(parse(&tokenize(src).unwrap()).unwrap(), list)
     }

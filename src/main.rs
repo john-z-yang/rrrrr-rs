@@ -1,5 +1,11 @@
+#![allow(dead_code)]
+
 extern crate rustyline;
 
+use std::collections::HashMap;
+
+use compile::bindings::Bindings;
+use compile::expand::{expand, introduce};
 use compile::parse::parse;
 use rustyline::error::ReadlineError;
 use rustyline::Editor;
@@ -17,15 +23,20 @@ fn main() {
             Ok(line) => {
                 rl.add_history_entry(line.as_str());
                 if line.is_empty() {
-                    match tokenize(&lines) {
-                        Ok(tokens) => match parse(&tokens) {
-                            Ok(sexpr) => {
-                                print!("{}", sexpr);
-                            }
-                            Err(err) => err.pprint_with_source(&lines),
-                        },
+                    let expanded =
+                        tokenize(&lines)
+                            .and_then(|tokens| parse(&tokens))
+                            .map(|sexpr| {
+                                expand(
+                                    &introduce(&sexpr),
+                                    &mut Bindings::new(),
+                                    &mut HashMap::new(),
+                                )
+                            });
+                    match expanded {
+                        Ok(sexpr) => println!("{}", sexpr),
                         Err(err) => err.pprint_with_source(&lines),
-                    }
+                    };
                     lines.clear();
                 } else {
                     lines.push_str(&line);

@@ -2,7 +2,10 @@ use std::collections::{HashMap, HashSet};
 
 use crate::{compile::util::for_each, match_sexpr};
 
-use super::sexpr::{Id, SExpr, Symbol};
+use super::{
+    sexpr::{Cons, Id, SExpr, Symbol},
+    src_loc::SourceLoc,
+};
 
 // TODO:
 //
@@ -137,9 +140,9 @@ impl SyntaxRule {
         bindings: &mut HashMap<Id, SExpr>,
     ) -> Option<()> {
         match pattern {
-            SExpr::Id(pattern) => {
+            SExpr::Id(pattern, _) => {
                 if literals.contains(&pattern.symbol) {
-                    let SExpr::Id(Id { symbol, scopes: _ }) = sexpr else {
+                    let SExpr::Id(Id { symbol, scopes: _ }, _) = sexpr else {
                         return None;
                     };
                     (pattern.symbol == *symbol).then_some(())
@@ -148,13 +151,13 @@ impl SyntaxRule {
                     Some(())
                 }
             }
-            SExpr::Cons(pattern) => {
+            SExpr::Cons(pattern, _) => {
                 match pattern.car.as_ref() {
-                    SExpr::Id(id) if id.symbol.0 == "..." => {
+                    SExpr::Id(id, _) if id.symbol.0 == "..." => {
                         bindings.insert(id.clone(), sexpr.clone());
                     }
                     _ => {
-                        let SExpr::Cons(cons) = sexpr else {
+                        let SExpr::Cons(cons, _) = sexpr else {
                             return None;
                         };
                         Self::_match_pattern(literals, &pattern.car, &cons.car, bindings)?;
@@ -163,7 +166,7 @@ impl SyntaxRule {
                 }
                 Some(())
             }
-            _ => (pattern == sexpr).then_some(()),
+            _ => (pattern.is_equal(sexpr)).then_some(()),
         }
     }
 
@@ -176,27 +179,41 @@ impl SyntaxRule {
         Self::_match_pattern(literals, &self.pattern, sexpr, &mut bindings).map(|_| bindings)
     }
 
-    fn _render_template(template: &SExpr, bindings: &HashMap<Id, SExpr>) -> SExpr {
+    fn _render_template(
+        template: &SExpr,
+        bindings: &HashMap<Id, SExpr>,
+        application_source_loc: SourceLoc,
+    ) -> SExpr {
         match template {
-            SExpr::Id(pattern) => bindings.get(pattern).unwrap_or(template).clone(),
-            SExpr::Cons(pattern) => match pattern.car.as_ref() {
-                SExpr::Id(id) if id.symbol.0 == "..." => bindings.get(id).unwrap().clone(),
-                _ => SExpr::cons(
-                    Self::_render_template(&pattern.car, bindings),
-                    Self::_render_template(&pattern.cdr, bindings),
+            SExpr::Id(pattern, _) => bindings
+                .get(pattern)
+                .unwrap_or(&template.update_src_loc(application_source_loc))
+                .clone(),
+            SExpr::Cons(pattern, _) => match pattern.car.as_ref() {
+                SExpr::Id(id, _) if id.symbol.0 == "..." => bindings.get(id).unwrap().clone(),
+                _ => SExpr::Cons(
+                    Cons::new(
+                        Self::_render_template(&pattern.car, bindings, application_source_loc),
+                        Self::_render_template(&pattern.cdr, bindings, application_source_loc),
+                    ),
+                    application_source_loc,
                 ),
             },
-            _ => template.clone(),
+            _ => template.update_src_loc(application_source_loc),
         }
     }
 
-    fn render_template(&self, bindings: &HashMap<Id, SExpr>) -> SExpr {
-        Self::_render_template(&self.template, bindings)
+    fn render_template(
+        &self,
+        bindings: &HashMap<Id, SExpr>,
+        application_source_loc: SourceLoc,
+    ) -> SExpr {
+        Self::_render_template(&self.template, bindings, application_source_loc)
     }
 
-    pub fn apply(&self, literals: &HashSet<Symbol>, sexpr: &SExpr) -> Option<SExpr> {
-        let bindings = self.match_pattern(literals, sexpr)?;
-        Some(self.render_template(&bindings))
+    pub fn apply(&self, literals: &HashSet<Symbol>, application: &SExpr) -> Option<SExpr> {
+        let bindings = self.match_pattern(literals, application)?;
+        Some(self.render_template(&bindings, application.get_src_loc()))
     }
 }
 
@@ -205,7 +222,7 @@ impl Transformer {
         match_sexpr! {(#"syntax-rules", (literals_list @ ..), rules @ ..) = spec =>
             let mut literals = HashSet::<Symbol>::new();
             for_each(|literal| {
-                if let SExpr::Id(Id { symbol, scopes: _ }) = literal{
+                if let SExpr::Id(Id { symbol, scopes: _ }, _) = literal{
                     literals.insert(symbol.clone());
                 } else {
                     unreachable!("Expected symbols in syntax transformer literals");
@@ -234,19 +251,21 @@ impl Transformer {
 
 #[cfg(test)]
 mod tests {
-    use crate::compile::{expand::introduce, lex::tokenize, parse::parse};
+    use crate::compile::{
+        expand::introduce, lex::tokenize, parse::parse, sexpr::Bool, src_loc::SourceLoc,
+    };
 
     use super::*;
 
     #[test]
-    fn test_and_transformer_base_case() {
+    fn test_and_transformer_literal() {
         let transformer = Transformer::new(&introduce(
             &parse(
                 &tokenize(
-                    r#"
+                    "
                     (syntax-rules ()
                       ((_) #f))
-                "#,
+                ",
                 )
                 .unwrap(),
             )
@@ -257,9 +276,19 @@ mod tests {
             transformer
                 .transform(&introduce(&parse(&tokenize("(and)").unwrap()).unwrap()))
                 .unwrap(),
-            SExpr::from(false)
+            SExpr::Bool(
+                Bool(false),
+                SourceLoc {
+                    line: 0,
+                    idx: 0,
+                    width: 5
+                }
+            )
         );
+    }
 
+    #[test]
+    fn test_and_transformer_id() {
         let transformer = Transformer::new(&introduce(
             &parse(
                 &tokenize(
@@ -277,7 +306,14 @@ mod tests {
             transformer
                 .transform(&introduce(&parse(&tokenize("(and x)").unwrap()).unwrap()))
                 .unwrap(),
-            introduce(&SExpr::from(Id::new("x", [])))
+            introduce(&SExpr::Id(
+                Id::new("x", []),
+                SourceLoc {
+                    line: 0,
+                    idx: 5,
+                    width: 1
+                }
+            ))
         );
     }
 
@@ -296,28 +332,28 @@ mod tests {
             .unwrap(),
         ));
 
-        assert_eq!(
-            transformer
-                .transform(&introduce(&parse(&tokenize("(and a b)").unwrap()).unwrap()))
-                .unwrap(),
-            introduce(&parse(&tokenize("(if a (and b) #f)").unwrap()).unwrap())
-        );
-        assert_eq!(
-            transformer
-                .transform(&introduce(
-                    &parse(&tokenize("(and a b c)").unwrap()).unwrap()
-                ))
-                .unwrap(),
-            introduce(&parse(&tokenize("(if a (and b c) #f)").unwrap()).unwrap())
-        );
-        assert_eq!(
-            transformer
-                .transform(&introduce(
-                    &parse(&tokenize("(and a b c d)").unwrap()).unwrap()
-                ))
-                .unwrap(),
-            introduce(&parse(&tokenize("(if a (and b c d) #f)").unwrap()).unwrap())
-        );
+        assert!(transformer
+            .transform(&introduce(&parse(&tokenize("(and a b)").unwrap()).unwrap()))
+            .unwrap()
+            .is_equal(&introduce(
+                &parse(&tokenize("(if a (and b) #f)").unwrap()).unwrap()
+            )));
+        assert!(transformer
+            .transform(&introduce(
+                &parse(&tokenize("(and a b c)").unwrap()).unwrap()
+            ))
+            .unwrap()
+            .is_equal(&introduce(
+                &parse(&tokenize("(if a (and b c) #f)").unwrap()).unwrap()
+            )));
+        assert!(transformer
+            .transform(&introduce(
+                &parse(&tokenize("(and a b c d)").unwrap()).unwrap()
+            ))
+            .unwrap()
+            .is_equal(&introduce(
+                &parse(&tokenize("(if a (and b c d) #f)").unwrap()).unwrap()
+            )));
     }
 
     #[test]
@@ -337,39 +373,54 @@ mod tests {
             )
             .unwrap(),
         ));
+
         assert_eq!(
             transformer
                 .transform(&introduce(&parse(&tokenize("(and)").unwrap()).unwrap()))
                 .unwrap(),
-            SExpr::from(false)
+            SExpr::Bool(
+                Bool(false),
+                SourceLoc {
+                    line: 0,
+                    idx: 0,
+                    width: 5
+                }
+            )
         );
         assert_eq!(
             transformer
-                .transform(&introduce(&parse(&tokenize("(and a)").unwrap()).unwrap()))
+                .transform(&introduce(&parse(&tokenize("(and x)").unwrap()).unwrap()))
                 .unwrap(),
-            introduce(&SExpr::from(Id::new("a", [])))
+            introduce(&SExpr::Id(
+                Id::new("x", []),
+                SourceLoc {
+                    line: 0,
+                    idx: 5,
+                    width: 1
+                }
+            ))
         );
-        assert_eq!(
-            transformer
-                .transform(&introduce(&parse(&tokenize("(and a b)").unwrap()).unwrap()))
-                .unwrap(),
-            introduce(&parse(&tokenize("(if a (and b) #f)").unwrap()).unwrap())
-        );
-        assert_eq!(
-            transformer
-                .transform(&introduce(
-                    &parse(&tokenize("(and a b c)").unwrap()).unwrap()
-                ))
-                .unwrap(),
-            introduce(&parse(&tokenize("(if a (and b c) #f)").unwrap()).unwrap())
-        );
-        assert_eq!(
-            transformer
-                .transform(&introduce(
-                    &parse(&tokenize("(and a b c d)").unwrap()).unwrap()
-                ))
-                .unwrap(),
-            introduce(&parse(&tokenize("(if a (and b c d) #f)").unwrap()).unwrap())
-        );
+        assert!(transformer
+            .transform(&introduce(&parse(&tokenize("(and a b)").unwrap()).unwrap()))
+            .unwrap()
+            .is_equal(&introduce(
+                &parse(&tokenize("(if a (and b) #f)").unwrap()).unwrap()
+            )));
+        assert!(transformer
+            .transform(&introduce(
+                &parse(&tokenize("(and a b c)").unwrap()).unwrap()
+            ))
+            .unwrap()
+            .is_equal(&introduce(
+                &parse(&tokenize("(if a (and b c) #f)").unwrap()).unwrap()
+            )));
+        assert!(transformer
+            .transform(&introduce(
+                &parse(&tokenize("(and a b c d)").unwrap()).unwrap()
+            ))
+            .unwrap()
+            .is_equal(&introduce(
+                &parse(&tokenize("(if a (and b c d) #f)").unwrap()).unwrap()
+            )));
     }
 }

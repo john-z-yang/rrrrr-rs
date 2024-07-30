@@ -26,7 +26,7 @@ pub enum Token {
 
 impl Token {
     pub fn get_src_loc(&self) -> SourceLoc {
-        match self {
+        *match self {
             Token::Id(_, source_loc) => source_loc,
             Token::Bool(_, source_loc) => source_loc,
             Token::Num(_, source_loc) => source_loc,
@@ -43,7 +43,6 @@ impl Token {
             Token::Pipe(source_loc) => source_loc,
             Token::EoF(source_loc) => source_loc,
         }
-        .clone()
     }
 }
 

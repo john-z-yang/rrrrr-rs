@@ -69,6 +69,10 @@ impl Cons {
         }
     }
 
+    pub fn is_equal(&self, other: &Self) -> bool {
+        self.car.is_equal(&other.car) && self.cdr.is_equal(&other.cdr)
+    }
+
     fn fmt_disp(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "{}", self.car)?;
         match self.cdr.as_ref() {
@@ -78,22 +82,6 @@ impl Cons {
             SExpr::Cons(cons, _) => {
                 write!(f, " ")?;
                 cons.fmt_disp(f)
-            }
-            other => {
-                write!(f, ". {})", other)
-            }
-        }
-    }
-
-    fn fmt_dbg(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "{:?}", self.car)?;
-        match self.cdr.as_ref() {
-            SExpr::Nil(_) => {
-                write!(f, ")")
-            }
-            SExpr::Cons(cons, _) => {
-                write!(f, " ")?;
-                cons.fmt_dbg(f)
             }
             other => {
                 write!(f, ". {})", other)
@@ -117,13 +105,6 @@ impl fmt::Debug for Id {
         )
     }
 }
-
-// impl fmt::Debug for Cons {
-//     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-//         write!(f, "(")?;
-//         self.fmt_dbg(f)
-//     }
-// }
 
 impl fmt::Display for SExpr {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
@@ -247,7 +228,7 @@ impl TryFrom<SExpr> for Bool {
 
 impl SExpr {
     pub fn get_src_loc(&self) -> SourceLoc {
-        match self {
+        *match self {
             SExpr::Id(_, src_loc) => src_loc,
             SExpr::Cons(_, src_loc) => src_loc,
             SExpr::Nil(src_loc) => src_loc,
@@ -257,7 +238,6 @@ impl SExpr {
             SExpr::Str(_, src_loc) => src_loc,
             SExpr::Vector(_, src_loc) => src_loc,
         }
-        .clone()
     }
 
     pub fn update_src_loc(&self, source_loc: SourceLoc) -> Self {
@@ -276,7 +256,7 @@ impl SExpr {
     pub fn cons(car: SExpr, cdr: SExpr) -> Self {
         let start = car.get_src_loc();
         let end = cdr.get_src_loc();
-        Self::Cons(Cons::new(car, cdr), start.combine(&end))
+        Self::Cons(Cons::new(car, cdr), start.combine(end))
     }
 
     fn adjust_scope<F>(&self, op: &F) -> Self
@@ -295,9 +275,12 @@ impl SExpr {
                     symbol: symbol.clone(),
                     scopes: op(scope),
                 },
-                source_loc.clone(),
+                *source_loc,
             ),
-            Self::Cons(cons, _) => Self::cons(cons.car.adjust_scope(op), cons.cdr.adjust_scope(op)),
+            Self::Cons(cons, source_loc) => Self::Cons(
+                Cons::new(cons.car.adjust_scope(op), cons.cdr.adjust_scope(op)),
+                *source_loc,
+            ),
             _ => self.clone(),
         }
     }
@@ -324,184 +307,108 @@ impl SExpr {
         self.adjust_scope(&op)
     }
 
-    pub fn make_list(elements: &[Self], start: &SourceLoc, end: &SourceLoc) -> Self {
-        let mut res = Self::Nil(end.clone());
-        for element in elements.iter().rev() {
-            res = Self::cons(element.clone(), res);
+    pub fn is_equal(&self, other: &Self) -> bool {
+        match self {
+            SExpr::Id(id, _) => {
+                let SExpr::Id(other, _) = other else {
+                    return false;
+                };
+                id == other
+            }
+            SExpr::Cons(cons, _) => {
+                let SExpr::Cons(other, _) = other else {
+                    return false;
+                };
+                cons.is_equal(other)
+            }
+            SExpr::Nil(_) => {
+                matches!(other, Self::Nil(_))
+            }
+            SExpr::Bool(bool, _) => {
+                let SExpr::Bool(other, _) = other else {
+                    return false;
+                };
+                bool == other
+            }
+            SExpr::Num(num, _) => {
+                let SExpr::Num(other, _) = other else {
+                    return false;
+                };
+                num == other
+            }
+            SExpr::Char(char, _) => {
+                let SExpr::Char(other, _) = other else {
+                    return false;
+                };
+                char == other
+            }
+            SExpr::Str(str, _) => {
+                let SExpr::Str(other, _) = other else {
+                    return false;
+                };
+                str == other
+            }
+            SExpr::Vector(vector, _) => {
+                let SExpr::Vector(other, _) = other else {
+                    return false;
+                };
+                vector == other
+            }
         }
-        res.update_src_loc(start.clone().combine(&res.get_src_loc()))
-    }
-
-    pub fn make_improper_list(slice: &[Self], start: &SourceLoc, end: &SourceLoc) -> Self {
-        assert!(
-            slice.len() >= 2,
-            "improper list has to have more than 2 element"
-        );
-        let mut iter = slice.iter().rev();
-        let cdr = iter.next().unwrap().clone();
-        let car = iter.next().unwrap().clone();
-        let mut res = Self::cons(car, cdr);
-        res = res.update_src_loc(res.get_src_loc().combine(end));
-        for element in iter {
-            res = Self::cons(element.clone(), res);
-        }
-        res.update_src_loc(start.clone().combine(&res.get_src_loc()))
     }
 }
 
-// #[cfg(test)]
-// mod tests {
-//     use crate::sexpr;
+#[cfg(test)]
+mod tests {
+    use crate::sexpr;
 
-//     use super::*;
+    use super::*;
 
-//     #[test]
-//     fn test_add_scope() {
-//         let list = sexpr!(
-//             SExpr::Id(
-//                 Id::new("a", [1]),
-//                 SourceLoc {
-//                     line: 0,
-//                     idx: 0,
-//                     width: 1
-//                 }
-//             ),
-//             (SExpr::Id(
-//                 Id::new("b", [1]),
-//                 SourceLoc {
-//                     line: 0,
-//                     idx: 2,
-//                     width: 1
-//                 }
-//             )),
-//             (SExpr::Id(
-//                 Id::new("c", [0]),
-//                 SourceLoc {
-//                     line: 0,
-//                     idx: 4,
-//                     width: 1
-//                 }
-//             )),
-//             SExpr::Id(
-//                 Id::new("d", [0, 1]),
-//                 SourceLoc {
-//                     line: 0,
-//                     idx: 6,
-//                     width: 1
-//                 }
-//             ),
-//         );
-//         assert_eq!(
-//             list.add_scope(0).add_scope(2),
-//             sexpr!(
-//                 SExpr::Id(
-//                     Id::new("a", [0, 1, 2]),
-//                     SourceLoc {
-//                         line: 0,
-//                         idx: 0,
-//                         width: 1
-//                     }
-//                 ),
-//                 (SExpr::Id(
-//                     Id::new("b", [0, 1, 2]),
-//                     SourceLoc {
-//                         line: 0,
-//                         idx: 2,
-//                         width: 1
-//                     }
-//                 )),
-//                 (SExpr::Id(
-//                     Id::new("c", [0, 1, 2]),
-//                     SourceLoc {
-//                         line: 0,
-//                         idx: 4,
-//                         width: 1
-//                     }
-//                 )),
-//                 SExpr::Id(
-//                     Id::new("d", [0, 1, 2]),
-//                     SourceLoc {
-//                         line: 0,
-//                         idx: 6,
-//                         width: 1
-//                     }
-//                 ),
-//             )
-//         )
-//     }
+    #[test]
+    fn test_add_scope() {
+        let source_loc = SourceLoc {
+            line: 0,
+            idx: 0,
+            width: 1,
+        };
+        let list = sexpr!(
+            SExpr::Id(Id::new("a", [1]), source_loc),
+            (SExpr::Id(Id::new("b", [1]), source_loc)),
+            (SExpr::Id(Id::new("c", [0]), source_loc)),
+            SExpr::Id(Id::new("d", [0, 1]), source_loc),
+        );
+        assert_eq!(
+            list.add_scope(0).add_scope(2),
+            sexpr!(
+                SExpr::Id(Id::new("a", [0, 1, 2]), source_loc),
+                (SExpr::Id(Id::new("b", [0, 1, 2]), source_loc)),
+                (SExpr::Id(Id::new("c", [0, 2]), source_loc)),
+                SExpr::Id(Id::new("d", [0, 1, 2]), source_loc),
+            )
+        )
+    }
 
-//     #[test]
-//     fn test_flip_scope() {
-//         let list = sexpr!(
-//             SExpr::Id(
-//                 Id::new("a", [1]),
-//                 SourceLoc {
-//                     line: 0,
-//                     idx: 0,
-//                     width: 1
-//                 }
-//             ),
-//             (SExpr::Id(
-//                 Id::new("b", [1]),
-//                 SourceLoc {
-//                     line: 0,
-//                     idx: 2,
-//                     width: 1
-//                 }
-//             )),
-//             (SExpr::Id(
-//                 Id::new("c", [0]),
-//                 SourceLoc {
-//                     line: 0,
-//                     idx: 4,
-//                     width: 1
-//                 }
-//             )),
-//             SExpr::Id(
-//                 Id::new("d", [0, 1]),
-//                 SourceLoc {
-//                     line: 0,
-//                     idx: 6,
-//                     width: 1
-//                 }
-//             ),
-//         );
-//         assert_eq!(
-//             list.flip_scope(0),
-//             sexpr!(
-//                 SExpr::Id(
-//                     Id::new("a", [1, 0]),
-//                     SourceLoc {
-//                         line: 0,
-//                         idx: 0,
-//                         width: 1
-//                     }
-//                 ),
-//                 (SExpr::Id(
-//                     Id::new("b", [1, 0]),
-//                     SourceLoc {
-//                         line: 0,
-//                         idx: 2,
-//                         width: 1
-//                     }
-//                 )),
-//                 (SExpr::Id(
-//                     Id::new("c", []),
-//                     SourceLoc {
-//                         line: 0,
-//                         idx: 4,
-//                         width: 1
-//                     }
-//                 )),
-//                 SExpr::Id(
-//                     Id::new("d", [1]),
-//                     SourceLoc {
-//                         line: 0,
-//                         idx: 6,
-//                         width: 1
-//                     }
-//                 ),
-//             )
-//         )
-//     }
-// }
+    #[test]
+    fn test_flip_scope() {
+        let source_loc = SourceLoc {
+            line: 0,
+            idx: 0,
+            width: 1,
+        };
+        let list = sexpr!(
+            SExpr::Id(Id::new("a", [1]), source_loc),
+            (SExpr::Id(Id::new("b", [1]), source_loc)),
+            (SExpr::Id(Id::new("c", [0]), source_loc)),
+            SExpr::Id(Id::new("d", [0, 1]), source_loc),
+        );
+        assert_eq!(
+            list.flip_scope(0),
+            sexpr!(
+                SExpr::Id(Id::new("a", [1, 0]), source_loc),
+                (SExpr::Id(Id::new("b", [1, 0]), source_loc)),
+                (SExpr::Id(Id::new("c", []), source_loc)),
+                SExpr::Id(Id::new("d", [1]), source_loc),
+            )
+        )
+    }
+}
