@@ -1,6 +1,6 @@
 use std::fmt;
 
-#[derive(Clone, Copy, Debug, PartialEq)]
+#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Debug)]
 pub struct SourceLoc {
     pub line: usize,
     pub idx: usize,
@@ -9,11 +9,7 @@ pub struct SourceLoc {
 
 impl SourceLoc {
     pub fn combine(self, other: Self) -> Self {
-        let (before, after) = if other.idx < self.idx {
-            (other, self)
-        } else if other.idx > self.idx {
-            (self, other)
-        } else if other.width < self.idx {
+        let (before, after) = if other < self {
             (other, self)
         } else {
             (self, other)
