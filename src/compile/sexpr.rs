@@ -84,7 +84,7 @@ impl Cons {
                 cons.fmt_disp(f)
             }
             other => {
-                write!(f, ". {})", other)
+                write!(f, " . {})", other)
             }
         }
     }
