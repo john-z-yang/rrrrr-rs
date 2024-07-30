@@ -3,7 +3,7 @@ use std::fmt;
 
 use super::{
     bindings::{ScopeId, Scopes},
-    src_loc::SourceLoc,
+    source_loc::SourceLoc,
 };
 
 #[derive(PartialEq, Clone, Debug)]
@@ -217,20 +217,20 @@ impl TryFrom<SExpr> for Bool {
 }
 
 impl SExpr {
-    pub fn get_src_loc(&self) -> SourceLoc {
+    pub fn get_source_loc(&self) -> SourceLoc {
         *match self {
-            SExpr::Id(_, src_loc) => src_loc,
-            SExpr::Cons(_, src_loc) => src_loc,
-            SExpr::Nil(src_loc) => src_loc,
-            SExpr::Bool(_, src_loc) => src_loc,
-            SExpr::Num(_, src_loc) => src_loc,
-            SExpr::Char(_, src_loc) => src_loc,
-            SExpr::Str(_, src_loc) => src_loc,
-            SExpr::Vector(_, src_loc) => src_loc,
+            SExpr::Id(_, source_loc) => source_loc,
+            SExpr::Cons(_, source_loc) => source_loc,
+            SExpr::Nil(source_loc) => source_loc,
+            SExpr::Bool(_, source_loc) => source_loc,
+            SExpr::Num(_, source_loc) => source_loc,
+            SExpr::Char(_, source_loc) => source_loc,
+            SExpr::Str(_, source_loc) => source_loc,
+            SExpr::Vector(_, source_loc) => source_loc,
         }
     }
 
-    pub fn update_src_loc(&self, source_loc: SourceLoc) -> Self {
+    pub fn update_source_loc(&self, source_loc: SourceLoc) -> Self {
         match self {
             SExpr::Id(id, _) => SExpr::Id(id.clone(), source_loc),
             SExpr::Cons(cons, _) => SExpr::Cons(cons.clone(), source_loc),
@@ -244,8 +244,8 @@ impl SExpr {
     }
 
     pub fn cons(car: SExpr, cdr: SExpr) -> Self {
-        let start = car.get_src_loc();
-        let end = cdr.get_src_loc();
+        let start = car.get_source_loc();
+        let end = cdr.get_source_loc();
         Self::Cons(Cons::new(car, cdr), start.combine(end))
     }
 

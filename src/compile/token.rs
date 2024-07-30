@@ -2,7 +2,7 @@ use std::fmt;
 
 use super::{
     sexpr::{Bool, Char, Num, Str, Symbol},
-    src_loc::SourceLoc,
+    source_loc::SourceLoc,
 };
 
 #[derive(Clone, Debug, PartialEq)]
@@ -25,7 +25,7 @@ pub enum Token {
 }
 
 impl Token {
-    pub fn get_src_loc(&self) -> SourceLoc {
+    pub fn get_source_loc(&self) -> SourceLoc {
         *match self {
             Token::Id(_, source_loc) => source_loc,
             Token::Bool(_, source_loc) => source_loc,

@@ -3,7 +3,7 @@ use std::{iter::Peekable, slice::Iter};
 use super::{compliation_error::CompliationError, sexpr::SExpr, token::Token};
 use crate::compile::{
     sexpr::{Id, Vector},
-    src_loc::SourceLoc,
+    source_loc::SourceLoc,
 };
 
 pub fn parse(tokens: &[Token]) -> Result<SExpr, CompliationError> {
@@ -92,7 +92,7 @@ pub fn parse(tokens: &[Token]) -> Result<SExpr, CompliationError> {
                 "parse_list is expecting a '(' token",
             );
 
-            let start = self.consume().get_src_loc();
+            let start = self.consume().get_source_loc();
             let mut elements: Vec<SExpr> = vec![];
             while let Some(t) = self.look_ahead() {
                 if matches!(t, Token::RParen(_))
@@ -113,7 +113,7 @@ pub fn parse(tokens: &[Token]) -> Result<SExpr, CompliationError> {
                     Ok(Self::make_improper_list(
                         &elements,
                         start,
-                        self.consume().get_src_loc(),
+                        self.consume().get_source_loc(),
                     ))
                 }
                 Some(Token::RParen(end)) => {
@@ -145,8 +145,8 @@ pub fn parse(tokens: &[Token]) -> Result<SExpr, CompliationError> {
             let elements = [self.parse_prefix(), self.parse_datum()?];
             Ok(Self::make_list(
                 &elements,
-                elements[0].get_src_loc(),
-                elements[1].get_src_loc(),
+                elements[0].get_source_loc(),
+                elements[1].get_source_loc(),
             ))
         }
         fn parse_prefix(&mut self) -> SExpr {
@@ -180,7 +180,7 @@ pub fn parse(tokens: &[Token]) -> Result<SExpr, CompliationError> {
                 matches!(self.look_ahead(), Some(Token::HashLParen(_))),
                 "parse_vector is expecting the '#(' token"
             );
-            let start = self.consume().get_src_loc();
+            let start = self.consume().get_source_loc();
             let mut elements: Vec<SExpr> = vec![];
             while let Some(t) = self.look_ahead() {
                 if matches!(t, Token::RParen(_)) || matches!(t, Token::EoF(_)) {
@@ -202,7 +202,7 @@ pub fn parse(tokens: &[Token]) -> Result<SExpr, CompliationError> {
             for element in elements.iter().rev() {
                 res = SExpr::cons(element.clone(), res);
             }
-            res.update_src_loc(start.combine(res.get_src_loc()))
+            res.update_source_loc(start.combine(res.get_source_loc()))
         }
         pub fn make_improper_list(slice: &[SExpr], start: SourceLoc, end: SourceLoc) -> SExpr {
             assert!(
@@ -213,11 +213,11 @@ pub fn parse(tokens: &[Token]) -> Result<SExpr, CompliationError> {
             let cdr = iter.next().unwrap().clone();
             let car = iter.next().unwrap().clone();
             let mut res = SExpr::cons(car, cdr);
-            res = res.update_src_loc(res.get_src_loc().combine(end));
+            res = res.update_source_loc(res.get_source_loc().combine(end));
             for element in iter {
                 res = SExpr::cons(element.clone(), res);
             }
-            res.update_src_loc(start.combine(res.get_src_loc()))
+            res.update_source_loc(start.combine(res.get_source_loc()))
         }
         fn look_ahead(&mut self) -> Option<Token> {
             self.it.peek().copied().cloned()
@@ -229,7 +229,7 @@ pub fn parse(tokens: &[Token]) -> Result<SExpr, CompliationError> {
         }
         fn emit_err(&self, reason: &str, token: Token) -> CompliationError {
             CompliationError {
-                source_loc: token.get_src_loc(),
+                source_loc: token.get_source_loc(),
                 reason: format!("{}, but got: {}", reason.to_owned(), token),
             }
         }
@@ -242,7 +242,7 @@ mod tests {
     use crate::compile::{
         lex::tokenize,
         sexpr::{Cons, Num},
-        src_loc::SourceLoc,
+        source_loc::SourceLoc,
     };
 
     use super::*;

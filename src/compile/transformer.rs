@@ -4,7 +4,7 @@ use crate::{compile::util::for_each, match_sexpr};
 
 use super::{
     sexpr::{Cons, Id, SExpr, Symbol},
-    src_loc::SourceLoc,
+    source_loc::SourceLoc,
 };
 
 // TODO:
@@ -187,7 +187,7 @@ impl SyntaxRule {
         match template {
             SExpr::Id(pattern, _) => bindings
                 .get(pattern)
-                .unwrap_or(&template.update_src_loc(application_source_loc))
+                .unwrap_or(&template.update_source_loc(application_source_loc))
                 .clone(),
             SExpr::Cons(pattern, _) => match pattern.car.as_ref() {
                 SExpr::Id(id, _) if id.symbol.0 == "..." => bindings.get(id).unwrap().clone(),
@@ -199,7 +199,7 @@ impl SyntaxRule {
                     application_source_loc,
                 ),
             },
-            _ => template.update_src_loc(application_source_loc),
+            _ => template.update_source_loc(application_source_loc),
         }
     }
 
@@ -213,7 +213,7 @@ impl SyntaxRule {
 
     pub fn apply(&self, literals: &HashSet<Symbol>, application: &SExpr) -> Option<SExpr> {
         let bindings = self.match_pattern(literals, application)?;
-        Some(self.render_template(&bindings, application.get_src_loc()))
+        Some(self.render_template(&bindings, application.get_source_loc()))
     }
 }
 
@@ -252,7 +252,7 @@ impl Transformer {
 #[cfg(test)]
 mod tests {
     use crate::compile::{
-        expand::introduce, lex::tokenize, parse::parse, sexpr::Bool, src_loc::SourceLoc,
+        expand::introduce, lex::tokenize, parse::parse, sexpr::Bool, source_loc::SourceLoc,
     };
 
     use super::*;

@@ -2,7 +2,7 @@ use std::{iter::Peekable, str::Chars};
 
 use crate::compile::{
     sexpr::{Bool, Char, Num, Str, Symbol},
-    src_loc::SourceLoc,
+    source_loc::SourceLoc,
 };
 
 use super::{compliation_error::CompliationError, token::Token};
@@ -31,7 +31,7 @@ pub fn tokenize(source: &str) -> Result<Vec<Token>, CompliationError> {
                 let res = self.scan_token()?;
                 self.advance(res);
             }
-            self.tokens.push(Token::EoF(self.get_src_loc()));
+            self.tokens.push(Token::EoF(self.get_source_loc()));
             Ok(self.tokens.clone())
         }
         fn scan_token(&mut self) -> Result<Option<Token>, CompliationError> {
@@ -41,31 +41,31 @@ pub fn tokenize(source: &str) -> Result<Vec<Token>, CompliationError> {
                     self.consume_until(&|c| c == '\n');
                     None
                 }
-                '(' => Some(Token::LParen(self.get_src_loc())),
-                ')' => Some(Token::RParen(self.get_src_loc())),
-                '`' => Some(Token::QuasiQuote(self.get_src_loc())),
-                '|' => Some(Token::Pipe(self.get_src_loc())),
-                '\'' => Some(Token::Quote(self.get_src_loc())),
+                '(' => Some(Token::LParen(self.get_source_loc())),
+                ')' => Some(Token::RParen(self.get_source_loc())),
+                '`' => Some(Token::QuasiQuote(self.get_source_loc())),
+                '|' => Some(Token::Pipe(self.get_source_loc())),
+                '\'' => Some(Token::Quote(self.get_source_loc())),
                 '.' => Some(if !self.consume_if('.') {
-                    Token::Dot(self.get_src_loc())
+                    Token::Dot(self.get_source_loc())
                 } else if self.consume_if('.') {
-                    Token::Id(Symbol::new("..."), self.get_src_loc())
+                    Token::Id(Symbol::new("..."), self.get_source_loc())
                 } else {
                     return Err(self.emit_err("Expecting '.' after '..'"));
                 }),
                 ',' => Some(if self.consume_if('@') {
-                    Token::CommaAt(self.get_src_loc())
+                    Token::CommaAt(self.get_source_loc())
                 } else {
-                    Token::Comma(self.get_src_loc())
+                    Token::Comma(self.get_source_loc())
                 }),
                 '#' => Some(if self.consume_if('t') {
-                    Token::Bool(Bool(true), self.get_src_loc())
+                    Token::Bool(Bool(true), self.get_source_loc())
                 } else if self.consume_if('f') {
-                    Token::Bool(Bool(false), self.get_src_loc())
+                    Token::Bool(Bool(false), self.get_source_loc())
                 } else if self.consume_if('(') {
-                    Token::HashLParen(self.get_src_loc())
+                    Token::HashLParen(self.get_source_loc())
                 } else if self.consume_if('\\') && self.look_ahead().is_some() {
-                    Token::Char(Char(self.consume()), self.get_src_loc())
+                    Token::Char(Char(self.consume()), self.get_source_loc())
                 } else {
                     return Err(
                         self.emit_err("Expectin 't', 'f', '(' or character literal after '#'")
@@ -89,12 +89,12 @@ pub fn tokenize(source: &str) -> Result<Vec<Token>, CompliationError> {
                 Num(self.cur.parse().map_err(|_| {
                     self.emit_err(&format!("Invalid number representation: {}", self.cur))
                 })?),
-                self.get_src_loc(),
+                self.get_source_loc(),
             ))
         }
         fn parse_id(&mut self) -> Result<Token, CompliationError> {
             self.consume_until(&|c| !Self::is_id_subsequent(c));
-            Ok(Token::Id(Symbol::new(&self.cur), self.get_src_loc()))
+            Ok(Token::Id(Symbol::new(&self.cur), self.get_source_loc()))
         }
         fn parse_string(&mut self) -> Result<Token, CompliationError> {
             while let Some(c) = self.look_ahead() {
@@ -110,7 +110,7 @@ pub fn tokenize(source: &str) -> Result<Vec<Token>, CompliationError> {
             self.consume();
             Ok(Token::Str(
                 Str(self.cur[1..self.cur.len() - 1].to_string()),
-                self.get_src_loc(),
+                self.get_source_loc(),
             ))
         }
         fn consume_until<F>(&mut self, f: &F)
@@ -179,7 +179,7 @@ pub fn tokenize(source: &str) -> Result<Vec<Token>, CompliationError> {
                 c => Self::is_id_initial(c),
             }
         }
-        fn get_src_loc(&self) -> SourceLoc {
+        fn get_source_loc(&self) -> SourceLoc {
             SourceLoc {
                 line: self.line,
                 idx: self.col,
@@ -188,7 +188,7 @@ pub fn tokenize(source: &str) -> Result<Vec<Token>, CompliationError> {
         }
         fn emit_err(&self, reason: &str) -> CompliationError {
             CompliationError {
-                source_loc: self.get_src_loc(),
+                source_loc: self.get_source_loc(),
                 reason: reason.to_owned(),
             }
         }
@@ -203,7 +203,7 @@ mod tests {
         compliation_error::CompliationError,
         lex::tokenize,
         sexpr::{Bool, Char, Num, Str, Symbol},
-        src_loc::SourceLoc,
+        source_loc::SourceLoc,
         token::Token,
     };
 

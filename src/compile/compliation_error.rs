@@ -1,6 +1,6 @@
 use std::{cmp::min, fmt};
 
-use super::src_loc::SourceLoc;
+use super::source_loc::SourceLoc;
 
 #[derive(Debug, Clone)]
 pub(crate) struct CompliationError {

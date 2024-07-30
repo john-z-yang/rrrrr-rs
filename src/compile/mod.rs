@@ -4,7 +4,7 @@ pub mod expand;
 pub mod lex;
 pub mod parse;
 pub mod sexpr;
-pub mod src_loc;
+pub mod source_loc;
 pub mod token;
 pub mod transformer;
 pub mod util;
