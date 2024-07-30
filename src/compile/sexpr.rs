@@ -6,7 +6,7 @@ use super::{
     source_loc::SourceLoc,
 };
 
-#[derive(PartialEq, Clone, Debug)]
+#[derive(Clone, Debug)]
 pub enum SExpr {
     Id(Id, SourceLoc),
     Cons(Cons, SourceLoc),
@@ -67,10 +67,6 @@ impl Cons {
             car: Box::new(car.into()),
             cdr: Box::new(cdr.into()),
         }
-    }
-
-    pub fn is_equal(&self, other: &Self) -> bool {
-        self.car.is_equal(&other.car) && self.cdr.is_equal(&other.cdr)
     }
 
     fn fmt_disp(&self, f: &mut fmt::Formatter) -> fmt::Result {
@@ -216,6 +212,58 @@ impl TryFrom<SExpr> for Bool {
     }
 }
 
+impl PartialEq for SExpr {
+    fn eq(&self, other: &Self) -> bool {
+        match self {
+            SExpr::Id(id, _) => {
+                let SExpr::Id(other, _) = other else {
+                    return false;
+                };
+                id == other
+            }
+            SExpr::Cons(cons, _) => {
+                let SExpr::Cons(other, _) = other else {
+                    return false;
+                };
+                cons == other
+            }
+            SExpr::Nil(_) => {
+                matches!(other, Self::Nil(_))
+            }
+            SExpr::Bool(bool, _) => {
+                let SExpr::Bool(other, _) = other else {
+                    return false;
+                };
+                bool == other
+            }
+            SExpr::Num(num, _) => {
+                let SExpr::Num(other, _) = other else {
+                    return false;
+                };
+                num == other
+            }
+            SExpr::Char(char, _) => {
+                let SExpr::Char(other, _) = other else {
+                    return false;
+                };
+                char == other
+            }
+            SExpr::Str(str, _) => {
+                let SExpr::Str(other, _) = other else {
+                    return false;
+                };
+                str == other
+            }
+            SExpr::Vector(vector, _) => {
+                let SExpr::Vector(other, _) = other else {
+                    return false;
+                };
+                vector == other
+            }
+        }
+    }
+}
+
 impl SExpr {
     pub fn get_source_loc(&self) -> SourceLoc {
         *match self {
@@ -297,54 +345,9 @@ impl SExpr {
         self.adjust_scope(&op)
     }
 
-    pub fn is_equal(&self, other: &Self) -> bool {
-        match self {
-            SExpr::Id(id, _) => {
-                let SExpr::Id(other, _) = other else {
-                    return false;
-                };
-                id == other
-            }
-            SExpr::Cons(cons, _) => {
-                let SExpr::Cons(other, _) = other else {
-                    return false;
-                };
-                cons.is_equal(other)
-            }
-            SExpr::Nil(_) => {
-                matches!(other, Self::Nil(_))
-            }
-            SExpr::Bool(bool, _) => {
-                let SExpr::Bool(other, _) = other else {
-                    return false;
-                };
-                bool == other
-            }
-            SExpr::Num(num, _) => {
-                let SExpr::Num(other, _) = other else {
-                    return false;
-                };
-                num == other
-            }
-            SExpr::Char(char, _) => {
-                let SExpr::Char(other, _) = other else {
-                    return false;
-                };
-                char == other
-            }
-            SExpr::Str(str, _) => {
-                let SExpr::Str(other, _) = other else {
-                    return false;
-                };
-                str == other
-            }
-            SExpr::Vector(vector, _) => {
-                let SExpr::Vector(other, _) = other else {
-                    return false;
-                };
-                vector == other
-            }
-        }
+    #[cfg(test)]
+    pub fn is_idential(&self, other: &Self) -> bool {
+        self == other && self.get_source_loc() == other.get_source_loc()
     }
 }
 

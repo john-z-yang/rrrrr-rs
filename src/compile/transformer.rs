@@ -171,7 +171,7 @@ impl SyntaxRule {
                     }
                     Some(())
                 }
-                _ => (pattern.is_equal(sexpr)).then_some(()),
+                _ => (pattern == sexpr).then_some(()),
             }
         }
 
@@ -284,11 +284,10 @@ mod tests {
             idx: 9,
             width: 27,
         };
-        assert_eq!(
-            transformer
-                .transform(&introduce(&parse(&tokenize(src).unwrap()).unwrap()))
-                .unwrap(),
-            SExpr::Cons(
+        assert!(transformer
+            .transform(&introduce(&parse(&tokenize(src).unwrap()).unwrap()))
+            .unwrap()
+            .is_idential(&SExpr::Cons(
                 Cons::new(
                     SExpr::Num(Num(1.0), callsite_src_loc),
                     SExpr::Cons(
@@ -307,8 +306,7 @@ mod tests {
                     )
                 ),
                 callsite_src_loc
-            )
-        );
+            )));
     }
 
     #[test]
@@ -326,19 +324,17 @@ mod tests {
             .unwrap(),
         ));
 
-        assert_eq!(
-            transformer
-                .transform(&introduce(&parse(&tokenize("(and)").unwrap()).unwrap()))
-                .unwrap(),
-            SExpr::Bool(
+        assert!(transformer
+            .transform(&introduce(&parse(&tokenize("(and)").unwrap()).unwrap()))
+            .unwrap()
+            .is_idential(&SExpr::Bool(
                 Bool(false),
                 SourceLoc {
                     line: 0,
                     idx: 0,
                     width: 5
                 }
-            )
-        );
+            )));
     }
 
     #[test]
@@ -356,19 +352,17 @@ mod tests {
             .unwrap(),
         ));
 
-        assert_eq!(
-            transformer
-                .transform(&introduce(&parse(&tokenize("(and x)").unwrap()).unwrap()))
-                .unwrap(),
-            introduce(&SExpr::Id(
+        assert!(transformer
+            .transform(&introduce(&parse(&tokenize("(and x)").unwrap()).unwrap()))
+            .unwrap()
+            .is_idential(&introduce(&SExpr::Id(
                 Id::new("x", []),
                 SourceLoc {
                     line: 0,
                     idx: 5,
                     width: 1
                 }
-            ))
-        );
+            ))));
     }
 
     #[test]
@@ -386,28 +380,28 @@ mod tests {
             .unwrap(),
         ));
 
-        assert!(transformer
-            .transform(&introduce(&parse(&tokenize("(and a b)").unwrap()).unwrap()))
-            .unwrap()
-            .is_equal(&introduce(
-                &parse(&tokenize("(if a (and b) #f)").unwrap()).unwrap()
-            )));
-        assert!(transformer
-            .transform(&introduce(
-                &parse(&tokenize("(and a b c)").unwrap()).unwrap()
-            ))
-            .unwrap()
-            .is_equal(&introduce(
-                &parse(&tokenize("(if a (and b c) #f)").unwrap()).unwrap()
-            )));
-        assert!(transformer
-            .transform(&introduce(
-                &parse(&tokenize("(and a b c d)").unwrap()).unwrap()
-            ))
-            .unwrap()
-            .is_equal(&introduce(
-                &parse(&tokenize("(if a (and b c d) #f)").unwrap()).unwrap()
-            )));
+        assert_eq!(
+            transformer
+                .transform(&introduce(&parse(&tokenize("(and a b)").unwrap()).unwrap()))
+                .unwrap(),
+            introduce(&parse(&tokenize("(if a (and b) #f)").unwrap()).unwrap())
+        );
+        assert_eq!(
+            transformer
+                .transform(&introduce(
+                    &parse(&tokenize("(and a b c)").unwrap()).unwrap()
+                ))
+                .unwrap(),
+            introduce(&parse(&tokenize("(if a (and b c) #f)").unwrap()).unwrap())
+        );
+        assert_eq!(
+            transformer
+                .transform(&introduce(
+                    &parse(&tokenize("(and a b c d)").unwrap()).unwrap()
+                ))
+                .unwrap(),
+            introduce(&parse(&tokenize("(if a (and b c d) #f)").unwrap()).unwrap())
+        );
     }
 
     #[test]
@@ -428,53 +422,49 @@ mod tests {
             .unwrap(),
         ));
 
-        assert_eq!(
-            transformer
-                .transform(&introduce(&parse(&tokenize("(and)").unwrap()).unwrap()))
-                .unwrap(),
-            SExpr::Bool(
+        assert!(transformer
+            .transform(&introduce(&parse(&tokenize("(and)").unwrap()).unwrap()))
+            .unwrap()
+            .is_idential(&SExpr::Bool(
                 Bool(false),
                 SourceLoc {
                     line: 0,
                     idx: 0,
                     width: 5
                 }
-            )
-        );
-        assert_eq!(
-            transformer
-                .transform(&introduce(&parse(&tokenize("(and x)").unwrap()).unwrap()))
-                .unwrap(),
-            introduce(&SExpr::Id(
+            )));
+        assert!(transformer
+            .transform(&introduce(&parse(&tokenize("(and x)").unwrap()).unwrap()))
+            .unwrap()
+            .is_idential(&introduce(&SExpr::Id(
                 Id::new("x", []),
                 SourceLoc {
                     line: 0,
                     idx: 5,
                     width: 1
                 }
-            ))
+            ))));
+        assert_eq!(
+            transformer
+                .transform(&introduce(&parse(&tokenize("(and a b)").unwrap()).unwrap()))
+                .unwrap(),
+            introduce(&parse(&tokenize("(if a (and b) #f)").unwrap()).unwrap())
         );
-        assert!(transformer
-            .transform(&introduce(&parse(&tokenize("(and a b)").unwrap()).unwrap()))
-            .unwrap()
-            .is_equal(&introduce(
-                &parse(&tokenize("(if a (and b) #f)").unwrap()).unwrap()
-            )));
-        assert!(transformer
-            .transform(&introduce(
-                &parse(&tokenize("(and a b c)").unwrap()).unwrap()
-            ))
-            .unwrap()
-            .is_equal(&introduce(
-                &parse(&tokenize("(if a (and b c) #f)").unwrap()).unwrap()
-            )));
-        assert!(transformer
-            .transform(&introduce(
-                &parse(&tokenize("(and a b c d)").unwrap()).unwrap()
-            ))
-            .unwrap()
-            .is_equal(&introduce(
-                &parse(&tokenize("(if a (and b c d) #f)").unwrap()).unwrap()
-            )));
+        assert_eq!(
+            transformer
+                .transform(&introduce(
+                    &parse(&tokenize("(and a b c)").unwrap()).unwrap()
+                ))
+                .unwrap(),
+            introduce(&parse(&tokenize("(if a (and b c) #f)").unwrap()).unwrap())
+        );
+        assert_eq!(
+            transformer
+                .transform(&introduce(
+                    &parse(&tokenize("(and a b c d)").unwrap()).unwrap()
+                ))
+                .unwrap(),
+            introduce(&parse(&tokenize("(if a (and b c d) #f)").unwrap()).unwrap())
+        );
     }
 }

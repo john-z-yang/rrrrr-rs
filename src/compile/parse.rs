@@ -271,7 +271,7 @@ mod tests {
             width: 6,
         });
 
-        assert_eq!(parse(&tokenize(src).unwrap()).unwrap(), list)
+        assert!(parse(&tokenize(src).unwrap()).unwrap().is_idential(&list));
     }
 
     #[test]
@@ -301,7 +301,7 @@ mod tests {
             },
         );
 
-        assert_eq!(parse(&tokenize(src).unwrap()).unwrap(), list)
+        assert!(parse(&tokenize(src).unwrap()).unwrap().is_idential(&list));
     }
 
     #[test]
@@ -345,7 +345,7 @@ mod tests {
             },
         );
 
-        assert_eq!(parse(&tokenize(src).unwrap()).unwrap(), list)
+        assert!(parse(&tokenize(src).unwrap()).unwrap().is_idential(&list));
     }
 
     #[test]
@@ -389,7 +389,7 @@ mod tests {
             },
         );
 
-        assert_eq!(parse(&tokenize(src).unwrap()).unwrap(), list)
+        assert!(parse(&tokenize(src).unwrap()).unwrap().is_idential(&list));
     }
 
     #[test]
@@ -466,7 +466,7 @@ mod tests {
             },
         );
 
-        assert_eq!(parse(&tokenize(src).unwrap()).unwrap(), list)
+        assert!(parse(&tokenize(src).unwrap()).unwrap().is_idential(&list));
     }
 
     #[test]
@@ -543,7 +543,7 @@ mod tests {
             },
         );
 
-        assert_eq!(parse(&tokenize(src).unwrap()).unwrap(), list)
+        assert!(parse(&tokenize(src).unwrap()).unwrap().is_idential(&list));
     }
 
     #[test]
@@ -620,7 +620,7 @@ mod tests {
             },
         );
 
-        assert_eq!(parse(&tokenize(src).unwrap()).unwrap(), list)
+        assert!(parse(&tokenize(src).unwrap()).unwrap().is_idential(&list));
     }
 
     #[test]
@@ -649,7 +649,7 @@ mod tests {
             },
         );
 
-        assert_eq!(parse(&tokenize(src).unwrap()).unwrap(), list)
+        assert!(parse(&tokenize(src).unwrap()).unwrap().is_idential(&list));
     }
 
     #[test]
@@ -716,7 +716,7 @@ mod tests {
                 width: 23,
             },
         );
-        assert_eq!(parse(&tokenize(src).unwrap()).unwrap(), list)
+        assert!(parse(&tokenize(src).unwrap()).unwrap().is_idential(&list));
     }
 
     #[test]
@@ -764,7 +764,7 @@ mod tests {
             },
         );
 
-        assert_eq!(parse(&tokenize(src).unwrap()).unwrap(), list)
+        assert!(parse(&tokenize(src).unwrap()).unwrap().is_idential(&list));
     }
 
     #[test]
@@ -859,7 +859,7 @@ mod tests {
             },
         );
 
-        assert_eq!(parse(&tokenize(src).unwrap()).unwrap(), list)
+        assert!(parse(&tokenize(src).unwrap()).unwrap().is_idential(&list));
     }
 
     #[test]
@@ -897,7 +897,7 @@ mod tests {
             },
         );
 
-        assert_eq!(parse(&tokenize(src).unwrap()).unwrap(), pair)
+        assert!(parse(&tokenize(src).unwrap()).unwrap().is_idential(&pair));
     }
 
     #[test]
@@ -955,7 +955,7 @@ mod tests {
             },
         );
 
-        assert_eq!(parse(&tokenize(src).unwrap()).unwrap(), list)
+        assert!(parse(&tokenize(src).unwrap()).unwrap().is_idential(&list));
     }
 
     #[test]
@@ -1025,7 +1025,9 @@ mod tests {
             },
         );
 
-        assert_eq!(parse(&tokenize(src).unwrap()).unwrap(), outer_pair)
+        assert!(parse(&tokenize(src).unwrap())
+            .unwrap()
+            .is_idential(&outer_pair));
     }
 
     #[test]

@@ -106,356 +106,413 @@ fn expand_letrec_syntax(sexpr: &SExpr, bindings: &mut Bindings, env: &mut Env) -
     unreachable!("Invalid use of let_syntax form: {}", sexpr);
 }
 
-// #[cfg(test)]
-// mod tests {
+#[cfg(test)]
+mod tests {
 
-//     use crate::{
-//         compile::{lex::tokenize, parse::parse},
-//         sexpr,
-//     };
+    use crate::{
+        compile::{
+            lex::tokenize,
+            parse::parse,
+            sexpr::{Bool, Id, Num},
+            source_loc::SourceLoc,
+        },
+        sexpr,
+    };
 
-//     fn last(sexpr: &SExpr) -> Option<SExpr> {
-//         match sexpr {
-//             SExpr::Cons(cons) if matches!(*cons.cdr, SExpr::Nil) => Some(cons.car.as_ref().clone()),
-//             SExpr::Cons(cons) => last(&cons.cdr),
-//             _ => None,
-//         }
-//     }
+    fn last(sexpr: &SExpr) -> Option<SExpr> {
+        match sexpr {
+            SExpr::Cons(cons, _) if matches!(*cons.cdr, SExpr::Nil(_)) => {
+                Some(cons.car.as_ref().clone())
+            }
+            SExpr::Cons(cons, _) => last(&cons.cdr),
+            _ => None,
+        }
+    }
 
-//     fn nth(sexpr: &SExpr, idx: usize) -> Option<SExpr> {
-//         let SExpr::Cons(cons) = sexpr else {
-//             return None;
-//         };
-//         if idx == 0 {
-//             Some(cons.car.as_ref().clone())
-//         } else {
-//             nth(&cons.cdr, idx - 1)
-//         }
-//     }
+    fn nth(sexpr: &SExpr, idx: usize) -> Option<SExpr> {
+        let SExpr::Cons(cons, _) = sexpr else {
+            return None;
+        };
+        if idx == 0 {
+            Some(cons.car.as_ref().clone())
+        } else {
+            nth(&cons.cdr, idx - 1)
+        }
+    }
 
-//     use super::*;
+    use super::*;
 
-//     #[test]
-//     fn test_introduce() {
-//         let list = parse(&tokenize("(cons 0 1)").unwrap()).unwrap();
-//         assert_eq!(
-//             introduce(&list),
-//             sexpr!(
-//                 SExpr::from(Id::new("cons", [Bindings::CORE_SCOPE])),
-//                 SExpr::from(0.0),
-//                 SExpr::from(1.0),
-//             )
-//         );
-//     }
+    #[test]
+    fn test_introduce() {
+        let list = parse(&tokenize("(cons 0 1)").unwrap()).unwrap();
+        let source_loc = SourceLoc {
+            line: 0,
+            idx: 0,
+            width: 0,
+        };
+        assert_eq!(
+            introduce(&list),
+            sexpr!(
+                SExpr::Id(Id::new("cons", [Bindings::CORE_SCOPE]), source_loc),
+                SExpr::Num(Num(0.0), source_loc),
+                SExpr::Num(Num(1.0), source_loc),
+            )
+        );
+    }
 
-//     #[test]
-//     fn test_expand_lambda() {
-//         let mut bindings = Bindings::new();
-//         let mut env = HashMap::<Symbol, Transformer>::new();
-//         let lambda_expr = parse(&tokenize("(lambda (x y) (cons x y))").unwrap()).unwrap();
-//         let left = expand(&introduce(&lambda_expr), &mut bindings, &mut env);
-//         let right = sexpr!(
-//             SExpr::from(Id::new("lambda", [Bindings::CORE_SCOPE])),
-//             (
-//                 SExpr::from(Id::new("x", [Bindings::CORE_SCOPE, 1])),
-//                 SExpr::from(Id::new("y", [Bindings::CORE_SCOPE, 1])),
-//             ),
-//             (
-//                 SExpr::from(Id::new("cons", [Bindings::CORE_SCOPE, 1])),
-//                 SExpr::from(Id::new("x", [Bindings::CORE_SCOPE, 1])),
-//                 SExpr::from(Id::new("y", [Bindings::CORE_SCOPE, 1])),
-//             ),
-//         );
-//         assert_eq!(left, right);
-//     }
+    #[test]
+    fn test_expand_lambda() {
+        let mut bindings = Bindings::new();
+        let mut env = HashMap::<Symbol, Transformer>::new();
+        let lambda_expr = parse(&tokenize("(lambda (x y) (cons x y))").unwrap()).unwrap();
+        let left = expand(&introduce(&lambda_expr), &mut bindings, &mut env);
+        let source_loc = SourceLoc {
+            line: 0,
+            idx: 0,
+            width: 0,
+        };
+        let right = sexpr!(
+            SExpr::Id(Id::new("lambda", [Bindings::CORE_SCOPE]), source_loc),
+            (
+                SExpr::Id(Id::new("x", [Bindings::CORE_SCOPE, 1]), source_loc),
+                SExpr::Id(Id::new("y", [Bindings::CORE_SCOPE, 1]), source_loc),
+            ),
+            (
+                SExpr::Id(Id::new("cons", [Bindings::CORE_SCOPE, 1]), source_loc),
+                SExpr::Id(Id::new("x", [Bindings::CORE_SCOPE, 1]), source_loc),
+                SExpr::Id(Id::new("y", [Bindings::CORE_SCOPE, 1]), source_loc),
+            ),
+        );
+        assert_eq!(left, right);
+    }
 
-//     #[test]
-//     fn test_expand_lambda_recursive() {
-//         let mut bindings = Bindings::new();
-//         let mut env = HashMap::<Symbol, Transformer>::new();
-//         let lambda_expr = parse(
-//             &tokenize(
-//                 r#"
-//                 (lambda (x)
-//                   (lambda (y) (cons x y))
-//                   (cons x x))
-//                 "#,
-//             )
-//             .unwrap(),
-//         )
-//         .unwrap();
-//         let result = expand(&introduce(&lambda_expr), &mut bindings, &mut env);
-//         let expected = sexpr!(
-//             SExpr::from(Id::new("lambda", [Bindings::CORE_SCOPE])),
-//             (SExpr::from(Id::new("x", [Bindings::CORE_SCOPE, 1]))),
-//             (
-//                 SExpr::from(Id::new("lambda", [Bindings::CORE_SCOPE, 1])),
-//                 (SExpr::from(Id::new("y", [Bindings::CORE_SCOPE, 1, 2]))),
-//                 (
-//                     SExpr::from(Id::new("cons", [Bindings::CORE_SCOPE, 1, 2])),
-//                     SExpr::from(Id::new("x", [Bindings::CORE_SCOPE, 1, 2])),
-//                     SExpr::from(Id::new("y", [Bindings::CORE_SCOPE, 1, 2])),
-//                 )
-//             ),
-//             (
-//                 SExpr::from(Id::new("cons", [Bindings::CORE_SCOPE, 1])),
-//                 SExpr::from(Id::new("x", [Bindings::CORE_SCOPE, 1])),
-//                 SExpr::from(Id::new("x", [Bindings::CORE_SCOPE, 1])),
-//             ),
-//         );
-//         assert_eq!(result, expected);
-//     }
+    #[test]
+    fn test_expand_lambda_recursive() {
+        let mut bindings = Bindings::new();
+        let mut env = HashMap::<Symbol, Transformer>::new();
+        let lambda_expr = parse(
+            &tokenize(
+                r#"
+                (lambda (x)
+                  (lambda (y) (cons x y))
+                  (cons x x))
+                "#,
+            )
+            .unwrap(),
+        )
+        .unwrap();
+        let result = expand(&introduce(&lambda_expr), &mut bindings, &mut env);
+        let source_loc = SourceLoc {
+            line: 0,
+            idx: 0,
+            width: 0,
+        };
+        let expected = sexpr!(
+            SExpr::Id(Id::new("lambda", [Bindings::CORE_SCOPE]), source_loc),
+            (SExpr::Id(Id::new("x", [Bindings::CORE_SCOPE, 1]), source_loc)),
+            (
+                SExpr::Id(Id::new("lambda", [Bindings::CORE_SCOPE, 1]), source_loc),
+                (SExpr::Id(Id::new("y", [Bindings::CORE_SCOPE, 1, 2]), source_loc)),
+                (
+                    SExpr::Id(Id::new("cons", [Bindings::CORE_SCOPE, 1, 2]), source_loc),
+                    SExpr::Id(Id::new("x", [Bindings::CORE_SCOPE, 1, 2]), source_loc),
+                    SExpr::Id(Id::new("y", [Bindings::CORE_SCOPE, 1, 2]), source_loc),
+                )
+            ),
+            (
+                SExpr::Id(Id::new("cons", [Bindings::CORE_SCOPE, 1]), source_loc),
+                SExpr::Id(Id::new("x", [Bindings::CORE_SCOPE, 1]), source_loc),
+                SExpr::Id(Id::new("x", [Bindings::CORE_SCOPE, 1]), source_loc),
+            ),
+        );
+        assert_eq!(result, expected);
+    }
 
-//     #[test]
-//     fn test_expand_atoms() {
-//         let mut bindings = Bindings::new();
-//         let mut env = HashMap::<Symbol, Transformer>::new();
-//         let sexpr = parse(
-//             &tokenize(
-//                 r#"
-//                 (#f)
-//                 "#,
-//             )
-//             .unwrap(),
-//         )
-//         .unwrap();
-//         assert_eq!(
-//             expand(&introduce(&sexpr), &mut bindings, &mut env),
-//             sexpr!(SExpr::from(false))
-//         );
-//     }
+    #[test]
+    fn test_expand_atoms() {
+        let mut bindings = Bindings::new();
+        let mut env = HashMap::<Symbol, Transformer>::new();
+        let sexpr = parse(
+            &tokenize(
+                r#"
+                (#f)
+                "#,
+            )
+            .unwrap(),
+        )
+        .unwrap();
+        let source_loc = SourceLoc {
+            line: 0,
+            idx: 0,
+            width: 0,
+        };
+        assert_eq!(
+            expand(&introduce(&sexpr), &mut bindings, &mut env),
+            sexpr!(SExpr::Bool(Bool(false), source_loc))
+        );
+    }
 
-//     #[test]
-//     fn test_expand_and_macro_0_arg() {
-//         let mut bindings = Bindings::new();
+    #[test]
+    fn test_expand_and_macro_0_arg() {
+        let mut bindings = Bindings::new();
 
-//         bindings.add_binding(&Id::new("and", [Bindings::CORE_SCOPE]), &Symbol::new("and"));
+        bindings.add_binding(&Id::new("and", [Bindings::CORE_SCOPE]), &Symbol::new("and"));
 
-//         let transformer = Transformer::new(&introduce(
-//             &parse(
-//                 &tokenize(
-//                     r#"
-//                     (syntax-rules ()
-//                       ((_) #f)
-//                       ((_ e) e)
-//                       ((_ e1 e2 ...)
-//                        (if e1 (and e2 ...) #f)))
-//                 "#,
-//                 )
-//                 .unwrap(),
-//             )
-//             .unwrap(),
-//         ));
+        let transformer = Transformer::new(&introduce(
+            &parse(
+                &tokenize(
+                    r#"
+                        (syntax-rules ()
+                          ((_) #f)
+                          ((_ e) e)
+                          ((_ e1 e2 ...)
+                           (if e1 (and e2 ...) #f)))
+                    "#,
+                )
+                .unwrap(),
+            )
+            .unwrap(),
+        ));
 
-//         let mut env = HashMap::from([(
-//             bindings
-//                 .resolve(&Id::new("and", [Bindings::CORE_SCOPE]))
-//                 .unwrap(),
-//             transformer,
-//         )]);
+        let mut env = HashMap::from([(
+            bindings
+                .resolve(&Id::new("and", [Bindings::CORE_SCOPE]))
+                .unwrap(),
+            transformer,
+        )]);
 
-//         let sexpr = parse(&tokenize("(and)").unwrap()).unwrap();
-//         let result = expand(&introduce(&sexpr), &mut bindings, &mut env);
-//         let expected = SExpr::from(false);
-//         assert_eq!(result, expected);
-//     }
+        let sexpr = parse(&tokenize("(and)").unwrap()).unwrap();
+        let result = expand(&introduce(&sexpr), &mut bindings, &mut env);
+        let expected = SExpr::Bool(
+            Bool(false),
+            SourceLoc {
+                line: 0,
+                idx: 0,
+                width: 0,
+            },
+        );
+        assert_eq!(result, expected);
+    }
 
-//     #[test]
-//     fn test_expand_and_macro_1_arg() {
-//         let mut bindings = Bindings::new();
+    #[test]
+    fn test_expand_and_macro_1_arg() {
+        let mut bindings = Bindings::new();
 
-//         bindings.add_binding(&Id::new("and", [Bindings::CORE_SCOPE]), &Symbol::new("and"));
+        bindings.add_binding(&Id::new("and", [Bindings::CORE_SCOPE]), &Symbol::new("and"));
 
-//         let transformer = Transformer::new(&introduce(
-//             &parse(
-//                 &tokenize(
-//                     r#"
-//                     (syntax-rules ()
-//                       ((_) #f)
-//                       ((_ e) e)
-//                       ((_ e1 e2 ...)
-//                        (if e1 (and e2 ...) #f)))
-//                 "#,
-//                 )
-//                 .unwrap(),
-//             )
-//             .unwrap(),
-//         ));
+        let transformer = Transformer::new(&introduce(
+            &parse(
+                &tokenize(
+                    r#"
+                        (syntax-rules ()
+                          ((_) #f)
+                          ((_ e) e)
+                          ((_ e1 e2 ...)
+                           (if e1 (and e2 ...) #f)))
+                    "#,
+                )
+                .unwrap(),
+            )
+            .unwrap(),
+        ));
 
-//         let mut env = HashMap::from([(
-//             bindings
-//                 .resolve(&Id::new("and", [Bindings::CORE_SCOPE]))
-//                 .unwrap(),
-//             transformer,
-//         )]);
+        let mut env = HashMap::from([(
+            bindings
+                .resolve(&Id::new("and", [Bindings::CORE_SCOPE]))
+                .unwrap(),
+            transformer,
+        )]);
 
-//         let sexpr = introduce(&parse(&tokenize("(and list)").unwrap()).unwrap());
-//         let result = expand(&introduce(&sexpr), &mut bindings, &mut env);
-//         let expected = SExpr::from(Id::new("list", [Bindings::CORE_SCOPE]));
-//         assert_eq!(result, expected);
-//     }
+        let sexpr = introduce(&parse(&tokenize("(and list)").unwrap()).unwrap());
+        let result = expand(&introduce(&sexpr), &mut bindings, &mut env);
+        let expected = SExpr::Id(
+            Id::new("list", [Bindings::CORE_SCOPE]),
+            SourceLoc {
+                line: 0,
+                idx: 0,
+                width: 0,
+            },
+        );
+        assert_eq!(result, expected);
+    }
 
-//     #[test]
-//     fn test_expand_and_macro_2_args() {
-//         let mut bindings = Bindings::new();
+    #[test]
+    fn test_expand_and_macro_2_args() {
+        let mut bindings = Bindings::new();
 
-//         bindings.add_binding(&Id::new("and", [Bindings::CORE_SCOPE]), &Symbol::new("and"));
+        bindings.add_binding(&Id::new("and", [Bindings::CORE_SCOPE]), &Symbol::new("and"));
 
-//         let transformer = Transformer::new(&introduce(
-//             &parse(
-//                 &tokenize(
-//                     r#"
-//                     (syntax-rules ()
-//                       ((_) #f)
-//                       ((_ e) e)
-//                       ((_ e1 e2 ...)
-//                        (if e1 (and e2 ...) #f)))
-//                 "#,
-//                 )
-//                 .unwrap(),
-//             )
-//             .unwrap(),
-//         ));
+        let transformer = Transformer::new(&introduce(
+            &parse(
+                &tokenize(
+                    r#"
+                    (syntax-rules ()
+                      ((_) #f)
+                      ((_ e) e)
+                      ((_ e1 e2 ...)
+                       (if e1 (and e2 ...) #f)))
+                "#,
+                )
+                .unwrap(),
+            )
+            .unwrap(),
+        ));
 
-//         let mut env = HashMap::from([(
-//             bindings
-//                 .resolve(&Id::new("and", [Bindings::CORE_SCOPE]))
-//                 .unwrap(),
-//             transformer,
-//         )]);
+        let mut env = HashMap::from([(
+            bindings
+                .resolve(&Id::new("and", [Bindings::CORE_SCOPE]))
+                .unwrap(),
+            transformer,
+        )]);
 
-//         let sexpr = parse(&tokenize("(and list list)").unwrap()).unwrap();
-//         let result = expand(&introduce(&sexpr), &mut bindings, &mut env);
-//         let expected = sexpr!(
-//             SExpr::from(Id::new("if", [Bindings::CORE_SCOPE, 1])),
-//             SExpr::from(Id::new("list", [Bindings::CORE_SCOPE])),
-//             SExpr::from(Id::new("list", [Bindings::CORE_SCOPE])),
-//             SExpr::from(false),
-//         );
-//         assert_eq!(result, expected);
-//     }
+        let sexpr = parse(&tokenize("(and list list)").unwrap()).unwrap();
+        let result = expand(&introduce(&sexpr), &mut bindings, &mut env);
+        let source_loc = SourceLoc {
+            line: 0,
+            idx: 0,
+            width: 0,
+        };
+        let expected = sexpr!(
+            SExpr::Id(Id::new("if", [Bindings::CORE_SCOPE, 1]), source_loc),
+            SExpr::Id(Id::new("list", [Bindings::CORE_SCOPE]), source_loc),
+            SExpr::Id(Id::new("list", [Bindings::CORE_SCOPE]), source_loc),
+            SExpr::Bool(Bool(false), source_loc),
+        );
+        assert_eq!(result, expected);
+    }
 
-//     #[test]
-//     fn test_expand_and_macro_4_args() {
-//         let mut bindings = Bindings::new();
+    #[test]
+    fn test_expand_and_macro_4_args() {
+        let mut bindings = Bindings::new();
 
-//         bindings.add_binding(&Id::new("and", [Bindings::CORE_SCOPE]), &Symbol::new("and"));
+        bindings.add_binding(&Id::new("and", [Bindings::CORE_SCOPE]), &Symbol::new("and"));
 
-//         let transformer = Transformer::new(&introduce(
-//             &parse(
-//                 &tokenize(
-//                     r#"
-//                     (syntax-rules ()
-//                       ((_) #f)
-//                       ((_ e) e)
-//                       ((_ e1 e2 ...)
-//                        (if e1 (and e2 ...) #f)))
-//                 "#,
-//                 )
-//                 .unwrap(),
-//             )
-//             .unwrap(),
-//         ));
+        let transformer = Transformer::new(&introduce(
+            &parse(
+                &tokenize(
+                    r#"
+                    (syntax-rules ()
+                      ((_) #f)
+                      ((_ e) e)
+                      ((_ e1 e2 ...)
+                       (if e1 (and e2 ...) #f)))
+                "#,
+                )
+                .unwrap(),
+            )
+            .unwrap(),
+        ));
 
-//         let mut env = HashMap::from([(
-//             bindings
-//                 .resolve(&Id::new("and", [Bindings::CORE_SCOPE]))
-//                 .unwrap(),
-//             transformer,
-//         )]);
+        let mut env = HashMap::from([(
+            bindings
+                .resolve(&Id::new("and", [Bindings::CORE_SCOPE]))
+                .unwrap(),
+            transformer,
+        )]);
 
-//         let sexpr = parse(&tokenize("(and #t #t #t #t)").unwrap()).unwrap();
-//         // (and t t t t)
-//         // (if t (and t t t) f)
-//         // (if t (if t (and t t) f) f)
-//         // (if t (if t (if t (and t) f) f) f)
-//         // (if t (if t (if t t f) f) f) f)
-//         let result = expand(&introduce(&sexpr), &mut bindings, &mut env);
-//         let expected = sexpr!(
-//             SExpr::from(Id::new("if", [Bindings::CORE_SCOPE, 1])),
-//             SExpr::from(true),
-//             (
-//                 SExpr::from(Id::new("if", [Bindings::CORE_SCOPE, 2])),
-//                 SExpr::from(true),
-//                 (
-//                     SExpr::from(Id::new("if", [Bindings::CORE_SCOPE, 3])),
-//                     SExpr::from(true),
-//                     SExpr::from(true),
-//                     SExpr::from(false),
-//                 ),
-//                 SExpr::from(false),
-//             ),
-//             SExpr::from(false),
-//         );
-//         assert_eq!(result, expected);
-//         assert_eq!(
-//             bindings
-//                 .resolve(&(first(&result).unwrap().try_into().unwrap()))
-//                 .unwrap(),
-//             Symbol::new("if")
-//         );
-//     }
+        let sexpr = parse(&tokenize("(and #t #t #t #t)").unwrap()).unwrap();
+        // (and t t t t)
+        // (if t (and t t t) f)
+        // (if t (if t (and t t) f) f)
+        // (if t (if t (if t (and t) f) f) f)
+        // (if t (if t (if t t f) f) f) f)
+        let result = expand(&introduce(&sexpr), &mut bindings, &mut env);
+        let source_loc = SourceLoc {
+            line: 0,
+            idx: 0,
+            width: 0,
+        };
+        let expected = sexpr!(
+            SExpr::Id(Id::new("if", [Bindings::CORE_SCOPE, 1]), source_loc),
+            SExpr::Bool(Bool(true), source_loc),
+            (
+                SExpr::Id(Id::new("if", [Bindings::CORE_SCOPE, 2]), source_loc),
+                SExpr::Bool(Bool(true), source_loc),
+                (
+                    SExpr::Id(Id::new("if", [Bindings::CORE_SCOPE, 3]), source_loc),
+                    SExpr::Bool(Bool(true), source_loc),
+                    SExpr::Bool(Bool(true), source_loc),
+                    SExpr::Bool(Bool(false), source_loc),
+                ),
+                SExpr::Bool(Bool(false), source_loc),
+            ),
+            SExpr::Bool(Bool(false), source_loc),
+        );
+        assert_eq!(result, expected);
+        assert_eq!(
+            bindings
+                .resolve(&(first(&result).unwrap().try_into().unwrap()))
+                .unwrap(),
+            Symbol::new("if")
+        );
+    }
 
-//     #[test]
-//     fn test_expand_simple_macro_hygiene() {
-//         let mut bindings = Bindings::new();
+    #[test]
+    fn test_expand_simple_macro_hygiene() {
+        let mut bindings = Bindings::new();
 
-//         bindings.add_binding(&Id::new("x", [Bindings::CORE_SCOPE]), &Symbol::new("x"));
-//         bindings.add_binding(
-//             &Id::new("my-macro", [Bindings::CORE_SCOPE]),
-//             &Symbol::new("my-macro"),
-//         );
+        bindings.add_binding(&Id::new("x", [Bindings::CORE_SCOPE]), &Symbol::new("x"));
+        bindings.add_binding(
+            &Id::new("my-macro", [Bindings::CORE_SCOPE]),
+            &Symbol::new("my-macro"),
+        );
 
-//         let transformer = Transformer::new(&introduce(
-//             &parse(
-//                 &tokenize(
-//                     r#"
-//                     (syntax-rules ()
-//                       ((_ body) (lambda (x) body)))
-//                 "#,
-//                 )
-//                 .unwrap(),
-//             )
-//             .unwrap(),
-//         ));
+        let transformer = Transformer::new(&introduce(
+            &parse(
+                &tokenize(
+                    r#"
+                    (syntax-rules ()
+                      ((_ body) (lambda (x) body)))
+                "#,
+                )
+                .unwrap(),
+            )
+            .unwrap(),
+        ));
 
-//         let mut env = HashMap::from([(
-//             bindings
-//                 .resolve(&Id::new("my-macro", [Bindings::CORE_SCOPE]))
-//                 .unwrap(),
-//             transformer,
-//         )]);
+        let mut env = HashMap::from([(
+            bindings
+                .resolve(&Id::new("my-macro", [Bindings::CORE_SCOPE]))
+                .unwrap(),
+            transformer,
+        )]);
 
-//         let sexpr = parse(&tokenize("(my-macro x)").unwrap()).unwrap();
-//         let result = expand(&introduce(&sexpr), &mut bindings, &mut env);
-//         let expected = sexpr!(
-//             SExpr::from(Id::new("lambda", [Bindings::CORE_SCOPE, 1])),
-//             (SExpr::from(Id::new("x", [Bindings::CORE_SCOPE, 1, 2]))),
-//             SExpr::from(Id::new("x", [Bindings::CORE_SCOPE, 2])),
-//         );
-//         assert_eq!(result, expected);
-//         assert_ne!(
-//             bindings
-//                 .resolve(
-//                     &first(&nth(&result, 1).unwrap())
-//                         .unwrap()
-//                         .try_into()
-//                         .unwrap()
-//                 )
-//                 .unwrap(),
-//             bindings
-//                 .resolve(&last(&result).unwrap().try_into().unwrap())
-//                 .unwrap(),
-//         );
-//         assert_eq!(
-//             bindings
-//                 .resolve(&Id::new("x", [Bindings::CORE_SCOPE]))
-//                 .unwrap(),
-//             bindings
-//                 .resolve(&last(&result).unwrap().try_into().unwrap())
-//                 .unwrap(),
-//         )
-//     }
+        let sexpr = parse(&tokenize("(my-macro x)").unwrap()).unwrap();
+        let result = expand(&introduce(&sexpr), &mut bindings, &mut env);
+        let source_loc = SourceLoc {
+            line: 0,
+            idx: 0,
+            width: 0,
+        };
+        let expected = sexpr!(
+            SExpr::Id(Id::new("lambda", [Bindings::CORE_SCOPE, 1]), source_loc),
+            (SExpr::Id(Id::new("x", [Bindings::CORE_SCOPE, 1, 2]), source_loc)),
+            SExpr::Id(Id::new("x", [Bindings::CORE_SCOPE, 2]), source_loc),
+        );
+        assert_eq!(result, expected);
+        assert_ne!(
+            bindings
+                .resolve(
+                    &first(&nth(&result, 1).unwrap())
+                        .unwrap()
+                        .try_into()
+                        .unwrap()
+                )
+                .unwrap(),
+            bindings
+                .resolve(&last(&result).unwrap().try_into().unwrap())
+                .unwrap(),
+        );
+        assert_eq!(
+            bindings
+                .resolve(&Id::new("x", [Bindings::CORE_SCOPE]))
+                .unwrap(),
+            bindings
+                .resolve(&last(&result).unwrap().try_into().unwrap())
+                .unwrap(),
+        )
+    }
+}
 
 //     #[test]
 //     fn test_expand_or_macro_hygiene() {
@@ -494,23 +551,23 @@ fn expand_letrec_syntax(sexpr: &SExpr, bindings: &mut Bindings, env: &mut Env) -
 
 //         let expected = sexpr!(
 //             (
-//                 SExpr::from(Id::new("lambda", [Bindings::CORE_SCOPE])),
-//                 (SExpr::from(Id::new("temp", [Bindings::CORE_SCOPE, 1]))),
+//                 SExpr::Id(Id::new("lambda", [Bindings::CORE_SCOPE])),
+//                 (SExpr::Id(Id::new("temp", [Bindings::CORE_SCOPE, 1]))),
 //                 (
 //                     (
-//                         SExpr::from(Id::new("lambda", [Bindings::CORE_SCOPE, 2])),
-//                         (SExpr::from(Id::new("temp", [Bindings::CORE_SCOPE, 2, 3]))),
+//                         SExpr::Id(Id::new("lambda", [Bindings::CORE_SCOPE, 2])),
+//                         (SExpr::Id(Id::new("temp", [Bindings::CORE_SCOPE, 2, 3]))),
 //                         (
-//                             SExpr::from(Id::new("if", [Bindings::CORE_SCOPE, 2, 3])),
-//                             SExpr::from(Id::new("temp", [Bindings::CORE_SCOPE, 0, 2, 3])),
-//                             SExpr::from(Id::new("temp", [Bindings::CORE_SCOPE, 0, 2, 3])),
-//                             SExpr::from(Id::new("temp", [Bindings::CORE_SCOPE, 1, 3])),
+//                             SExpr::Id(Id::new("if", [Bindings::CORE_SCOPE, 2, 3])),
+//                             SExpr::Id(Id::new("temp", [Bindings::CORE_SCOPE, 0, 2, 3])),
+//                             SExpr::Id(Id::new("temp", [Bindings::CORE_SCOPE, 0, 2, 3])),
+//                             SExpr::Id(Id::new("temp", [Bindings::CORE_SCOPE, 1, 3])),
 //                         )
 //                     ),
-//                     SExpr::from(false)
+//                     SExpr::Bool(Bool(false), source_loc)
 //                 )
 //             ),
-//             SExpr::from(true),
+//             SExpr::Bool(Bool(true), source_loc),
 //         );
 
 //         assert_eq!(result, expected);
@@ -623,23 +680,23 @@ fn expand_letrec_syntax(sexpr: &SExpr, bindings: &mut Bindings, env: &mut Env) -
 //         let result = expand(&introduce(&let_syntax_expr), &mut bindings, &mut env);
 //         let expected = sexpr!(
 //             (
-//                 SExpr::from(Id::new("lambda", [Bindings::CORE_SCOPE, 1])),
-//                 (SExpr::from(Id::new("temp", [Bindings::CORE_SCOPE, 1, 2]))),
+//                 SExpr::Id(Id::new("lambda", [Bindings::CORE_SCOPE, 1])),
+//                 (SExpr::Id(Id::new("temp", [Bindings::CORE_SCOPE, 1, 2]))),
 //                 (
 //                     (
-//                         SExpr::from(Id::new("lambda", [Bindings::CORE_SCOPE, 1, 3])),
-//                         (SExpr::from(Id::new("temp", [Bindings::CORE_SCOPE, 1, 3, 4]))),
+//                         SExpr::Id(Id::new("lambda", [Bindings::CORE_SCOPE, 1, 3])),
+//                         (SExpr::Id(Id::new("temp", [Bindings::CORE_SCOPE, 1, 3, 4]))),
 //                         (
-//                             SExpr::from(Id::new("if", [Bindings::CORE_SCOPE, 1, 3, 4])),
-//                             SExpr::from(Id::new("temp", [Bindings::CORE_SCOPE, 1, 3, 4])),
-//                             SExpr::from(Id::new("temp", [Bindings::CORE_SCOPE, 1, 3, 4])),
-//                             SExpr::from(Id::new("temp", [Bindings::CORE_SCOPE, 1, 2, 4]))
+//                             SExpr::Id(Id::new("if", [Bindings::CORE_SCOPE, 1, 3, 4])),
+//                             SExpr::Id(Id::new("temp", [Bindings::CORE_SCOPE, 1, 3, 4])),
+//                             SExpr::Id(Id::new("temp", [Bindings::CORE_SCOPE, 1, 3, 4])),
+//                             SExpr::Id(Id::new("temp", [Bindings::CORE_SCOPE, 1, 2, 4]))
 //                         )
 //                     ),
-//                     SExpr::from(false)
+//                     SExpr::Bool(Bool(false), source_loc)
 //                 ),
 //             ),
-//             SExpr::from(true),
+//             SExpr::Bool(Bool(true), source_loc),
 //         );
 //         assert_eq!(result, expected);
 
