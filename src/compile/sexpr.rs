@@ -18,7 +18,7 @@ pub enum SExpr {
     Vector(Vector, SourceLoc),
 }
 
-#[derive(PartialEq, Clone, Eq, Hash)]
+#[derive(PartialEq, Clone, Eq, Hash, Debug)]
 pub struct Id {
     pub symbol: Symbol,
     pub scopes: Scopes,
@@ -93,16 +93,6 @@ impl Cons {
 impl Symbol {
     pub fn new(symbol: &str) -> Self {
         Symbol(symbol.to_string())
-    }
-}
-
-impl fmt::Debug for Id {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(
-            f,
-            "Id {{ symbol: {}, scopes: {:?} }}",
-            self.symbol, self.scopes
-        )
     }
 }
 
