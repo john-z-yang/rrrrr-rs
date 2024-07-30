@@ -133,74 +133,50 @@ pub struct Transformer {
 }
 
 impl SyntaxRule {
-    fn _match_pattern(
-        literals: &HashSet<Symbol>,
-        pattern: &SExpr,
-        sexpr: &SExpr,
-        bindings: &mut HashMap<Id, SExpr>,
-    ) -> Option<()> {
-        match pattern {
-            SExpr::Id(pattern, _) => {
-                if literals.contains(&pattern.symbol) {
-                    let SExpr::Id(Id { symbol, scopes: _ }, _) = sexpr else {
-                        return None;
-                    };
-                    (pattern.symbol == *symbol).then_some(())
-                } else {
-                    bindings.insert(pattern.clone(), sexpr.clone());
-                    Some(())
-                }
-            }
-            SExpr::Cons(pattern, _) => {
-                match pattern.car.as_ref() {
-                    SExpr::Id(id, _) if id.symbol.0 == "..." => {
-                        bindings.insert(id.clone(), sexpr.clone());
-                    }
-                    _ => {
-                        let SExpr::Cons(cons, _) = sexpr else {
-                            return None;
-                        };
-                        Self::_match_pattern(literals, &pattern.car, &cons.car, bindings)?;
-                        Self::_match_pattern(literals, &pattern.cdr, &cons.cdr, bindings)?;
-                    }
-                }
-                Some(())
-            }
-            _ => (pattern.is_equal(sexpr)).then_some(()),
-        }
-    }
-
     fn match_pattern(
         &self,
         literals: &HashSet<Symbol>,
         sexpr: &SExpr,
     ) -> Option<HashMap<Id, SExpr>> {
-        let mut bindings = HashMap::<Id, SExpr>::new();
-        Self::_match_pattern(literals, &self.pattern, sexpr, &mut bindings).map(|_| bindings)
-    }
-
-    fn _render_template(
-        template: &SExpr,
-        bindings: &HashMap<Id, SExpr>,
-        application_source_loc: SourceLoc,
-    ) -> SExpr {
-        match template {
-            SExpr::Id(pattern, _) => bindings
-                .get(pattern)
-                .unwrap_or(&template.update_source_loc(application_source_loc))
-                .clone(),
-            SExpr::Cons(pattern, _) => match pattern.car.as_ref() {
-                SExpr::Id(id, _) if id.symbol.0 == "..." => bindings.get(id).unwrap().clone(),
-                _ => SExpr::Cons(
-                    Cons::new(
-                        Self::_render_template(&pattern.car, bindings, application_source_loc),
-                        Self::_render_template(&pattern.cdr, bindings, application_source_loc),
-                    ),
-                    application_source_loc,
-                ),
-            },
-            _ => template.update_source_loc(application_source_loc),
+        fn _match_pattern(
+            literals: &HashSet<Symbol>,
+            pattern: &SExpr,
+            sexpr: &SExpr,
+            bindings: &mut HashMap<Id, SExpr>,
+        ) -> Option<()> {
+            match pattern {
+                SExpr::Id(pattern, _) => {
+                    if literals.contains(&pattern.symbol) {
+                        let SExpr::Id(Id { symbol, scopes: _ }, _) = sexpr else {
+                            return None;
+                        };
+                        (pattern.symbol == *symbol).then_some(())
+                    } else {
+                        bindings.insert(pattern.clone(), sexpr.clone());
+                        Some(())
+                    }
+                }
+                SExpr::Cons(pattern, _) => {
+                    match pattern.car.as_ref() {
+                        SExpr::Id(id, _) if id.symbol.0 == "..." => {
+                            bindings.insert(id.clone(), sexpr.clone());
+                        }
+                        _ => {
+                            let SExpr::Cons(cons, _) = sexpr else {
+                                return None;
+                            };
+                            _match_pattern(literals, &pattern.car, &cons.car, bindings)?;
+                            _match_pattern(literals, &pattern.cdr, &cons.cdr, bindings)?;
+                        }
+                    }
+                    Some(())
+                }
+                _ => (pattern.is_equal(sexpr)).then_some(()),
+            }
         }
+
+        let mut bindings = HashMap::<Id, SExpr>::new();
+        _match_pattern(literals, &self.pattern, sexpr, &mut bindings).map(|_| bindings)
     }
 
     fn render_template(
@@ -208,7 +184,31 @@ impl SyntaxRule {
         bindings: &HashMap<Id, SExpr>,
         application_source_loc: SourceLoc,
     ) -> SExpr {
-        Self::_render_template(&self.template, bindings, application_source_loc)
+        fn _render_template(
+            template: &SExpr,
+            bindings: &HashMap<Id, SExpr>,
+            application_source_loc: SourceLoc,
+        ) -> SExpr {
+            match template {
+                SExpr::Id(pattern, _) => bindings
+                    .get(pattern)
+                    .unwrap_or(&template.update_source_loc(application_source_loc))
+                    .clone(),
+                SExpr::Cons(pattern, _) => match pattern.car.as_ref() {
+                    SExpr::Id(id, _) if id.symbol.0 == "..." => bindings.get(id).unwrap().clone(),
+                    _ => SExpr::Cons(
+                        Cons::new(
+                            _render_template(&pattern.car, bindings, application_source_loc),
+                            _render_template(&pattern.cdr, bindings, application_source_loc),
+                        ),
+                        application_source_loc,
+                    ),
+                },
+                _ => template.update_source_loc(application_source_loc),
+            }
+        }
+
+        _render_template(&self.template, bindings, application_source_loc)
     }
 
     pub fn apply(&self, literals: &HashSet<Symbol>, application: &SExpr) -> Option<SExpr> {
@@ -252,10 +252,64 @@ impl Transformer {
 #[cfg(test)]
 mod tests {
     use crate::compile::{
-        expand::introduce, lex::tokenize, parse::parse, sexpr::Bool, source_loc::SourceLoc,
+        expand::introduce,
+        lex::tokenize,
+        parse::parse,
+        sexpr::{Bool, Num},
+        source_loc::SourceLoc,
     };
 
     use super::*;
+
+    #[test]
+    fn test_transformer_improper_list() {
+        let transformer = Transformer::new(&introduce(
+            &parse(
+                &tokenize(
+                    "
+                    (syntax-rules ()
+                        ((_ a) (1 2 . a)))",
+                )
+                .unwrap(),
+            )
+            .unwrap(),
+        ));
+
+        let src = "
+        (
+          mac 3
+        )";
+        let callsite_src_loc = SourceLoc {
+            line: 1,
+            idx: 9,
+            width: 27,
+        };
+        assert_eq!(
+            transformer
+                .transform(&introduce(&parse(&tokenize(src).unwrap()).unwrap()))
+                .unwrap(),
+            SExpr::Cons(
+                Cons::new(
+                    SExpr::Num(Num(1.0), callsite_src_loc),
+                    SExpr::Cons(
+                        Cons::new(
+                            SExpr::Num(Num(2.0), callsite_src_loc),
+                            SExpr::Num(
+                                Num(3.0),
+                                SourceLoc {
+                                    line: 2,
+                                    idx: 25,
+                                    width: 1
+                                }
+                            )
+                        ),
+                        callsite_src_loc
+                    )
+                ),
+                callsite_src_loc
+            )
+        );
+    }
 
     #[test]
     fn test_and_transformer_literal() {
