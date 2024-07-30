@@ -408,43 +408,58 @@ mod tests {
 
     #[test]
     fn test_tokenize_unterminated_single_line_string() {
-        assert!(matches!(
-            tokenize("\""),
-            Err(CompliationError {
-                source_loc: SourceLoc {
-                    line: 0,
-                    idx: 0,
-                    width: 1
-                },
-                reason: _
-            })
-        ));
+        let res = tokenize("\"");
+        assert!(
+            matches!(
+                res,
+                Err(CompliationError {
+                    source_loc: SourceLoc {
+                        line: 0,
+                        idx: 0,
+                        width: 1
+                    },
+                    reason: _
+                })
+            ),
+            "{:?}",
+            res
+        );
 
-        assert!(matches!(
-            tokenize("1   \""),
-            Err(CompliationError {
-                source_loc: SourceLoc {
-                    line: 0,
-                    idx: 4,
-                    width: 1
-                },
-                reason: _
-            })
-        ));
+        let res = tokenize("1   \"");
+        assert!(
+            matches!(
+                res,
+                Err(CompliationError {
+                    source_loc: SourceLoc {
+                        line: 0,
+                        idx: 4,
+                        width: 1
+                    },
+                    reason: _
+                })
+            ),
+            "{:?}",
+            res
+        );
     }
 
     #[test]
     fn test_tokenize_unterminated_multiline_string() {
-        assert!(matches!(
-            tokenize("\"\n123\n456\n\" \"\n123\n456\n"),
-            Err(CompliationError {
-                source_loc: SourceLoc {
-                    line: 3,
-                    idx: 12,
-                    width: 10
-                },
-                reason: _
-            })
-        ));
+        let res = tokenize("\"\n123\n456\n\" \"\n123\n456\n");
+        assert!(
+            matches!(
+                res,
+                Err(CompliationError {
+                    source_loc: SourceLoc {
+                        line: 3,
+                        idx: 12,
+                        width: 10
+                    },
+                    reason: _
+                })
+            ),
+            "{:?}",
+            res
+        );
     }
 }
