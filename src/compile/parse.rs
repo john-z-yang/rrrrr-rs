@@ -20,6 +20,7 @@ pub fn parse(tokens: &[Token]) -> Result<SExpr, CompliationError> {
                 cur: &tokens[0],
             }
         }
+
         fn parse(&mut self) -> Result<SExpr, CompliationError> {
             let res = self.parse_datum()?;
             match self.look_ahead() {
@@ -28,6 +29,7 @@ pub fn parse(tokens: &[Token]) -> Result<SExpr, CompliationError> {
                 None => unreachable!("parse is expecting token stream to end with the EoF token"),
             }
         }
+
         fn parse_datum(&mut self) -> Result<SExpr, CompliationError> {
             match self.look_ahead() {
                 Some(
@@ -49,6 +51,7 @@ pub fn parse(tokens: &[Token]) -> Result<SExpr, CompliationError> {
                 _ => unreachable!("parse_datum is expecting at least 1 token to look ahead"),
             }
         }
+
         fn parse_atom(&mut self) -> SExpr {
             assert!(
                 matches!(
@@ -73,12 +76,14 @@ pub fn parse(tokens: &[Token]) -> Result<SExpr, CompliationError> {
                 _ => unreachable!("parse_atom is only expecting tokens for atomic values"),
             }
         }
+
         fn parse_compound(&mut self) -> Result<SExpr, CompliationError> {
             match self.look_ahead() {
                 Some(Token::HashLParen(_)) => self.parse_vector(),
                 _ => self.parse_list(),
             }
         }
+
         fn parse_list(&mut self) -> Result<SExpr, CompliationError> {
             if matches!(
                 self.look_ahead(),
@@ -126,6 +131,7 @@ pub fn parse(tokens: &[Token]) -> Result<SExpr, CompliationError> {
                 }
             }
         }
+
         fn parse_dot_notation(&mut self) -> Result<SExpr, CompliationError> {
             assert!(
                 matches!(self.look_ahead(), Some(Token::Dot(_))),
@@ -141,6 +147,7 @@ pub fn parse(tokens: &[Token]) -> Result<SExpr, CompliationError> {
                 }
             }
         }
+
         fn parse_abbreviation(&mut self) -> Result<SExpr, CompliationError> {
             let elements = [self.parse_prefix(), self.parse_datum()?];
             Ok(Self::make_list(
@@ -149,6 +156,7 @@ pub fn parse(tokens: &[Token]) -> Result<SExpr, CompliationError> {
                 elements[1].get_source_loc(),
             ))
         }
+
         fn parse_prefix(&mut self) -> SExpr {
             assert!(
                 matches!(
@@ -175,6 +183,7 @@ pub fn parse(tokens: &[Token]) -> Result<SExpr, CompliationError> {
                 ),
             }
         }
+
         fn parse_vector(&mut self) -> Result<SExpr, CompliationError> {
             assert!(
                 matches!(self.look_ahead(), Some(Token::HashLParen(_))),
@@ -197,14 +206,16 @@ pub fn parse(tokens: &[Token]) -> Result<SExpr, CompliationError> {
                 None => unreachable!("parse_datum is expecting at least 1 token to look ahead"),
             }
         }
-        pub fn make_list(elements: &[SExpr], start: SourceLoc, end: SourceLoc) -> SExpr {
+
+        fn make_list(elements: &[SExpr], start: SourceLoc, end: SourceLoc) -> SExpr {
             let mut res = SExpr::Nil(end);
             for element in elements.iter().rev() {
                 res = SExpr::cons(element.clone(), res);
             }
             res.update_source_loc(start.combine(res.get_source_loc()))
         }
-        pub fn make_improper_list(slice: &[SExpr], start: SourceLoc, end: SourceLoc) -> SExpr {
+
+        fn make_improper_list(slice: &[SExpr], start: SourceLoc, end: SourceLoc) -> SExpr {
             assert!(
                 slice.len() >= 2,
                 "improper list has to have more than 2 element"
@@ -219,14 +230,17 @@ pub fn parse(tokens: &[Token]) -> Result<SExpr, CompliationError> {
             }
             res.update_source_loc(start.combine(res.get_source_loc()))
         }
+
         fn look_ahead(&mut self) -> Option<Token> {
             self.it.peek().copied().cloned()
         }
+
         fn consume(&mut self) -> &Token {
             let token = self.it.next().unwrap();
             self.cur = token;
             token
         }
+
         fn emit_err(&self, reason: &str, token: Token) -> CompliationError {
             CompliationError {
                 source_loc: token.get_source_loc(),
@@ -234,6 +248,7 @@ pub fn parse(tokens: &[Token]) -> Result<SExpr, CompliationError> {
             }
         }
     }
+
     Parser::new(tokens).parse()
 }
 
