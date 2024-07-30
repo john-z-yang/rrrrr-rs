@@ -1,5 +1,3 @@
-#![allow(dead_code)]
-
 extern crate rustyline;
 
 use std::collections::HashMap;
