@@ -6,7 +6,7 @@ use super::{
 };
 
 #[derive(Clone, Debug, PartialEq)]
-pub enum Token {
+pub(crate) enum Token {
     Id(Symbol, SourceLoc),
     Bool(Bool, SourceLoc),
     Num(Num, SourceLoc),
@@ -25,7 +25,7 @@ pub enum Token {
 }
 
 impl Token {
-    pub fn get_source_loc(&self) -> SourceLoc {
+    pub(crate) fn get_source_loc(&self) -> SourceLoc {
         *match self {
             Token::Id(_, source_loc) => source_loc,
             Token::Bool(_, source_loc) => source_loc,

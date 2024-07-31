@@ -127,7 +127,7 @@ struct SyntaxRule {
     template: SExpr,
 }
 
-pub struct Transformer {
+pub(crate) struct Transformer {
     literals: HashSet<Symbol>,
     syntax_rules: Vec<SyntaxRule>,
 }
@@ -211,14 +211,14 @@ impl SyntaxRule {
         _render_template(&self.template, bindings, application_source_loc)
     }
 
-    pub fn apply(&self, literals: &HashSet<Symbol>, application: &SExpr) -> Option<SExpr> {
+    pub(crate) fn apply(&self, literals: &HashSet<Symbol>, application: &SExpr) -> Option<SExpr> {
         let bindings = self.match_pattern(literals, application)?;
         Some(self.render_template(&bindings, application.get_source_loc()))
     }
 }
 
 impl Transformer {
-    pub fn new(spec: &SExpr) -> Self {
+    pub(crate) fn new(spec: &SExpr) -> Self {
         match_sexpr! {(#"syntax-rules", (literals_list @ ..), rules @ ..) = spec =>
             let mut literals = HashSet::<Symbol>::new();
             for_each(|literal| {
@@ -241,7 +241,7 @@ impl Transformer {
         unreachable!("Unrecognized syntax for syntax transformer")
     }
 
-    pub fn transform(&self, application: &SExpr) -> Option<SExpr> {
+    pub(crate) fn transform(&self, application: &SExpr) -> Option<SExpr> {
         self.syntax_rules
             .iter()
             .filter_map(|syntax_rule| syntax_rule.apply(&self.literals, application))

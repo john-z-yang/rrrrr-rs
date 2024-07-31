@@ -7,7 +7,7 @@ use super::{
 };
 
 #[derive(Clone, Debug)]
-pub enum SExpr {
+pub(crate) enum SExpr {
     Id(Id, SourceLoc),
     Cons(Cons, SourceLoc),
     Nil(SourceLoc),
@@ -19,37 +19,37 @@ pub enum SExpr {
 }
 
 #[derive(PartialEq, Clone, Eq, Hash, Debug)]
-pub struct Id {
-    pub symbol: Symbol,
-    pub scopes: Scopes,
+pub(crate) struct Id {
+    pub(crate) symbol: Symbol,
+    pub(crate) scopes: Scopes,
 }
 
 #[derive(PartialEq, Clone, Debug)]
-pub struct Cons {
-    pub car: Box<SExpr>,
-    pub cdr: Box<SExpr>,
+pub(crate) struct Cons {
+    pub(crate) car: Box<SExpr>,
+    pub(crate) cdr: Box<SExpr>,
 }
 
 #[derive(Debug, PartialEq, Eq, Clone, Hash)]
-pub struct Symbol(pub String);
+pub(crate) struct Symbol(pub(crate) String);
 
 #[derive(Debug, PartialEq, Clone)]
-pub struct Bool(pub bool);
+pub(crate) struct Bool(pub(crate) bool);
 
 #[derive(Debug, PartialEq, Clone)]
-pub struct Num(pub f32);
+pub(crate) struct Num(pub(crate) f32);
 
 #[derive(Debug, PartialEq, Clone)]
-pub struct Char(pub char);
+pub(crate) struct Char(pub(crate) char);
 
 #[derive(Debug, PartialEq, Clone)]
-pub struct Str(pub String);
+pub(crate) struct Str(pub(crate) String);
 
 #[derive(Debug, PartialEq, Clone)]
-pub struct Vector(pub Vec<SExpr>);
+pub(crate) struct Vector(pub(crate) Vec<SExpr>);
 
 impl Id {
-    pub fn new<const N: usize>(symbol: &str, scopes: [ScopeId; N]) -> Self {
+    pub(crate) fn new<const N: usize>(symbol: &str, scopes: [ScopeId; N]) -> Self {
         Id {
             symbol: Symbol::new(symbol),
             scopes: BTreeSet::from(scopes),
@@ -58,7 +58,7 @@ impl Id {
 }
 
 impl Cons {
-    pub fn new<T, U>(car: T, cdr: U) -> Self
+    pub(crate) fn new<T, U>(car: T, cdr: U) -> Self
     where
         T: Into<SExpr>,
         U: Into<SExpr>,
@@ -87,7 +87,7 @@ impl Cons {
 }
 
 impl Symbol {
-    pub fn new(symbol: &str) -> Self {
+    pub(crate) fn new(symbol: &str) -> Self {
         Symbol(symbol.to_string())
     }
 }
@@ -265,7 +265,7 @@ impl PartialEq for SExpr {
 }
 
 impl SExpr {
-    pub fn get_source_loc(&self) -> SourceLoc {
+    pub(crate) fn get_source_loc(&self) -> SourceLoc {
         *match self {
             SExpr::Id(_, source_loc) => source_loc,
             SExpr::Cons(_, source_loc) => source_loc,
@@ -278,7 +278,7 @@ impl SExpr {
         }
     }
 
-    pub fn update_source_loc(&self, source_loc: SourceLoc) -> Self {
+    pub(crate) fn update_source_loc(&self, source_loc: SourceLoc) -> Self {
         match self {
             SExpr::Id(id, _) => SExpr::Id(id.clone(), source_loc),
             SExpr::Cons(cons, _) => SExpr::Cons(cons.clone(), source_loc),
@@ -291,7 +291,7 @@ impl SExpr {
         }
     }
 
-    pub fn cons(car: SExpr, cdr: SExpr) -> Self {
+    pub(crate) fn cons(car: SExpr, cdr: SExpr) -> Self {
         let start = car.get_source_loc();
         let end = cdr.get_source_loc();
         Self::Cons(Cons::new(car, cdr), start.combine(end))
@@ -323,7 +323,7 @@ impl SExpr {
         }
     }
 
-    pub fn add_scope(&self, scope: ScopeId) -> Self {
+    pub(crate) fn add_scope(&self, scope: ScopeId) -> Self {
         let op = |scopes: &Scopes| {
             let mut scopes = scopes.clone();
             scopes.insert(scope);
@@ -332,7 +332,7 @@ impl SExpr {
         self.adjust_scope(&op)
     }
 
-    pub fn flip_scope(&self, scope: ScopeId) -> Self {
+    pub(crate) fn flip_scope(&self, scope: ScopeId) -> Self {
         let op = |scopes: &Scopes| {
             let mut scopes = scopes.clone();
             if scopes.contains(&scope) {
@@ -346,7 +346,7 @@ impl SExpr {
     }
 
     #[cfg(test)]
-    pub fn is_idential(&self, other: &Self) -> bool {
+    pub(crate) fn is_idential(&self, other: &Self) -> bool {
         if self.get_source_loc() != other.get_source_loc() {
             return false;
         }

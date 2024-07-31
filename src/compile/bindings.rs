@@ -1,19 +1,19 @@
 use super::sexpr::{Id, Symbol};
 use std::collections::{BTreeSet, HashMap};
 
-pub type ScopeId = u64;
-pub type Scopes = BTreeSet<ScopeId>;
+pub(crate) type ScopeId = u64;
+pub(crate) type Scopes = BTreeSet<ScopeId>;
 
-pub struct Bindings {
+pub(crate) struct Bindings {
     symbols: HashMap<Symbol, Vec<(Scopes, Symbol)>>,
     scope_counter: ScopeId,
     gen_sym_counter: u64,
 }
 
 impl Bindings {
-    pub const CORE_SCOPE: ScopeId = 0;
+    pub(crate) const CORE_SCOPE: ScopeId = 0;
 
-    pub fn new() -> Self {
+    pub(crate) fn new() -> Self {
         let mut bindings = Bindings {
             symbols: HashMap::new(),
             scope_counter: Self::CORE_SCOPE,
@@ -34,22 +34,22 @@ impl Bindings {
         bindings
     }
 
-    pub fn new_scope_id(&mut self) -> ScopeId {
+    pub(crate) fn new_scope_id(&mut self) -> ScopeId {
         self.scope_counter += 1;
         self.scope_counter
     }
 
-    pub fn gen_sym(&mut self) -> Symbol {
+    pub(crate) fn gen_sym(&mut self) -> Symbol {
         self.gen_sym_counter += 1;
         Symbol(format!("gensym:{0}", self.gen_sym_counter))
     }
 
-    pub fn add_binding(&mut self, id: &Id, symbol: &Symbol) {
+    pub(crate) fn add_binding(&mut self, id: &Id, symbol: &Symbol) {
         let binding = self.symbols.entry(id.symbol.clone()).or_default();
         binding.push((id.scopes.clone(), symbol.clone()));
     }
 
-    pub fn resolve(&self, id: &Id) -> Option<Symbol> {
+    pub(crate) fn resolve(&self, id: &Id) -> Option<Symbol> {
         self.symbols
             .get_key_value(&id.symbol)
             .and_then(|(_, candidates)| {

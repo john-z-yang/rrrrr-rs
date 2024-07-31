@@ -7,7 +7,7 @@ use crate::compile::{
 
 use super::{compliation_error::CompliationError, token::Token};
 
-pub fn tokenize(source: &str) -> Result<Vec<Token>, CompliationError> {
+pub(crate) fn tokenize(source: &str) -> Result<Vec<Token>, CompliationError> {
     struct Lexer<'source> {
         it: Peekable<Chars<'source>>,
         cur: String,

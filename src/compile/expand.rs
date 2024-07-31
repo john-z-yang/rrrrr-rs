@@ -10,11 +10,11 @@ use crate::{compile::util::for_each, match_sexpr, template_sexpr};
 
 type Env = HashMap<Symbol, Transformer>;
 
-pub fn introduce(sexpr: &SExpr) -> SExpr {
+pub(crate) fn introduce(sexpr: &SExpr) -> SExpr {
     sexpr.add_scope(Bindings::CORE_SCOPE)
 }
 
-pub fn expand(sexpr: &SExpr, bindings: &mut Bindings, env: &mut Env) -> SExpr {
+pub(crate) fn expand(sexpr: &SExpr, bindings: &mut Bindings, env: &mut Env) -> SExpr {
     if let SExpr::Nil(_) = sexpr {
         panic!("Bad syntax");
     };

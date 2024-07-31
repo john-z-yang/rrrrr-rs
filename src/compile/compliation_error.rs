@@ -15,7 +15,7 @@ impl fmt::Display for CompliationError {
 }
 
 impl CompliationError {
-    pub fn pprint_with_source(&self, source: &str) {
+    pub(crate) fn pprint_with_source(&self, source: &str) {
         println!("Error: {}", self.reason);
         println!(" --> {}:", self.source_loc);
         println!("  |");

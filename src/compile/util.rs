@@ -190,14 +190,14 @@ macro_rules! template_sexpr {
     }};
 }
 
-pub fn first(sexpr: &SExpr) -> Option<SExpr> {
+pub(crate) fn first(sexpr: &SExpr) -> Option<SExpr> {
     match sexpr {
         SExpr::Cons(cons, _) => Some((*cons.car).clone()),
         _ => None,
     }
 }
 
-pub fn for_each<F>(mut op: F, sexpr: &SExpr)
+pub(crate) fn for_each<F>(mut op: F, sexpr: &SExpr)
 where
     F: FnMut(&SExpr),
 {
@@ -207,7 +207,7 @@ where
     }
 }
 
-pub fn map<F>(mut op: F, sexpr: &SExpr) -> SExpr
+pub(crate) fn map<F>(mut op: F, sexpr: &SExpr) -> SExpr
 where
     F: FnMut(&SExpr) -> SExpr,
 {

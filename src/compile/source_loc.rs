@@ -1,14 +1,14 @@
 use std::fmt;
 
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Debug)]
-pub struct SourceLoc {
-    pub line: usize,
-    pub idx: usize,
-    pub width: usize,
+pub(crate) struct SourceLoc {
+    pub(crate) line: usize,
+    pub(crate) idx: usize,
+    pub(crate) width: usize,
 }
 
 impl SourceLoc {
-    pub fn combine(self, other: Self) -> Self {
+    pub(crate) fn combine(self, other: Self) -> Self {
         let (before, after) = if other < self {
             (other, self)
         } else {

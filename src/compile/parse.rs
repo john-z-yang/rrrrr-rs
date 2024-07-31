@@ -6,7 +6,7 @@ use crate::compile::{
     source_loc::SourceLoc,
 };
 
-pub fn parse(tokens: &[Token]) -> Result<SExpr, CompliationError> {
+pub(crate) fn parse(tokens: &[Token]) -> Result<SExpr, CompliationError> {
     struct Parser<'tokens> {
         it: Peekable<Iter<'tokens, Token>>,
         cur: &'tokens Token,
