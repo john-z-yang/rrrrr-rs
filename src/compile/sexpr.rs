@@ -347,7 +347,14 @@ impl SExpr {
 
     #[cfg(test)]
     pub fn is_idential(&self, other: &Self) -> bool {
-        self == other && self.get_source_loc() == other.get_source_loc()
+        if self.get_source_loc() != other.get_source_loc() {
+            return false;
+        }
+        if let (Self::Cons(self_cons, _), Self::Cons(other_cons, _)) = (self, other) {
+            self_cons.car.is_idential(&other_cons.car) && self_cons.cdr.is_idential(&other_cons.cdr)
+        } else {
+            self == other
+        }
     }
 }
 

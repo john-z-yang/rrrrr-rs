@@ -41,7 +41,7 @@ macro_rules! match_sexpr {
         }
     };
 
-    // Handles nested lists i.e. `(('a, 'b, 'c))``
+    // Handles nested lists i.e. (('a, 'b, 'c))
     (
         (($($inner:tt)*) $(, $($rest:tt)*)?) = $targ:expr => $($handler:tt)*
     ) => {
@@ -120,6 +120,76 @@ macro_rules! match_sexpr {
     };
 }
 
+#[macro_export]
+macro_rules! template_sexpr {
+    // Empty list aka Nil i.e. ()
+    (@
+        () => $targ:ident
+    ) => {
+        if matches!($targ, SExpr::Nil(_)) {
+            Some($targ.clone())
+        } else {
+            None
+        }
+    };
+
+    // Nested lists i.e. ((a, b, c))
+    (@
+        (($($inner:tt)*) $(, $($rest:tt)*)?) => $targ:ident
+    ) => {
+        if let $crate::compile::sexpr::SExpr::Cons(ref cons, ref source_loc) = $targ {
+            template_sexpr!(($($inner)*) => cons.car.as_ref()).and_then(|car| {
+                Some(
+                    $crate::compile::sexpr::SExpr::Cons(
+                        $crate::compile::sexpr::Cons::new(
+                            car,
+                            template_sexpr!(($($($rest)*)?) => cons.cdr.as_ref())?),
+                        *source_loc
+                ))
+            })
+        } else {
+            println!("nested");
+            None
+        }
+    };
+
+    // Splat i.e. (.. 3)
+    (@
+        (..$rest:expr) => $targ:ident
+    ) => {
+        Some($rest.clone())
+    };
+
+    // First element in a list i.e. (a b c)
+    (@
+        ($first:expr $(, $($rest:tt)*)?) => $targ:expr
+    ) => {
+        if let $crate::compile::sexpr::SExpr::Cons(ref cons, ref source_loc) = $targ {
+            template_sexpr!(($($($rest)*)?) => cons.cdr.as_ref()).and_then(
+                |rest| {
+                    Some($crate::compile::sexpr::SExpr::Cons(
+                        $crate::compile::sexpr::Cons::new(
+                            $first,
+                            rest
+                        ),
+                        *source_loc,
+                    ))
+                }
+            )
+        } else {
+            println!("elem");
+            None
+        }
+    };
+
+
+    (($($template:tt)*) => $targ:expr) => {{
+        #[allow(unused_variables)]
+        let res = $targ;
+        template_sexpr!(@ ($($template)*) => res)
+    }};
+}
+
 pub fn first(sexpr: &SExpr) -> Option<SExpr> {
     match sexpr {
         SExpr::Cons(cons, _) => Some((*cons.car).clone()),
@@ -147,5 +217,79 @@ where
             SExpr::Cons(Cons::new(op(&cons.car), map(op, &cons.cdr)), *source_loc)
         }
         _ => op(sexpr),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::compile::{lex::tokenize, parse::parse, sexpr::Num, source_loc::SourceLoc};
+
+    use super::*;
+
+    #[test]
+    fn test_template_sexpr_nil() {
+        let original = parse(&tokenize("()").unwrap()).unwrap();
+        let templated = template_sexpr!(() => original).unwrap();
+        assert!(templated.is_idential(&parse(&tokenize("()").unwrap()).unwrap()));
+    }
+
+    #[test]
+    fn test_template_sexpr_single() {
+        let original = parse(&tokenize("(0)").unwrap()).unwrap();
+        let templated = template_sexpr!(
+            (
+                SExpr::Num(Num(1.0), SourceLoc { line: 0, idx: 1, width: 1 })
+            ) => original)
+        .unwrap();
+        assert!(templated.is_idential(&parse(&tokenize("(1)").unwrap()).unwrap()));
+    }
+
+    #[test]
+    fn test_template_sexpr_double() {
+        let original = parse(&tokenize("(0 1)").unwrap()).unwrap();
+        let templated = template_sexpr!(
+            (
+                SExpr::Num(Num(1.0), SourceLoc { line: 0, idx: 1, width: 1 }),
+                SExpr::Num(Num(2.0), SourceLoc { line: 0, idx: 3, width: 1 })
+            ) => original)
+        .unwrap();
+        assert!(templated.is_idential(&parse(&tokenize("(1 2)").unwrap()).unwrap()));
+    }
+
+    #[test]
+    fn test_template_sexpr_nested_list_first() {
+        let original = parse(&tokenize("((0) 1)").unwrap()).unwrap();
+        let templated = template_sexpr!(
+            (
+                (SExpr::Num(Num(1.0), SourceLoc { line: 0, idx: 2, width: 1 })),
+                SExpr::Num(Num(2.0), SourceLoc { line: 0, idx: 5, width: 1 })
+            ) => original)
+        .unwrap();
+        assert!(templated.is_idential(&parse(&tokenize("((1) 2)").unwrap()).unwrap()));
+    }
+
+    #[test]
+    fn test_template_sexpr_nested_list_middle() {
+        let original = parse(&tokenize("(0 (1) 2)").unwrap()).unwrap();
+        let templated = template_sexpr!(
+            (
+                SExpr::Num(Num(1.0), SourceLoc { line: 0, idx: 1, width: 1 }),
+                (SExpr::Num(Num(2.0), SourceLoc { line: 0, idx: 4, width: 1 })),
+                SExpr::Num(Num(3.0), SourceLoc { line: 0, idx: 7, width: 1 })
+            ) => original)
+        .unwrap();
+        assert!(templated.is_idential(&parse(&tokenize("(1 (2) 3)").unwrap()).unwrap()));
+    }
+
+    #[test]
+    fn test_template_sexpr_nested_list_last() {
+        let original = parse(&tokenize("(0 (1))").unwrap()).unwrap();
+        let templated = template_sexpr!(
+            (
+                SExpr::Num(Num(1.0), SourceLoc { line: 0, idx: 1, width: 1 }),
+                (SExpr::Num(Num(2.0), SourceLoc { line: 0, idx: 4, width: 1 }))
+            ) => original)
+        .unwrap();
+        assert!(templated.is_idential(&parse(&tokenize("(1 (2))").unwrap()).unwrap()));
     }
 }

@@ -262,7 +262,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_transformer_improper_list() {
+    fn test_transformer_improper_list_in_template() {
         let transformer = Transformer::new(&introduce(
             &parse(
                 &tokenize(
@@ -284,33 +284,41 @@ mod tests {
             idx: 9,
             width: 27,
         };
-        assert!(transformer
+
+        let result = transformer
             .transform(&introduce(&parse(&tokenize(src).unwrap()).unwrap()))
-            .unwrap()
-            .is_idential(&SExpr::Cons(
-                Cons::new(
-                    SExpr::Num(Num(1.0), callsite_src_loc),
-                    SExpr::Cons(
-                        Cons::new(
-                            SExpr::Num(Num(2.0), callsite_src_loc),
-                            SExpr::Num(
-                                Num(3.0),
-                                SourceLoc {
-                                    line: 2,
-                                    idx: 25,
-                                    width: 1
-                                }
-                            )
+            .unwrap();
+        let expected = &SExpr::Cons(
+            Cons::new(
+                SExpr::Num(Num(1.0), callsite_src_loc),
+                SExpr::Cons(
+                    Cons::new(
+                        SExpr::Num(Num(2.0), callsite_src_loc),
+                        SExpr::Num(
+                            Num(3.0),
+                            SourceLoc {
+                                line: 2,
+                                idx: 25,
+                                width: 1,
+                            },
                         ),
-                        callsite_src_loc
-                    )
+                    ),
+                    callsite_src_loc,
                 ),
-                callsite_src_loc
-            )));
+            ),
+            callsite_src_loc,
+        );
+
+        assert!(
+            result.is_idential(expected),
+            "result: {:?}\nexpected: {:?}",
+            result,
+            expected
+        );
     }
 
     #[test]
-    fn test_and_transformer_literal() {
+    fn test_and_transformer_literal_in_template() {
         let transformer = Transformer::new(&introduce(
             &parse(
                 &tokenize(
@@ -324,17 +332,61 @@ mod tests {
             .unwrap(),
         ));
 
-        assert!(transformer
+        let result = transformer
             .transform(&introduce(&parse(&tokenize("(and)").unwrap()).unwrap()))
-            .unwrap()
-            .is_idential(&SExpr::Bool(
-                Bool(false),
-                SourceLoc {
-                    line: 0,
-                    idx: 0,
-                    width: 5
-                }
-            )));
+            .unwrap();
+        let expected = &SExpr::Bool(
+            Bool(false),
+            SourceLoc {
+                line: 0,
+                idx: 0,
+                width: 5,
+            },
+        );
+
+        assert!(
+            result.is_idential(expected),
+            "result: {:?}\nexpected: {:?}",
+            result,
+            expected
+        );
+    }
+
+    #[test]
+    fn test_and_transformer_literal_in_pattern() {
+        let transformer = Transformer::new(&introduce(
+            &parse(
+                &tokenize(
+                    "
+                    (syntax-rules ()
+                      ((_ 1 x) x))
+                ",
+                )
+                .unwrap(),
+            )
+            .unwrap(),
+        ));
+
+        let result = transformer
+            .transform(&introduce(
+                &parse(&tokenize("(macro 1 a)").unwrap()).unwrap(),
+            ))
+            .unwrap();
+        let expected = SExpr::Id(
+            Id::new("a", [0]),
+            SourceLoc {
+                line: 0,
+                idx: 9,
+                width: 1,
+            },
+        );
+
+        assert!(
+            result.is_idential(&expected),
+            "result: {:?}\nexpected: {:?}",
+            result,
+            expected
+        );
     }
 
     #[test]
@@ -352,17 +404,24 @@ mod tests {
             .unwrap(),
         ));
 
-        assert!(transformer
+        let result = transformer
             .transform(&introduce(&parse(&tokenize("(and x)").unwrap()).unwrap()))
-            .unwrap()
-            .is_idential(&introduce(&SExpr::Id(
-                Id::new("x", []),
-                SourceLoc {
-                    line: 0,
-                    idx: 5,
-                    width: 1
-                }
-            ))));
+            .unwrap();
+        let expected = introduce(&SExpr::Id(
+            Id::new("x", []),
+            SourceLoc {
+                line: 0,
+                idx: 5,
+                width: 1,
+            },
+        ));
+
+        assert!(
+            result.is_idential(&expected),
+            "result: {:?}\nexpected: {:?}",
+            result,
+            expected
+        );
     }
 
     #[test]

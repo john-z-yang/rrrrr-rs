@@ -6,7 +6,7 @@ use super::{
     transformer::Transformer,
     util::{first, map},
 };
-use crate::{compile::util::for_each, match_sexpr, sexpr};
+use crate::{compile::util::for_each, match_sexpr, template_sexpr};
 
 type Env = HashMap<Symbol, Transformer>;
 
@@ -79,7 +79,7 @@ fn expand_lambda(sexpr: &SExpr, bindings: &mut Bindings, env: &mut Env) -> SExpr
         }, &args);
 
         let body = map(|sexpr| expand(&sexpr.add_scope(scope_id), bindings, env), body);
-        return sexpr!(lambda.clone(), args, ..body);
+        return template_sexpr!((lambda.clone(), args, ..body) => sexpr).unwrap();
     };
     unreachable!("Invalid use of lambda form: {}", sexpr);
 }
@@ -165,13 +165,13 @@ mod tests {
         let mut bindings = Bindings::new();
         let mut env = HashMap::<Symbol, Transformer>::new();
         let lambda_expr = parse(&tokenize("(lambda (x y) (cons x y))").unwrap()).unwrap();
-        let left = expand(&introduce(&lambda_expr), &mut bindings, &mut env);
+        let result = expand(&introduce(&lambda_expr), &mut bindings, &mut env);
         let source_loc = SourceLoc {
             line: 0,
             idx: 0,
             width: 0,
         };
-        let right = sexpr!(
+        let expected = sexpr!(
             SExpr::Id(Id::new("lambda", [Bindings::CORE_SCOPE]), source_loc),
             (
                 SExpr::Id(Id::new("x", [Bindings::CORE_SCOPE, 1]), source_loc),
@@ -183,7 +183,40 @@ mod tests {
                 SExpr::Id(Id::new("y", [Bindings::CORE_SCOPE, 1]), source_loc),
             ),
         );
-        assert_eq!(left, right);
+        assert_eq!(result, expected);
+    }
+
+    #[test]
+    fn test_expand_maintains_source_loc() {
+        let mut bindings = Bindings::new();
+        let mut env = HashMap::<Symbol, Transformer>::new();
+        let src = "
+        (lambda
+          (x y)
+          (cons
+            x
+            y
+          )
+        )";
+        let lambda_expr = parse(&tokenize(src).unwrap()).unwrap();
+        let result = expand(&introduce(&lambda_expr), &mut bindings, &mut env);
+        let expected = template_sexpr!(
+            (
+                SExpr::Id(Id::new("lambda", [Bindings::CORE_SCOPE]), SourceLoc { line: 1, idx: 10, width: 6 }),
+                (
+                    SExpr::Id(Id::new("x", [Bindings::CORE_SCOPE, 1]), SourceLoc { line: 2, idx: 28, width: 1 }),
+                    SExpr::Id(Id::new("y", [Bindings::CORE_SCOPE, 1]), SourceLoc { line: 2, idx: 30, width: 1 }),
+                ),
+                (
+                    SExpr::Id(Id::new("cons", [Bindings::CORE_SCOPE, 1]), SourceLoc { line: 3, idx: 44, width: 4 }),
+                    SExpr::Id(Id::new("x", [Bindings::CORE_SCOPE, 1]), SourceLoc { line: 4, idx: 61, width: 1 }),
+                    SExpr::Id(Id::new("y", [Bindings::CORE_SCOPE, 1]), SourceLoc { line: 5, idx: 75, width: 1 }),
+                )
+            ) => parse(&tokenize(src).unwrap()).unwrap()
+        )
+        .unwrap();
+
+        assert!(result.is_idential(&expected));
     }
 
     #[test]
@@ -512,252 +545,267 @@ mod tests {
                 .unwrap(),
         )
     }
+
+    #[test]
+    fn test_expand_or_macro_hygiene() {
+        let mut bindings = Bindings::new();
+
+        bindings.add_binding(
+            &Id::new("my-or", [Bindings::CORE_SCOPE]),
+            &Symbol::new("my-or"),
+        );
+
+        let transformer = Transformer::new(&introduce(
+            &parse(
+                &tokenize(
+                    r#"
+                    (syntax-rules ()
+                      ((_) #f)
+                      ((_ e) e)
+                      ((_ e1 e2 ...)
+                       ((lambda (temp) (if temp temp (my-or e2 ...))) e1)))
+                "#,
+                )
+                .unwrap(),
+            )
+            .unwrap(),
+        ));
+
+        let mut env = HashMap::from([(
+            bindings
+                .resolve(&Id::new("my-or", [Bindings::CORE_SCOPE]))
+                .unwrap(),
+            transformer,
+        )]);
+
+        let sexpr = parse(&tokenize("((lambda (temp) (my-or #f temp)) #t)").unwrap()).unwrap();
+        let result = expand(&introduce(&sexpr), &mut bindings, &mut env);
+        let source_loc = SourceLoc {
+            line: 0,
+            idx: 0,
+            width: 0,
+        };
+
+        let expected = sexpr!(
+            (
+                SExpr::Id(Id::new("lambda", [Bindings::CORE_SCOPE]), source_loc),
+                (SExpr::Id(Id::new("temp", [Bindings::CORE_SCOPE, 1]), source_loc)),
+                (
+                    (
+                        SExpr::Id(Id::new("lambda", [Bindings::CORE_SCOPE, 2]), source_loc),
+                        (SExpr::Id(Id::new("temp", [Bindings::CORE_SCOPE, 2, 3]), source_loc)),
+                        (
+                            SExpr::Id(Id::new("if", [Bindings::CORE_SCOPE, 2, 3]), source_loc),
+                            SExpr::Id(Id::new("temp", [Bindings::CORE_SCOPE, 0, 2, 3]), source_loc),
+                            SExpr::Id(Id::new("temp", [Bindings::CORE_SCOPE, 0, 2, 3]), source_loc),
+                            SExpr::Id(Id::new("temp", [Bindings::CORE_SCOPE, 1, 3]), source_loc),
+                        )
+                    ),
+                    SExpr::Bool(Bool(false), source_loc)
+                )
+            ),
+            SExpr::Bool(Bool(true), source_loc),
+        );
+
+        assert_eq!(result, expected);
+
+        let outer_temp_id = first(&nth(&first(&result).unwrap(), 1).unwrap()).unwrap();
+        let inner_temp_id = first(
+            &nth(
+                &first(&nth(&first(&result).unwrap(), 2).unwrap()).unwrap(),
+                1,
+            )
+            .unwrap(),
+        )
+        .unwrap();
+        let if_expr = nth(
+            &first(&nth(&first(&result).unwrap(), 2).unwrap()).unwrap(),
+            2,
+        )
+        .unwrap();
+
+        assert_ne!(
+            bindings
+                .resolve(&outer_temp_id.clone().try_into().unwrap())
+                .unwrap(),
+            bindings
+                .resolve(&inner_temp_id.clone().try_into().unwrap())
+                .unwrap(),
+        );
+
+        assert_eq!(
+            bindings
+                .resolve(&(nth(&if_expr, 1).unwrap()).try_into().unwrap())
+                .unwrap(),
+            bindings
+                .resolve(&(nth(&if_expr, 2).unwrap()).try_into().unwrap())
+                .unwrap(),
+        );
+
+        assert_ne!(
+            bindings
+                .resolve(&(nth(&if_expr, 1).unwrap()).try_into().unwrap())
+                .unwrap(),
+            bindings
+                .resolve(&(nth(&if_expr, 3).unwrap()).try_into().unwrap())
+                .unwrap(),
+        );
+
+        assert_eq!(
+            bindings
+                .resolve(&inner_temp_id.clone().try_into().unwrap())
+                .unwrap(),
+            bindings
+                .resolve(&(nth(&if_expr, 2).unwrap()).try_into().unwrap())
+                .unwrap(),
+        );
+
+        assert_eq!(
+            bindings
+                .resolve(&outer_temp_id.clone().try_into().unwrap())
+                .unwrap(),
+            bindings
+                .resolve(&(nth(&if_expr, 3).unwrap()).try_into().unwrap())
+                .unwrap(),
+        );
+    }
+
+    #[test]
+    fn test_expand_let_syntax_to_num() {
+        let mut bindings = Bindings::new();
+        let mut env = HashMap::<Symbol, Transformer>::new();
+        let let_syntax_expr = &parse(
+            &tokenize(
+                r#"
+                (letrec-syntax
+                    ((one (syntax-rules ()
+                            ((_) 1))))
+                  (one))
+                "#,
+            )
+            .unwrap(),
+        )
+        .unwrap();
+        let result = expand(&introduce(let_syntax_expr), &mut bindings, &mut env);
+
+        let source_loc = SourceLoc {
+            line: 0,
+            idx: 0,
+            width: 0,
+        };
+        let expected = SExpr::Num(Num(1.0), source_loc);
+        assert_eq!(result, expected);
+    }
+
+    #[test]
+    fn test_expand_let_syntax_via_or_macro() {
+        let mut bindings = Bindings::new();
+        let mut env = HashMap::<Symbol, Transformer>::new();
+        let let_syntax_expr = &parse(
+            &tokenize(
+                r#"
+                (letrec-syntax
+                  ((or (syntax-rules ()
+                            ((_) #f)
+                            ((_ e) e)
+                            ((_ e1 e2 ...)
+                             ((lambda (temp)
+                               (if temp
+                                  temp
+                                   (or e2 ...)))
+                              e1)))))
+                   ((lambda (temp) (or #f temp)) #t))
+                "#,
+            )
+            .unwrap(),
+        )
+        .unwrap();
+        let result = expand(&introduce(let_syntax_expr), &mut bindings, &mut env);
+        let source_loc = SourceLoc {
+            line: 0,
+            idx: 0,
+            width: 0,
+        };
+        let expected = sexpr!(
+            (
+                SExpr::Id(Id::new("lambda", [Bindings::CORE_SCOPE, 1]), source_loc),
+                (SExpr::Id(Id::new("temp", [Bindings::CORE_SCOPE, 1, 2]), source_loc)),
+                (
+                    (
+                        SExpr::Id(Id::new("lambda", [Bindings::CORE_SCOPE, 1, 3]), source_loc),
+                        (SExpr::Id(Id::new("temp", [Bindings::CORE_SCOPE, 1, 3, 4]), source_loc)),
+                        (
+                            SExpr::Id(Id::new("if", [Bindings::CORE_SCOPE, 1, 3, 4]), source_loc),
+                            SExpr::Id(Id::new("temp", [Bindings::CORE_SCOPE, 1, 3, 4]), source_loc),
+                            SExpr::Id(Id::new("temp", [Bindings::CORE_SCOPE, 1, 3, 4]), source_loc),
+                            SExpr::Id(Id::new("temp", [Bindings::CORE_SCOPE, 1, 2, 4]), source_loc)
+                        )
+                    ),
+                    SExpr::Bool(Bool(false), source_loc)
+                ),
+            ),
+            SExpr::Bool(Bool(true), source_loc),
+        );
+        assert_eq!(result, expected);
+
+        let outer_temp_id = first(&nth(&first(&result).unwrap(), 1).unwrap()).unwrap();
+        let inner_temp_id = first(
+            &nth(
+                &first(&nth(&first(&result).unwrap(), 2).unwrap()).unwrap(),
+                1,
+            )
+            .unwrap(),
+        )
+        .unwrap();
+        let if_expr = nth(
+            &first(&nth(&first(&result).unwrap(), 2).unwrap()).unwrap(),
+            2,
+        )
+        .unwrap();
+
+        assert_ne!(
+            bindings
+                .resolve(&outer_temp_id.clone().try_into().unwrap())
+                .unwrap(),
+            bindings
+                .resolve(&inner_temp_id.clone().try_into().unwrap())
+                .unwrap(),
+        );
+
+        assert_eq!(
+            bindings
+                .resolve(&(nth(&if_expr, 1).unwrap()).try_into().unwrap())
+                .unwrap(),
+            bindings
+                .resolve(&(nth(&if_expr, 2).unwrap()).try_into().unwrap())
+                .unwrap(),
+        );
+
+        assert_ne!(
+            bindings
+                .resolve(&(nth(&if_expr, 1).unwrap()).try_into().unwrap())
+                .unwrap(),
+            bindings
+                .resolve(&(nth(&if_expr, 3).unwrap()).try_into().unwrap())
+                .unwrap(),
+        );
+
+        assert_eq!(
+            bindings
+                .resolve(&inner_temp_id.clone().try_into().unwrap())
+                .unwrap(),
+            bindings
+                .resolve(&(nth(&if_expr, 2).unwrap()).try_into().unwrap())
+                .unwrap(),
+        );
+
+        assert_eq!(
+            bindings
+                .resolve(&outer_temp_id.clone().try_into().unwrap())
+                .unwrap(),
+            bindings
+                .resolve(&(nth(&if_expr, 3).unwrap()).try_into().unwrap())
+                .unwrap(),
+        );
+    }
 }
-
-//     #[test]
-//     fn test_expand_or_macro_hygiene() {
-//         let mut bindings = Bindings::new();
-
-//         bindings.add_binding(
-//             &Id::new("my-or", [Bindings::CORE_SCOPE]),
-//             &Symbol::new("my-or"),
-//         );
-
-//         let transformer = Transformer::new(&introduce(
-//             &parse(
-//                 &tokenize(
-//                     r#"
-//                     (syntax-rules ()
-//                       ((_) #f)
-//                       ((_ e) e)
-//                       ((_ e1 e2 ...)
-//                        ((lambda (temp) (if temp temp (my-or e2 ...))) e1)))
-//                 "#,
-//                 )
-//                 .unwrap(),
-//             )
-//             .unwrap(),
-//         ));
-
-//         let mut env = HashMap::from([(
-//             bindings
-//                 .resolve(&Id::new("my-or", [Bindings::CORE_SCOPE]))
-//                 .unwrap(),
-//             transformer,
-//         )]);
-
-//         let sexpr = parse(&tokenize("((lambda (temp) (my-or #f temp)) #t)").unwrap()).unwrap();
-//         let result = expand(&introduce(&sexpr), &mut bindings, &mut env);
-
-//         let expected = sexpr!(
-//             (
-//                 SExpr::Id(Id::new("lambda", [Bindings::CORE_SCOPE])),
-//                 (SExpr::Id(Id::new("temp", [Bindings::CORE_SCOPE, 1]))),
-//                 (
-//                     (
-//                         SExpr::Id(Id::new("lambda", [Bindings::CORE_SCOPE, 2])),
-//                         (SExpr::Id(Id::new("temp", [Bindings::CORE_SCOPE, 2, 3]))),
-//                         (
-//                             SExpr::Id(Id::new("if", [Bindings::CORE_SCOPE, 2, 3])),
-//                             SExpr::Id(Id::new("temp", [Bindings::CORE_SCOPE, 0, 2, 3])),
-//                             SExpr::Id(Id::new("temp", [Bindings::CORE_SCOPE, 0, 2, 3])),
-//                             SExpr::Id(Id::new("temp", [Bindings::CORE_SCOPE, 1, 3])),
-//                         )
-//                     ),
-//                     SExpr::Bool(Bool(false), source_loc)
-//                 )
-//             ),
-//             SExpr::Bool(Bool(true), source_loc),
-//         );
-
-//         assert_eq!(result, expected);
-
-//         let outer_temp_id = first(&nth(&first(&result).unwrap(), 1).unwrap()).unwrap();
-//         let inner_temp_id = first(
-//             &nth(
-//                 &first(&nth(&first(&result).unwrap(), 2).unwrap()).unwrap(),
-//                 1,
-//             )
-//             .unwrap(),
-//         )
-//         .unwrap();
-//         let if_expr = nth(
-//             &first(&nth(&first(&result).unwrap(), 2).unwrap()).unwrap(),
-//             2,
-//         )
-//         .unwrap();
-
-//         assert_ne!(
-//             bindings
-//                 .resolve(&outer_temp_id.clone().try_into().unwrap())
-//                 .unwrap(),
-//             bindings
-//                 .resolve(&inner_temp_id.clone().try_into().unwrap())
-//                 .unwrap(),
-//         );
-
-//         assert_eq!(
-//             bindings
-//                 .resolve(&(nth(&if_expr, 1).unwrap()).try_into().unwrap())
-//                 .unwrap(),
-//             bindings
-//                 .resolve(&(nth(&if_expr, 2).unwrap()).try_into().unwrap())
-//                 .unwrap(),
-//         );
-
-//         assert_ne!(
-//             bindings
-//                 .resolve(&(nth(&if_expr, 1).unwrap()).try_into().unwrap())
-//                 .unwrap(),
-//             bindings
-//                 .resolve(&(nth(&if_expr, 3).unwrap()).try_into().unwrap())
-//                 .unwrap(),
-//         );
-
-//         assert_eq!(
-//             bindings
-//                 .resolve(&inner_temp_id.clone().try_into().unwrap())
-//                 .unwrap(),
-//             bindings
-//                 .resolve(&(nth(&if_expr, 2).unwrap()).try_into().unwrap())
-//                 .unwrap(),
-//         );
-
-//         assert_eq!(
-//             bindings
-//                 .resolve(&outer_temp_id.clone().try_into().unwrap())
-//                 .unwrap(),
-//             bindings
-//                 .resolve(&(nth(&if_expr, 3).unwrap()).try_into().unwrap())
-//                 .unwrap(),
-//         );
-//     }
-
-//     #[test]
-//     fn test_expand_let_syntax_to_num() {
-//         let mut bindings = Bindings::new();
-//         let mut env = HashMap::<Symbol, Transformer>::new();
-//         let let_syntax_expr = &parse(
-//             &tokenize(
-//                 r#"
-//                 (letrec-syntax
-//                     ((one (syntax-rules ()
-//                             ((_) 1))))
-//                   (one))
-//                 "#,
-//             )
-//             .unwrap(),
-//         )
-//         .unwrap();
-//         let result = expand(&introduce(&let_syntax_expr), &mut bindings, &mut env);
-//         let expected = SExpr::from(1.0);
-//         assert_eq!(result, expected);
-//     }
-
-//     #[test]
-//     fn test_expand_let_syntax_via_or_macro() {
-//         let mut bindings = Bindings::new();
-//         let mut env = HashMap::<Symbol, Transformer>::new();
-//         let let_syntax_expr = &parse(
-//             &tokenize(
-//                 r#"
-//                 (letrec-syntax
-//                   ((or (syntax-rules ()
-//                             ((_) #f)
-//                             ((_ e) e)
-//                             ((_ e1 e2 ...)
-//                              ((lambda (temp)
-//                                (if temp
-//                                   temp
-//                                    (or e2 ...)))
-//                               e1)))))
-//                    ((lambda (temp) (or #f temp)) #t))
-//                 "#,
-//             )
-//             .unwrap(),
-//         )
-//         .unwrap();
-//         let result = expand(&introduce(&let_syntax_expr), &mut bindings, &mut env);
-//         let expected = sexpr!(
-//             (
-//                 SExpr::Id(Id::new("lambda", [Bindings::CORE_SCOPE, 1])),
-//                 (SExpr::Id(Id::new("temp", [Bindings::CORE_SCOPE, 1, 2]))),
-//                 (
-//                     (
-//                         SExpr::Id(Id::new("lambda", [Bindings::CORE_SCOPE, 1, 3])),
-//                         (SExpr::Id(Id::new("temp", [Bindings::CORE_SCOPE, 1, 3, 4]))),
-//                         (
-//                             SExpr::Id(Id::new("if", [Bindings::CORE_SCOPE, 1, 3, 4])),
-//                             SExpr::Id(Id::new("temp", [Bindings::CORE_SCOPE, 1, 3, 4])),
-//                             SExpr::Id(Id::new("temp", [Bindings::CORE_SCOPE, 1, 3, 4])),
-//                             SExpr::Id(Id::new("temp", [Bindings::CORE_SCOPE, 1, 2, 4]))
-//                         )
-//                     ),
-//                     SExpr::Bool(Bool(false), source_loc)
-//                 ),
-//             ),
-//             SExpr::Bool(Bool(true), source_loc),
-//         );
-//         assert_eq!(result, expected);
-
-//         let outer_temp_id = first(&nth(&first(&result).unwrap(), 1).unwrap()).unwrap();
-//         let inner_temp_id = first(
-//             &nth(
-//                 &first(&nth(&first(&result).unwrap(), 2).unwrap()).unwrap(),
-//                 1,
-//             )
-//             .unwrap(),
-//         )
-//         .unwrap();
-//         let if_expr = nth(
-//             &first(&nth(&first(&result).unwrap(), 2).unwrap()).unwrap(),
-//             2,
-//         )
-//         .unwrap();
-
-//         assert_ne!(
-//             bindings
-//                 .resolve(&outer_temp_id.clone().try_into().unwrap())
-//                 .unwrap(),
-//             bindings
-//                 .resolve(&inner_temp_id.clone().try_into().unwrap())
-//                 .unwrap(),
-//         );
-
-//         assert_eq!(
-//             bindings
-//                 .resolve(&(nth(&if_expr, 1).unwrap()).try_into().unwrap())
-//                 .unwrap(),
-//             bindings
-//                 .resolve(&(nth(&if_expr, 2).unwrap()).try_into().unwrap())
-//                 .unwrap(),
-//         );
-
-//         assert_ne!(
-//             bindings
-//                 .resolve(&(nth(&if_expr, 1).unwrap()).try_into().unwrap())
-//                 .unwrap(),
-//             bindings
-//                 .resolve(&(nth(&if_expr, 3).unwrap()).try_into().unwrap())
-//                 .unwrap(),
-//         );
-
-//         assert_eq!(
-//             bindings
-//                 .resolve(&inner_temp_id.clone().try_into().unwrap())
-//                 .unwrap(),
-//             bindings
-//                 .resolve(&(nth(&if_expr, 2).unwrap()).try_into().unwrap())
-//                 .unwrap(),
-//         );
-
-//         assert_eq!(
-//             bindings
-//                 .resolve(&outer_temp_id.clone().try_into().unwrap())
-//                 .unwrap(),
-//             bindings
-//                 .resolve(&(nth(&if_expr, 3).unwrap()).try_into().unwrap())
-//                 .unwrap(),
-//         );
-//     }
-// }
