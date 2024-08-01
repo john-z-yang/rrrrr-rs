@@ -316,14 +316,7 @@ mod tests {
 
         let sexpr = parse(&tokenize("(and)").unwrap()).unwrap();
         let result = expand(&introduce(&sexpr), &mut bindings, &mut env);
-        let expected = SExpr::Bool(
-            Bool(false),
-            SourceLoc {
-                line: 0,
-                idx: 0,
-                width: 0,
-            },
-        );
+        let expected = parse(&tokenize("#f").unwrap()).unwrap();
         assert_eq!(result, expected);
     }
 
@@ -358,14 +351,7 @@ mod tests {
 
         let sexpr = introduce(&parse(&tokenize("(and list)").unwrap()).unwrap());
         let result = expand(&introduce(&sexpr), &mut bindings, &mut env);
-        let expected = SExpr::Id(
-            Id::new("list", [Bindings::CORE_SCOPE]),
-            SourceLoc {
-                line: 0,
-                idx: 0,
-                width: 0,
-            },
-        );
+        let expected = introduce(&parse(&tokenize("list").unwrap()).unwrap());
         assert_eq!(result, expected);
     }
 
@@ -806,6 +792,88 @@ mod tests {
             bindings
                 .resolve(&(nth(&if_expr, 3).unwrap()).try_into().unwrap())
                 .unwrap(),
+        );
+    }
+
+    #[test]
+    fn test_expand_let_syntax_or_macro_0_arg_maintains_source_loc() {
+        let mut bindings = Bindings::new();
+        let mut env = HashMap::<Symbol, Transformer>::new();
+        let let_syntax_expr = &parse(
+            &tokenize(
+                r#"
+                (letrec-syntax
+                  ((or (syntax-rules ()
+                            ((_) #f)
+                            ((_ e) e)
+                            ((_ e1 e2 ...)
+                             ((lambda (temp)
+                               (if temp
+                                  temp
+                                   (or e2 ...)))
+                              e1)))))
+                   (or))
+                "#,
+            )
+            .unwrap(),
+        )
+        .unwrap();
+        let result = expand(&introduce(let_syntax_expr), &mut bindings, &mut env);
+        let expected = SExpr::Bool(
+            Bool(false),
+            SourceLoc {
+                line: 11,
+                idx: 420,
+                width: 4,
+            },
+        );
+
+        assert!(
+            result.is_idential(&expected),
+            "result: {}\nexpected: {}",
+            result,
+            expected
+        );
+    }
+
+    #[test]
+    fn test_expand_let_syntax_or_macro_1_arg_maintains_source_loc() {
+        let mut bindings = Bindings::new();
+        let mut env = HashMap::<Symbol, Transformer>::new();
+        let let_syntax_expr = &parse(
+            &tokenize(
+                r#"
+                (letrec-syntax
+                  ((or (syntax-rules ()
+                            ((_) #f)
+                            ((_ e) e)
+                            ((_ e1 e2 ...)
+                             ((lambda (temp)
+                               (if temp
+                                  temp
+                                   (or e2 ...)))
+                              e1)))))
+                   (or 1))
+                "#,
+            )
+            .unwrap(),
+        )
+        .unwrap();
+        let result = expand(&introduce(let_syntax_expr), &mut bindings, &mut env);
+        let expected = SExpr::Num(
+            Num(1.0),
+            SourceLoc {
+                line: 11,
+                idx: 424,
+                width: 1,
+            },
+        );
+
+        assert!(
+            result.is_idential(&expected),
+            "result: {:?}\nexpected: {:?}",
+            result,
+            expected
         );
     }
 }
