@@ -102,10 +102,12 @@ pub(crate) fn tokenize(source: &str) -> Result<Vec<Token>, CompliationError> {
         }
 
         fn parse_string(&mut self) -> Result<Token, CompliationError> {
+            let mut is_escaped = false;
             while let Some(c) = self.look_ahead() {
                 match c {
-                    '"' if !matches!(self.cur.chars().last(), Some('\\')) => break,
-                    _ => (),
+                    '"' if !is_escaped => break,
+                    '\\' => is_escaped = !is_escaped,
+                    _ => is_escaped = false,
                 }
                 self.consume();
             }
@@ -114,7 +116,9 @@ pub(crate) fn tokenize(source: &str) -> Result<Vec<Token>, CompliationError> {
             };
             self.consume();
             Ok(Token::Str(
-                Str(self.cur[1..self.cur.len() - 1].to_string()),
+                Str(self.cur[1..self.cur.len() - 1]
+                    .replace("\\\\", "\\")
+                    .replace("\\\"", "\"")),
                 self.get_source_loc(),
             ))
         }
@@ -417,6 +421,98 @@ mod tests {
                     width: 0
                 })
             ]
+        );
+    }
+
+    #[test]
+    fn test_tokenize_escape_double_quote() {
+        let result = tokenize(
+            r#"
+
+        "\""
+
+        "#,
+        )
+        .unwrap();
+        assert_eq!(
+            result[0],
+            Token::Str(
+                Str("\"".to_string()),
+                SourceLoc {
+                    line: 2,
+                    idx: 10,
+                    width: 4
+                }
+            )
+        );
+    }
+
+    #[test]
+    fn test_tokenize_escape_slashes() {
+        let result = tokenize(
+            r#"
+
+        "\\"
+
+        "#,
+        )
+        .unwrap();
+        assert_eq!(
+            result[0],
+            Token::Str(
+                Str("\\".to_string()),
+                SourceLoc {
+                    line: 2,
+                    idx: 10,
+                    width: 4
+                }
+            )
+        );
+    }
+
+    #[test]
+    fn test_tokenize_escape_multiple_slashes() {
+        let result = tokenize(
+            r#"
+
+        "\\\""
+
+        "#,
+        )
+        .unwrap();
+        assert_eq!(
+            result[0],
+            Token::Str(
+                Str("\\\"".to_string()),
+                SourceLoc {
+                    line: 2,
+                    idx: 10,
+                    width: 6
+                }
+            )
+        );
+    }
+
+    #[test]
+    fn test_tokenize_escape_multiple_slashes_and_double_quote() {
+        let result = tokenize(
+            r#"
+
+        "\\\"\\\"\\"
+
+        "#,
+        )
+        .unwrap();
+        assert_eq!(
+            result[0],
+            Token::Str(
+                Str("\\\"\\\"\\".to_string()),
+                SourceLoc {
+                    line: 2,
+                    idx: 10,
+                    width: 12
+                }
+            )
         );
     }
 
