@@ -58,14 +58,10 @@ impl Id {
 }
 
 impl Cons {
-    pub(crate) fn new<T, U>(car: T, cdr: U) -> Self
-    where
-        T: Into<SExpr>,
-        U: Into<SExpr>,
-    {
+    pub(crate) fn new(car: SExpr, cdr: SExpr) -> Self {
         Cons {
-            car: Box::new(car.into()),
-            cdr: Box::new(cdr.into()),
+            car: Box::new(car),
+            cdr: Box::new(cdr),
         }
     }
 
