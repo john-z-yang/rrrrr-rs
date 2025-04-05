@@ -85,7 +85,7 @@ fn expand_lambda(sexpr: &SExpr, bindings: &mut Bindings, env: &mut Env) -> SExpr
 }
 
 fn expand_letrec_syntax(sexpr: &SExpr, bindings: &mut Bindings, env: &mut Env) -> SExpr {
-    match_sexpr! {(#"letrec-syntax", ((keyword, transformer_spec)), body) = sexpr =>
+    match_sexpr! {(sym("letrec-syntax"), ((keyword, transformer_spec)), body) = sexpr =>
         let scope_id = bindings.new_scope_id();
         let keyword = keyword.add_scope(scope_id);
 
@@ -212,7 +212,7 @@ mod tests {
                     SExpr::Id(Id::new("x", [Bindings::CORE_SCOPE, 1]), SourceLoc { line: 4, idx: 61, width: 1 }),
                     SExpr::Id(Id::new("y", [Bindings::CORE_SCOPE, 1]), SourceLoc { line: 5, idx: 75, width: 1 }),
                 )
-            ) => parse(&tokenize(src).unwrap()).unwrap()
+            ) => &parse(&tokenize(src).unwrap()).unwrap()
         )
         .unwrap();
 

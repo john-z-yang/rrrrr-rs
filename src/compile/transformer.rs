@@ -219,7 +219,7 @@ impl SyntaxRule {
 
 impl Transformer {
     pub(crate) fn new(spec: &SExpr) -> Self {
-        match_sexpr! {(#"syntax-rules", (literals_list @ ..), rules @ ..) = spec =>
+        match_sexpr! {(sym("syntax-rules"), (literals_list @ ..), rules @ ..) = spec =>
             let mut literals = HashSet::<Symbol>::new();
             for_each(|literal| {
                 if let SExpr::Id(Id { symbol, scopes: _ }, _) = literal{
@@ -481,28 +481,32 @@ mod tests {
             .unwrap(),
         ));
 
-        assert!(transformer
-            .transform(&introduce(&parse(&tokenize("(and)").unwrap()).unwrap()))
-            .unwrap()
-            .is_idential(&SExpr::Bool(
-                Bool(false),
-                SourceLoc {
-                    line: 0,
-                    idx: 0,
-                    width: 5
-                }
-            )));
-        assert!(transformer
-            .transform(&introduce(&parse(&tokenize("(and x)").unwrap()).unwrap()))
-            .unwrap()
-            .is_idential(&introduce(&SExpr::Id(
-                Id::new("x", []),
-                SourceLoc {
-                    line: 0,
-                    idx: 5,
-                    width: 1
-                }
-            ))));
+        assert!(
+            transformer
+                .transform(&introduce(&parse(&tokenize("(and)").unwrap()).unwrap()))
+                .unwrap()
+                .is_idential(&SExpr::Bool(
+                    Bool(false),
+                    SourceLoc {
+                        line: 0,
+                        idx: 0,
+                        width: 5
+                    }
+                ))
+        );
+        assert!(
+            transformer
+                .transform(&introduce(&parse(&tokenize("(and x)").unwrap()).unwrap()))
+                .unwrap()
+                .is_idential(&introduce(&SExpr::Id(
+                    Id::new("x", []),
+                    SourceLoc {
+                        line: 0,
+                        idx: 5,
+                        width: 1
+                    }
+                )))
+        );
         assert_eq!(
             transformer
                 .transform(&introduce(&parse(&tokenize("(and a b)").unwrap()).unwrap()))

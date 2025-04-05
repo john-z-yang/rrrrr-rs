@@ -5,21 +5,21 @@ use std::collections::HashMap;
 use compile::bindings::Bindings;
 use compile::expand::{expand, introduce};
 use compile::parse::parse;
+use rustyline::DefaultEditor;
 use rustyline::error::ReadlineError;
-use rustyline::Editor;
 
 use compile::lex::tokenize;
 mod compile;
 
 fn main() {
-    let mut rl = Editor::<()>::new();
+    let mut rl = DefaultEditor::new().expect("Unable to open interactive terminal");
     let _ = rl.load_history("history.txt");
     let mut lines = String::new();
     loop {
         let readline = rl.readline(if lines.is_empty() { "lisp> " } else { "  ... " });
         match readline {
             Ok(line) => {
-                rl.add_history_entry(line.as_str());
+                let _ = rl.add_history_entry(line.as_str());
                 if line.is_empty() {
                     let expanded =
                         tokenize(&lines)
