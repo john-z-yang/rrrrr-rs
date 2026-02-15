@@ -3,18 +3,18 @@ use std::{cmp::min, fmt};
 use super::source_loc::SourceLoc;
 
 #[derive(Debug, Clone)]
-pub(crate) struct CompliationError {
+pub(crate) struct CompilationError {
     pub(crate) source_loc: SourceLoc,
     pub(crate) reason: String,
 }
 
-impl fmt::Display for CompliationError {
+impl fmt::Display for CompilationError {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "{}: {}", self.source_loc, self.reason)
     }
 }
 
-impl CompliationError {
+impl CompilationError {
     pub(crate) fn pprint_with_source(&self, source: &str) {
         println!("Error: {}", self.reason);
         println!(" --> {}:", self.source_loc);

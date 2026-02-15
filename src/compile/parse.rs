@@ -1,12 +1,12 @@
 use std::{iter::Peekable, slice::Iter};
 
-use super::{compliation_error::CompliationError, sexpr::SExpr, token::Token};
+use super::{compilation_error::CompilationError, sexpr::SExpr, token::Token};
 use crate::compile::{
     sexpr::{Id, Vector},
     source_loc::SourceLoc,
 };
 
-pub(crate) fn parse(tokens: &[Token]) -> Result<SExpr, CompliationError> {
+pub(crate) fn parse(tokens: &[Token]) -> Result<SExpr, CompilationError> {
     struct Parser<'tokens> {
         it: Peekable<Iter<'tokens, Token>>,
         cur: &'tokens Token,
@@ -21,7 +21,7 @@ pub(crate) fn parse(tokens: &[Token]) -> Result<SExpr, CompliationError> {
             }
         }
 
-        fn parse(&mut self) -> Result<SExpr, CompliationError> {
+        fn parse(&mut self) -> Result<SExpr, CompilationError> {
             let res = self.parse_datum()?;
             match self.look_ahead() {
                 Some(Token::EoF(_)) => Ok(res),
@@ -30,7 +30,7 @@ pub(crate) fn parse(tokens: &[Token]) -> Result<SExpr, CompliationError> {
             }
         }
 
-        fn parse_datum(&mut self) -> Result<SExpr, CompliationError> {
+        fn parse_datum(&mut self) -> Result<SExpr, CompilationError> {
             match self.look_ahead() {
                 Some(
                     Token::Id(_, _)
@@ -77,14 +77,14 @@ pub(crate) fn parse(tokens: &[Token]) -> Result<SExpr, CompliationError> {
             }
         }
 
-        fn parse_compound(&mut self) -> Result<SExpr, CompliationError> {
+        fn parse_compound(&mut self) -> Result<SExpr, CompilationError> {
             match self.look_ahead() {
                 Some(Token::HashLParen(_)) => self.parse_vector(),
                 _ => self.parse_list(),
             }
         }
 
-        fn parse_list(&mut self) -> Result<SExpr, CompliationError> {
+        fn parse_list(&mut self) -> Result<SExpr, CompilationError> {
             if matches!(
                 self.look_ahead(),
                 Some(Token::Quote(_) | Token::QuasiQuote(_) | Token::Comma(_) | Token::CommaAt(_))
@@ -132,7 +132,7 @@ pub(crate) fn parse(tokens: &[Token]) -> Result<SExpr, CompliationError> {
             }
         }
 
-        fn parse_dot_notation(&mut self) -> Result<SExpr, CompliationError> {
+        fn parse_dot_notation(&mut self) -> Result<SExpr, CompilationError> {
             assert!(
                 matches!(self.look_ahead(), Some(Token::Dot(_))),
                 "parse_dot_notation is expecting the '.' token"
@@ -148,7 +148,7 @@ pub(crate) fn parse(tokens: &[Token]) -> Result<SExpr, CompliationError> {
             }
         }
 
-        fn parse_abbreviation(&mut self) -> Result<SExpr, CompliationError> {
+        fn parse_abbreviation(&mut self) -> Result<SExpr, CompilationError> {
             let elements = [self.parse_prefix(), self.parse_datum()?];
             Ok(Self::make_list(
                 &elements,
@@ -184,7 +184,7 @@ pub(crate) fn parse(tokens: &[Token]) -> Result<SExpr, CompliationError> {
             }
         }
 
-        fn parse_vector(&mut self) -> Result<SExpr, CompliationError> {
+        fn parse_vector(&mut self) -> Result<SExpr, CompilationError> {
             assert!(
                 matches!(self.look_ahead(), Some(Token::HashLParen(_))),
                 "parse_vector is expecting the '#(' token"
@@ -241,8 +241,8 @@ pub(crate) fn parse(tokens: &[Token]) -> Result<SExpr, CompliationError> {
             token
         }
 
-        fn emit_err(&self, reason: &str, token: Token) -> CompliationError {
-            CompliationError {
+        fn emit_err(&self, reason: &str, token: Token) -> CompilationError {
+            CompilationError {
                 source_loc: token.get_source_loc(),
                 reason: format!("{}, but got: {}", reason.to_owned(), token),
             }
@@ -1038,7 +1038,7 @@ mod tests {
         assert!(
             matches!(
                 res,
-                Err(CompliationError {
+                Err(CompilationError {
                     source_loc: SourceLoc {
                         line: 0,
                         idx: 1,
@@ -1058,7 +1058,7 @@ mod tests {
         assert!(
             matches!(
                 res,
-                Err(CompliationError {
+                Err(CompilationError {
                     source_loc: SourceLoc {
                         line: 1,
                         idx: 7,
@@ -1078,7 +1078,7 @@ mod tests {
         assert!(
             matches!(
                 res,
-                Err(CompliationError {
+                Err(CompilationError {
                     source_loc: SourceLoc {
                         line: 1,
                         idx: 8,
@@ -1098,7 +1098,7 @@ mod tests {
         assert!(
             matches!(
                 res,
-                Err(CompliationError {
+                Err(CompilationError {
                     source_loc: SourceLoc {
                         line: 1,
                         idx: 8,
@@ -1118,7 +1118,7 @@ mod tests {
         assert!(
             matches!(
                 res,
-                Err(CompliationError {
+                Err(CompilationError {
                     source_loc: SourceLoc {
                         line: 0,
                         idx: 8,
@@ -1138,7 +1138,7 @@ mod tests {
         assert!(
             matches!(
                 res,
-                Err(CompliationError {
+                Err(CompilationError {
                     source_loc: SourceLoc {
                         line: 0,
                         idx: 8,

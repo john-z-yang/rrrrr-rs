@@ -1,5 +1,5 @@
 pub(crate) mod bindings;
-pub(crate) mod compliation_error;
+pub(crate) mod compilation_error;
 pub(crate) mod expand;
 pub(crate) mod lex;
 pub(crate) mod parse;

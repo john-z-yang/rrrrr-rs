@@ -5,9 +5,9 @@ use crate::compile::{
     source_loc::SourceLoc,
 };
 
-use super::{compliation_error::CompliationError, token::Token};
+use super::{compilation_error::CompilationError, token::Token};
 
-pub(crate) fn tokenize(source: &str) -> Result<Vec<Token>, CompliationError> {
+pub(crate) fn tokenize(source: &str) -> Result<Vec<Token>, CompilationError> {
     struct Lexer<'source> {
         it: Peekable<Chars<'source>>,
         cur: String,
@@ -27,7 +27,7 @@ pub(crate) fn tokenize(source: &str) -> Result<Vec<Token>, CompliationError> {
             }
         }
 
-        fn scan(&mut self) -> Result<Vec<Token>, CompliationError> {
+        fn scan(&mut self) -> Result<Vec<Token>, CompilationError> {
             while self.look_ahead().is_some() {
                 let res = self.scan_token()?;
                 self.advance(res);
@@ -36,7 +36,7 @@ pub(crate) fn tokenize(source: &str) -> Result<Vec<Token>, CompliationError> {
             Ok(self.tokens.clone())
         }
 
-        fn scan_token(&mut self) -> Result<Option<Token>, CompliationError> {
+        fn scan_token(&mut self) -> Result<Option<Token>, CompilationError> {
             Ok(match self.consume() {
                 ' ' | '\r' | '\t' | '\n' => None,
                 ';' => {
@@ -80,7 +80,7 @@ pub(crate) fn tokenize(source: &str) -> Result<Vec<Token>, CompliationError> {
             })
         }
 
-        fn parse_num(&mut self) -> Result<Token, CompliationError> {
+        fn parse_num(&mut self) -> Result<Token, CompilationError> {
             self.consume_until(&|c| !c.is_ascii_digit());
 
             if self.look_ahead() == Some('.') {
@@ -96,12 +96,12 @@ pub(crate) fn tokenize(source: &str) -> Result<Vec<Token>, CompliationError> {
             ))
         }
 
-        fn parse_id(&mut self) -> Result<Token, CompliationError> {
+        fn parse_id(&mut self) -> Result<Token, CompilationError> {
             self.consume_until(&|c| !Self::is_id_subsequent(c));
             Ok(Token::Id(Symbol::new(&self.cur), self.get_source_loc()))
         }
 
-        fn parse_string(&mut self) -> Result<Token, CompliationError> {
+        fn parse_string(&mut self) -> Result<Token, CompilationError> {
             let mut is_escaped = false;
             while let Some(c) = self.look_ahead() {
                 match c {
@@ -204,8 +204,8 @@ pub(crate) fn tokenize(source: &str) -> Result<Vec<Token>, CompliationError> {
             }
         }
 
-        fn emit_err(&self, reason: &str) -> CompliationError {
-            CompliationError {
+        fn emit_err(&self, reason: &str) -> CompilationError {
+            CompilationError {
                 source_loc: self.get_source_loc(),
                 reason: reason.to_owned(),
             }
@@ -218,7 +218,7 @@ pub(crate) fn tokenize(source: &str) -> Result<Vec<Token>, CompliationError> {
 #[cfg(test)]
 mod tests {
     use crate::compile::{
-        compliation_error::CompliationError,
+        compilation_error::CompilationError,
         lex::tokenize,
         sexpr::{Bool, Char, Num, Str, Symbol},
         source_loc::SourceLoc,
@@ -522,7 +522,7 @@ mod tests {
         assert!(
             matches!(
                 res,
-                Err(CompliationError {
+                Err(CompilationError {
                     source_loc: SourceLoc {
                         line: 0,
                         idx: 0,
@@ -539,7 +539,7 @@ mod tests {
         assert!(
             matches!(
                 res,
-                Err(CompliationError {
+                Err(CompilationError {
                     source_loc: SourceLoc {
                         line: 0,
                         idx: 4,
@@ -559,7 +559,7 @@ mod tests {
         assert!(
             matches!(
                 res,
-                Err(CompliationError {
+                Err(CompilationError {
                     source_loc: SourceLoc {
                         line: 3,
                         idx: 12,
