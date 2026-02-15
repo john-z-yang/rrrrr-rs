@@ -13,7 +13,7 @@ pub(crate) fn parse(tokens: &[Token]) -> Result<SExpr, CompliationError> {
     }
 
     impl Parser<'_> {
-        fn new(tokens: &[Token]) -> Parser {
+        fn new(tokens: &'_ [Token]) -> Parser<'_> {
             assert_ne!(tokens.len(), 0, "Token stream must have at least 1 token");
             Parser {
                 it: tokens.iter().peekable(),
@@ -1025,9 +1025,11 @@ mod tests {
             },
         );
 
-        assert!(parse(&tokenize(src).unwrap())
-            .unwrap()
-            .is_idential(&outer_pair));
+        assert!(
+            parse(&tokenize(src).unwrap())
+                .unwrap()
+                .is_idential(&outer_pair)
+        );
     }
 
     #[test]

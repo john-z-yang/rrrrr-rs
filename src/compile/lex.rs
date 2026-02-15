@@ -17,7 +17,7 @@ pub(crate) fn tokenize(source: &str) -> Result<Vec<Token>, CompliationError> {
     }
 
     impl Lexer<'_> {
-        fn new(source: &str) -> Lexer {
+        fn new(source: &'_ str) -> Lexer<'_> {
             Lexer {
                 it: source.chars().peekable(),
                 cur: String::new(),
