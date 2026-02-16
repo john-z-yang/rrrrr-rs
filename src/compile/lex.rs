@@ -369,6 +369,34 @@ mod tests {
     }
 
     #[test]
+    fn test_tokenize_multibyte_utf8_in_string() {
+        let src = "\"λ\" 42";
+        let tokens = tokenize(src).unwrap();
+        assert_eq!(
+            tokens,
+            vec![
+                Token::Str(Str("λ".to_string()), Span { lo: 0, hi: 4 }),
+                Token::Num(Num(42.0), Span { lo: 5, hi: 7 }),
+                Token::EoF(Span { lo: 7, hi: 7 }),
+            ]
+        );
+    }
+
+    #[test]
+    fn test_tokenize_multibyte_utf8_char_literal() {
+        let src = "#\\λ 1";
+        let tokens = tokenize(src).unwrap();
+        assert_eq!(
+            tokens,
+            vec![
+                Token::Char(Char('λ'), Span { lo: 0, hi: 4 }),
+                Token::Num(Num(1.0), Span { lo: 5, hi: 6 }),
+                Token::EoF(Span { lo: 6, hi: 6 }),
+            ]
+        );
+    }
+
+    #[test]
     fn test_tokenize_unterminated_multiline_string() {
         let res = tokenize("\"\n123\n456\n\" \"\n123\n456\n");
         assert!(
