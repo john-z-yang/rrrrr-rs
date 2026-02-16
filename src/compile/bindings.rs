@@ -13,7 +13,7 @@ pub(crate) struct Bindings {
 impl Bindings {
     pub(crate) const CORE_SCOPE: ScopeId = 0;
 
-    const CORE_BINDINGS: &[&str] = &[
+    pub(crate) const CORE_BINDINGS: &[&str] = &[
         "letrec-syntax",
         "quote",
         "quote-syntax",
@@ -121,9 +121,11 @@ mod tests {
     #[test]
     fn test_resolve_with_core_bindings() {
         let bindings = Bindings::new();
-        assert_eq!(
-            bindings.resolve(&Id::new("lambda", [Bindings::CORE_SCOPE])),
-            Some(Symbol::new("lambda"))
-        );
+        for core_binding in Bindings::CORE_BINDINGS {
+            assert_eq!(
+                bindings.resolve(&Id::new(core_binding, [Bindings::CORE_SCOPE])),
+                Some(Symbol::new(core_binding))
+            );
+        }
     }
 }
