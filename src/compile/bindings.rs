@@ -13,22 +13,26 @@ pub(crate) struct Bindings {
 impl Bindings {
     pub(crate) const CORE_SCOPE: ScopeId = 0;
 
+    const CORE_BINDINGS: &[&str] = &[
+        "letrec-syntax",
+        "quote",
+        "quote-syntax",
+        "if",
+        "lambda",
+        "list",
+        "cons",
+        "first",
+        "second",
+        "rest",
+    ];
+
     pub(crate) fn new() -> Self {
         let mut bindings = Bindings {
             symbols: HashMap::new(),
             scope_counter: Self::CORE_SCOPE,
             gen_sym_counter: 0,
         };
-        for symbol in [
-            "letrec-syntax",
-            "if",
-            "lambda",
-            "list",
-            "cons",
-            "first",
-            "second",
-            "rest",
-        ] {
+        for symbol in Self::CORE_BINDINGS {
             bindings.add_binding(&Id::new(symbol, [Self::CORE_SCOPE]), &Symbol::new(symbol))
         }
         bindings
