@@ -70,7 +70,7 @@ fn expand_id_application(sexpr: &SExpr, bindings: &mut Bindings, env: &mut Env) 
                 let sexpr = sexpr.add_scope(scope_id);
                 let transformed_sexpr =
                     transformer
-                        .transform(&sexpr)
+                        .transform(&sexpr, bindings)
                         .ok_or_else(|| CompilationError {
                             span: sexpr.get_span(),
                             reason: format!(
@@ -871,5 +871,28 @@ mod tests {
             result,
             expected
         );
+    }
+
+    #[test]
+    fn test_literal_matching_respects_lexical_binding() {
+        let mut bindings = Bindings::new();
+        let mut env = HashMap::<Symbol, Transformer>::new();
+        let expr = parse(
+            &tokenize(
+                r#"
+                (letrec-syntax
+                  ((my-mac (syntax-rules (list)
+                             ((_ list) 1)
+                             ((_ x) 2))))
+                  (lambda (list) (my-mac list)))
+                "#,
+            )
+            .unwrap(),
+        )
+        .unwrap();
+        let result = expand(&introduce(&expr), &mut bindings, &mut env).unwrap();
+
+        let body = nth(&result, 2).unwrap();
+        assert_eq!(body, SExpr::Num(Num(2.0), body.get_span()));
     }
 }
