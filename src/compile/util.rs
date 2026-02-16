@@ -146,7 +146,6 @@ macro_rules! template_sexpr {
                 ))
             })
         } else {
-            println!("nested");
             None
         }
     };
@@ -175,7 +174,6 @@ macro_rules! template_sexpr {
                 }
             )
         } else {
-            println!("elem");
             None
         }
     };
