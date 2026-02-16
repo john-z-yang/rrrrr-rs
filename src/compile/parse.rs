@@ -2,11 +2,12 @@ use std::{iter::Peekable, slice::Iter};
 
 use super::{compilation_error::CompilationError, sexpr::SExpr, token::Token};
 use crate::compile::{
+    compilation_error::Result,
     sexpr::{Id, Vector},
     span::Span,
 };
 
-pub(crate) fn parse(tokens: &[Token]) -> Result<SExpr, CompilationError> {
+pub(crate) fn parse(tokens: &[Token]) -> Result<SExpr> {
     struct Parser<'tokens> {
         it: Peekable<Iter<'tokens, Token>>,
         cur: &'tokens Token,
@@ -21,7 +22,7 @@ pub(crate) fn parse(tokens: &[Token]) -> Result<SExpr, CompilationError> {
             }
         }
 
-        fn parse(&mut self) -> Result<SExpr, CompilationError> {
+        fn parse(&mut self) -> Result<SExpr> {
             let res = self.parse_datum()?;
             match self.look_ahead() {
                 Some(Token::EoF(_)) => Ok(res),
@@ -30,7 +31,7 @@ pub(crate) fn parse(tokens: &[Token]) -> Result<SExpr, CompilationError> {
             }
         }
 
-        fn parse_datum(&mut self) -> Result<SExpr, CompilationError> {
+        fn parse_datum(&mut self) -> Result<SExpr> {
             match self.look_ahead() {
                 Some(
                     Token::Id(_, _)
@@ -77,14 +78,14 @@ pub(crate) fn parse(tokens: &[Token]) -> Result<SExpr, CompilationError> {
             }
         }
 
-        fn parse_compound(&mut self) -> Result<SExpr, CompilationError> {
+        fn parse_compound(&mut self) -> Result<SExpr> {
             match self.look_ahead() {
                 Some(Token::HashLParen(_)) => self.parse_vector(),
                 _ => self.parse_list(),
             }
         }
 
-        fn parse_list(&mut self) -> Result<SExpr, CompilationError> {
+        fn parse_list(&mut self) -> Result<SExpr> {
             if matches!(
                 self.look_ahead(),
                 Some(Token::Quote(_) | Token::QuasiQuote(_) | Token::Comma(_) | Token::CommaAt(_))
@@ -132,7 +133,7 @@ pub(crate) fn parse(tokens: &[Token]) -> Result<SExpr, CompilationError> {
             }
         }
 
-        fn parse_dot_notation(&mut self) -> Result<SExpr, CompilationError> {
+        fn parse_dot_notation(&mut self) -> Result<SExpr> {
             assert!(
                 matches!(self.look_ahead(), Some(Token::Dot(_))),
                 "parse_dot_notation is expecting the '.' token"
@@ -148,7 +149,7 @@ pub(crate) fn parse(tokens: &[Token]) -> Result<SExpr, CompilationError> {
             }
         }
 
-        fn parse_abbreviation(&mut self) -> Result<SExpr, CompilationError> {
+        fn parse_abbreviation(&mut self) -> Result<SExpr> {
             let elements = [self.parse_prefix(), self.parse_datum()?];
             Ok(Self::make_list(
                 &elements,
@@ -182,7 +183,7 @@ pub(crate) fn parse(tokens: &[Token]) -> Result<SExpr, CompilationError> {
             }
         }
 
-        fn parse_vector(&mut self) -> Result<SExpr, CompilationError> {
+        fn parse_vector(&mut self) -> Result<SExpr> {
             assert!(
                 matches!(self.look_ahead(), Some(Token::HashLParen(_))),
                 "parse_vector is expecting the '#(' token"

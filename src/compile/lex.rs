@@ -1,13 +1,14 @@
 use std::{iter::Peekable, str::Chars};
 
 use crate::compile::{
+    compilation_error::Result,
     sexpr::{Bool, Char, Num, Str, Symbol},
     span::Span,
 };
 
 use super::{compilation_error::CompilationError, token::Token};
 
-pub(crate) fn tokenize(source: &str) -> Result<Vec<Token>, CompilationError> {
+pub(crate) fn tokenize(source: &str) -> Result<Vec<Token>> {
     struct Lexer<'source> {
         it: Peekable<Chars<'source>>,
         cur: String,
@@ -25,7 +26,7 @@ pub(crate) fn tokenize(source: &str) -> Result<Vec<Token>, CompilationError> {
             }
         }
 
-        fn scan(&mut self) -> Result<Vec<Token>, CompilationError> {
+        fn scan(&mut self) -> Result<Vec<Token>> {
             while self.look_ahead().is_some() {
                 let res = self.scan_token()?;
                 self.advance(res);
@@ -34,7 +35,7 @@ pub(crate) fn tokenize(source: &str) -> Result<Vec<Token>, CompilationError> {
             Ok(self.tokens.clone())
         }
 
-        fn scan_token(&mut self) -> Result<Option<Token>, CompilationError> {
+        fn scan_token(&mut self) -> Result<Option<Token>> {
             Ok(match self.consume() {
                 ' ' | '\r' | '\t' | '\n' => None,
                 ';' => {
@@ -78,7 +79,7 @@ pub(crate) fn tokenize(source: &str) -> Result<Vec<Token>, CompilationError> {
             })
         }
 
-        fn parse_num(&mut self) -> Result<Token, CompilationError> {
+        fn parse_num(&mut self) -> Result<Token> {
             self.consume_until(&|c| !c.is_ascii_digit());
 
             if self.look_ahead() == Some('.') {
@@ -94,12 +95,12 @@ pub(crate) fn tokenize(source: &str) -> Result<Vec<Token>, CompilationError> {
             ))
         }
 
-        fn parse_id(&mut self) -> Result<Token, CompilationError> {
+        fn parse_id(&mut self) -> Result<Token> {
             self.consume_until(&|c| !Self::is_id_subsequent(c));
             Ok(Token::Id(Symbol::new(&self.cur), self.get_span()))
         }
 
-        fn parse_string(&mut self) -> Result<Token, CompilationError> {
+        fn parse_string(&mut self) -> Result<Token> {
             let mut is_escaped = false;
             while let Some(c) = self.look_ahead() {
                 match c {

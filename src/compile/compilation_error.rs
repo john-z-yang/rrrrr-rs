@@ -2,6 +2,8 @@ use std::fmt;
 
 use super::span::Span;
 
+pub(crate) type Result<T> = std::result::Result<T, CompilationError>;
+
 #[derive(Debug, Clone)]
 pub(crate) struct CompilationError {
     pub(crate) span: Span,
