@@ -80,7 +80,7 @@ macro_rules! match_sexpr {
     (
         (_ $(, $($rest:tt)*)?) = $targ:expr => $($handler:tt)*
     ) => {
-        if let $crate::compile::sexpr::SExpr::Cons(cons) = $targ {
+        if let $crate::compile::sexpr::SExpr::Cons(cons, _) = $targ {
             match_sexpr! {($($($rest)*)?) = cons.cdr.as_ref() =>
                 $($handler)*
             }
