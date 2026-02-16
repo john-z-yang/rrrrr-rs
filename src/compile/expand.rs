@@ -106,7 +106,7 @@ fn expand_lambda(sexpr: &SExpr, bindings: &mut Bindings, env: &mut Env) -> Resul
                         ),
                     });
                 };
-                let binding = bindings.gen_sym();
+                let binding = bindings.gen_sym(id);
                 bindings.add_binding(id, &binding);
                 Ok(())
             },
@@ -133,7 +133,7 @@ fn expand_letrec_syntax(sexpr: &SExpr, bindings: &mut Bindings, env: &mut Env) -
                 reason: format!("Expected identifiers in syntax keyword, but got: {}", keyword)
             });
         };
-        let binding = bindings.gen_sym();
+        let binding = bindings.gen_sym(&id);
         bindings.add_binding(&id, &binding);
 
         let transformer = Transformer::new(&transformer_spec.add_scope(scope_id))?;
