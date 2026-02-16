@@ -2,7 +2,7 @@ use std::{iter::Peekable, str::Chars};
 
 use crate::compile::{
     sexpr::{Bool, Char, Num, Str, Symbol},
-    source_loc::SourceLoc,
+    span::Span,
 };
 
 use super::{compilation_error::CompilationError, token::Token};
@@ -11,8 +11,7 @@ pub(crate) fn tokenize(source: &str) -> Result<Vec<Token>, CompilationError> {
     struct Lexer<'source> {
         it: Peekable<Chars<'source>>,
         cur: String,
-        col: usize,
-        line: usize,
+        offset: usize,
         tokens: Vec<Token>,
     }
 
@@ -21,8 +20,7 @@ pub(crate) fn tokenize(source: &str) -> Result<Vec<Token>, CompilationError> {
             Lexer {
                 it: source.chars().peekable(),
                 cur: String::new(),
-                col: 0,
-                line: 0,
+                offset: 0,
                 tokens: vec![],
             }
         }
@@ -32,7 +30,7 @@ pub(crate) fn tokenize(source: &str) -> Result<Vec<Token>, CompilationError> {
                 let res = self.scan_token()?;
                 self.advance(res);
             }
-            self.tokens.push(Token::EoF(self.get_source_loc()));
+            self.tokens.push(Token::EoF(self.get_span()));
             Ok(self.tokens.clone())
         }
 
@@ -43,31 +41,31 @@ pub(crate) fn tokenize(source: &str) -> Result<Vec<Token>, CompilationError> {
                     self.consume_until(&|c| c == '\n');
                     None
                 }
-                '(' => Some(Token::LParen(self.get_source_loc())),
-                ')' => Some(Token::RParen(self.get_source_loc())),
-                '`' => Some(Token::QuasiQuote(self.get_source_loc())),
-                '|' => Some(Token::Pipe(self.get_source_loc())),
-                '\'' => Some(Token::Quote(self.get_source_loc())),
+                '(' => Some(Token::LParen(self.get_span())),
+                ')' => Some(Token::RParen(self.get_span())),
+                '`' => Some(Token::QuasiQuote(self.get_span())),
+                '|' => Some(Token::Pipe(self.get_span())),
+                '\'' => Some(Token::Quote(self.get_span())),
                 '.' => Some(if !self.consume_if('.') {
-                    Token::Dot(self.get_source_loc())
+                    Token::Dot(self.get_span())
                 } else if self.consume_if('.') {
-                    Token::Id(Symbol::new("..."), self.get_source_loc())
+                    Token::Id(Symbol::new("..."), self.get_span())
                 } else {
                     return Err(self.emit_err("Expecting '.' after '..'"));
                 }),
                 ',' => Some(if self.consume_if('@') {
-                    Token::CommaAt(self.get_source_loc())
+                    Token::CommaAt(self.get_span())
                 } else {
-                    Token::Comma(self.get_source_loc())
+                    Token::Comma(self.get_span())
                 }),
                 '#' => Some(if self.consume_if('t') {
-                    Token::Bool(Bool(true), self.get_source_loc())
+                    Token::Bool(Bool(true), self.get_span())
                 } else if self.consume_if('f') {
-                    Token::Bool(Bool(false), self.get_source_loc())
+                    Token::Bool(Bool(false), self.get_span())
                 } else if self.consume_if('(') {
-                    Token::HashLParen(self.get_source_loc())
+                    Token::HashLParen(self.get_span())
                 } else if self.consume_if('\\') && self.look_ahead().is_some() {
-                    Token::Char(Char(self.consume()), self.get_source_loc())
+                    Token::Char(Char(self.consume()), self.get_span())
                 } else {
                     return Err(
                         self.emit_err("Expectin 't', 'f', '(' or character literal after '#'")
@@ -92,13 +90,13 @@ pub(crate) fn tokenize(source: &str) -> Result<Vec<Token>, CompilationError> {
                 Num(self.cur.parse().map_err(|_| {
                     self.emit_err(&format!("Invalid number representation: {}", self.cur))
                 })?),
-                self.get_source_loc(),
+                self.get_span(),
             ))
         }
 
         fn parse_id(&mut self) -> Result<Token, CompilationError> {
             self.consume_until(&|c| !Self::is_id_subsequent(c));
-            Ok(Token::Id(Symbol::new(&self.cur), self.get_source_loc()))
+            Ok(Token::Id(Symbol::new(&self.cur), self.get_span()))
         }
 
         fn parse_string(&mut self) -> Result<Token, CompilationError> {
@@ -119,7 +117,7 @@ pub(crate) fn tokenize(source: &str) -> Result<Vec<Token>, CompilationError> {
                 Str(self.cur[1..self.cur.len() - 1]
                     .replace("\\\\", "\\")
                     .replace("\\\"", "\"")),
-                self.get_source_loc(),
+                self.get_span(),
             ))
         }
 
@@ -160,9 +158,7 @@ pub(crate) fn tokenize(source: &str) -> Result<Vec<Token>, CompilationError> {
             if let Some(token) = token {
                 self.tokens.push(token)
             }
-            let num_lines = self.cur.chars().filter(|c| *c == '\n').count();
-            self.line += num_lines;
-            self.col += self.cur.len();
+            self.offset += self.cur.len();
             self.cur.clear();
         }
 
@@ -196,17 +192,16 @@ pub(crate) fn tokenize(source: &str) -> Result<Vec<Token>, CompilationError> {
             }
         }
 
-        fn get_source_loc(&self) -> SourceLoc {
-            SourceLoc {
-                line: self.line,
-                idx: self.col,
-                width: self.cur.len(),
+        fn get_span(&self) -> Span {
+            Span {
+                lo: self.offset,
+                hi: self.offset + self.cur.len(),
             }
         }
 
         fn emit_err(&self, reason: &str) -> CompilationError {
             CompilationError {
-                source_loc: self.get_source_loc(),
+                span: self.get_span(),
                 reason: reason.to_owned(),
             }
         }
@@ -221,7 +216,7 @@ mod tests {
         compilation_error::CompilationError,
         lex::tokenize,
         sexpr::{Bool, Char, Num, Str, Symbol},
-        source_loc::SourceLoc,
+        span::Span,
         token::Token,
     };
 
@@ -229,11 +224,7 @@ mod tests {
     fn test_tokenize_empty() {
         assert_eq!(
             tokenize("").unwrap(),
-            vec![Token::EoF(SourceLoc {
-                line: 0,
-                idx: 0,
-                width: 0
-            })]
+            vec![Token::EoF(Span { lo: 0, hi: 0 })]
         );
     }
 
@@ -252,174 +243,33 @@ mod tests {
         assert_eq!(
             tokenize(src).unwrap(),
             vec![
-                Token::QuasiQuote(SourceLoc {
-                    line: 0,
-                    idx: 0,
-                    width: 1
-                }),
-                Token::LParen(SourceLoc {
-                    line: 0,
-                    idx: 1,
-                    width: 1
-                }),
-                Token::HashLParen(SourceLoc {
-                    line: 0,
-                    idx: 2,
-                    width: 2
-                }),
-                Token::RParen(SourceLoc {
-                    line: 0,
-                    idx: 4,
-                    width: 1
-                }),
-                Token::RParen(SourceLoc {
-                    line: 0,
-                    idx: 5,
-                    width: 1
-                }),
-                Token::Str(
-                    Str("ab".to_string()),
-                    SourceLoc {
-                        line: 2,
-                        idx: 11,
-                        width: 4
-                    }
-                ),
-                Token::Str(
-                    Str("".to_string()),
-                    SourceLoc {
-                        line: 4,
-                        idx: 24,
-                        width: 2
-                    }
-                ),
-                Token::Num(
-                    Num(9.0001),
-                    SourceLoc {
-                        line: 4,
-                        idx: 27,
-                        width: 6
-                    }
-                ),
-                Token::Num(
-                    Num(0.0),
-                    SourceLoc {
-                        line: 4,
-                        idx: 34,
-                        width: 1
-                    }
-                ),
-                Token::Num(
-                    Num(-3.0),
-                    SourceLoc {
-                        line: 4,
-                        idx: 36,
-                        width: 2
-                    }
-                ),
-                Token::Num(
-                    Num(-42.0),
-                    SourceLoc {
-                        line: 4,
-                        idx: 39,
-                        width: 6
-                    }
-                ),
-                Token::Num(
-                    Num(-100.0),
-                    SourceLoc {
-                        line: 4,
-                        idx: 46,
-                        width: 4
-                    }
-                ),
-                Token::Id(
-                    Symbol::new("some-symbol"),
-                    SourceLoc {
-                        line: 4,
-                        idx: 51,
-                        width: 11
-                    }
-                ),
-                Token::Id(
-                    Symbol::new("<=?"),
-                    SourceLoc {
-                        line: 4,
-                        idx: 63,
-                        width: 3
-                    }
-                ),
-                Token::Id(
-                    Symbol::new("list->vector"),
-                    SourceLoc {
-                        line: 4,
-                        idx: 67,
-                        width: 12
-                    }
-                ),
-                Token::Num(
-                    Num(2.0),
-                    SourceLoc {
-                        line: 5,
-                        idx: 82,
-                        width: 1
-                    }
-                ),
-                Token::Bool(
-                    Bool(true),
-                    SourceLoc {
-                        line: 5,
-                        idx: 84,
-                        width: 2
-                    }
-                ),
-                Token::Char(
-                    Char(' '),
-                    SourceLoc {
-                        line: 5,
-                        idx: 87,
-                        width: 3
-                    }
-                ),
-                Token::LParen(SourceLoc {
-                    line: 5,
-                    idx: 90,
-                    width: 1
-                }),
-                Token::Id(
-                    Symbol::new("..."),
-                    SourceLoc {
-                        line: 5,
-                        idx: 91,
-                        width: 3
-                    }
-                ),
-                Token::RParen(SourceLoc {
-                    line: 5,
-                    idx: 94,
-                    width: 1
-                }),
-                Token::Str(
-                    Str("\n\n  ".to_string()),
-                    SourceLoc {
-                        line: 5,
-                        idx: 96,
-                        width: 6
-                    }
-                ),
+                Token::QuasiQuote(Span { lo: 0, hi: 1 }),
+                Token::LParen(Span { lo: 1, hi: 2 }),
+                Token::HashLParen(Span { lo: 2, hi: 4 }),
+                Token::RParen(Span { lo: 4, hi: 5 }),
+                Token::RParen(Span { lo: 5, hi: 6 }),
+                Token::Str(Str("ab".to_string()), Span { lo: 11, hi: 15 }),
+                Token::Str(Str("".to_string()), Span { lo: 24, hi: 26 }),
+                Token::Num(Num(9.0001), Span { lo: 27, hi: 33 }),
+                Token::Num(Num(0.0), Span { lo: 34, hi: 35 }),
+                Token::Num(Num(-3.0), Span { lo: 36, hi: 38 }),
+                Token::Num(Num(-42.0), Span { lo: 39, hi: 45 }),
+                Token::Num(Num(-100.0), Span { lo: 46, hi: 50 }),
+                Token::Id(Symbol::new("some-symbol"), Span { lo: 51, hi: 62 }),
+                Token::Id(Symbol::new("<=?"), Span { lo: 63, hi: 66 }),
+                Token::Id(Symbol::new("list->vector"), Span { lo: 67, hi: 79 }),
+                Token::Num(Num(2.0), Span { lo: 82, hi: 83 }),
+                Token::Bool(Bool(true), Span { lo: 84, hi: 86 }),
+                Token::Char(Char(' '), Span { lo: 87, hi: 90 }),
+                Token::LParen(Span { lo: 90, hi: 91 }),
+                Token::Id(Symbol::new("..."), Span { lo: 91, hi: 94 }),
+                Token::RParen(Span { lo: 94, hi: 95 }),
+                Token::Str(Str("\n\n  ".to_string()), Span { lo: 96, hi: 102 }),
                 Token::Str(
                     Str(" 123\n    456\n".to_string()),
-                    SourceLoc {
-                        line: 7,
-                        idx: 104,
-                        width: 15
-                    }
+                    Span { lo: 104, hi: 119 }
                 ),
-                Token::EoF(SourceLoc {
-                    line: 9,
-                    idx: 119,
-                    width: 0
-                })
+                Token::EoF(Span { lo: 119, hi: 119 })
             ]
         );
     }
@@ -436,14 +286,7 @@ mod tests {
         .unwrap();
         assert_eq!(
             result[0],
-            Token::Str(
-                Str("\"".to_string()),
-                SourceLoc {
-                    line: 2,
-                    idx: 10,
-                    width: 4
-                }
-            )
+            Token::Str(Str("\"".to_string()), Span { lo: 10, hi: 14 })
         );
     }
 
@@ -459,14 +302,7 @@ mod tests {
         .unwrap();
         assert_eq!(
             result[0],
-            Token::Str(
-                Str("\\".to_string()),
-                SourceLoc {
-                    line: 2,
-                    idx: 10,
-                    width: 4
-                }
-            )
+            Token::Str(Str("\\".to_string()), Span { lo: 10, hi: 14 })
         );
     }
 
@@ -482,14 +318,7 @@ mod tests {
         .unwrap();
         assert_eq!(
             result[0],
-            Token::Str(
-                Str("\\\"".to_string()),
-                SourceLoc {
-                    line: 2,
-                    idx: 10,
-                    width: 6
-                }
-            )
+            Token::Str(Str("\\\"".to_string()), Span { lo: 10, hi: 16 })
         );
     }
 
@@ -505,14 +334,7 @@ mod tests {
         .unwrap();
         assert_eq!(
             result[0],
-            Token::Str(
-                Str("\\\"\\\"\\".to_string()),
-                SourceLoc {
-                    line: 2,
-                    idx: 10,
-                    width: 12
-                }
-            )
+            Token::Str(Str("\\\"\\\"\\".to_string()), Span { lo: 10, hi: 22 })
         );
     }
 
@@ -523,11 +345,7 @@ mod tests {
             matches!(
                 res,
                 Err(CompilationError {
-                    source_loc: SourceLoc {
-                        line: 0,
-                        idx: 0,
-                        width: 1
-                    },
+                    span: Span { lo: 0, hi: 1 },
                     reason: _
                 })
             ),
@@ -540,11 +358,7 @@ mod tests {
             matches!(
                 res,
                 Err(CompilationError {
-                    source_loc: SourceLoc {
-                        line: 0,
-                        idx: 4,
-                        width: 1
-                    },
+                    span: Span { lo: 4, hi: 5 },
                     reason: _
                 })
             ),
@@ -560,11 +374,7 @@ mod tests {
             matches!(
                 res,
                 Err(CompilationError {
-                    source_loc: SourceLoc {
-                        line: 3,
-                        idx: 12,
-                        width: 10
-                    },
+                    span: Span { lo: 12, hi: 22 },
                     reason: _
                 })
             ),

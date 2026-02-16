@@ -4,7 +4,7 @@ pub(crate) mod expand;
 pub(crate) mod lex;
 pub(crate) mod parse;
 pub(crate) mod sexpr;
-pub(crate) mod source_loc;
+pub(crate) mod span;
 pub(crate) mod token;
 pub(crate) mod transformer;
 pub(crate) mod util;

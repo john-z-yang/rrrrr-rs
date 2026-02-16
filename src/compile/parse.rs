@@ -3,7 +3,7 @@ use std::{iter::Peekable, slice::Iter};
 use super::{compilation_error::CompilationError, sexpr::SExpr, token::Token};
 use crate::compile::{
     sexpr::{Id, Vector},
-    source_loc::SourceLoc,
+    span::Span,
 };
 
 pub(crate) fn parse(tokens: &[Token]) -> Result<SExpr, CompilationError> {
@@ -68,11 +68,11 @@ pub(crate) fn parse(tokens: &[Token]) -> Result<SExpr, CompilationError> {
             );
 
             match self.consume() {
-                Token::Id(symbol, source_loc) => SExpr::Id(Id::new(&symbol.0, []), *source_loc),
-                Token::Bool(bool, source_loc) => SExpr::Bool(bool.clone(), *source_loc),
-                Token::Num(num, source_loc) => SExpr::Num(num.clone(), *source_loc),
-                Token::Char(char, source_loc) => SExpr::Char(char.clone(), *source_loc),
-                Token::Str(string, source_loc) => SExpr::Str(string.clone(), *source_loc),
+                Token::Id(symbol, span) => SExpr::Id(Id::new(&symbol.0, []), *span),
+                Token::Bool(bool, span) => SExpr::Bool(bool.clone(), *span),
+                Token::Num(num, span) => SExpr::Num(num.clone(), *span),
+                Token::Char(char, span) => SExpr::Char(char.clone(), *span),
+                Token::Str(string, span) => SExpr::Str(string.clone(), *span),
                 _ => unreachable!("parse_atom is only expecting tokens for atomic values"),
             }
         }
@@ -97,7 +97,7 @@ pub(crate) fn parse(tokens: &[Token]) -> Result<SExpr, CompilationError> {
                 "parse_list is expecting a '(' token",
             );
 
-            let start = self.consume().get_source_loc();
+            let start = self.consume().get_span();
             let mut elements: Vec<SExpr> = vec![];
             while let Some(t) = self.look_ahead() {
                 if matches!(t, Token::RParen(_))
@@ -118,7 +118,7 @@ pub(crate) fn parse(tokens: &[Token]) -> Result<SExpr, CompilationError> {
                     Ok(Self::make_improper_list(
                         &elements,
                         start,
-                        self.consume().get_source_loc(),
+                        self.consume().get_span(),
                     ))
                 }
                 Some(Token::RParen(end)) => {
@@ -152,8 +152,8 @@ pub(crate) fn parse(tokens: &[Token]) -> Result<SExpr, CompilationError> {
             let elements = [self.parse_prefix(), self.parse_datum()?];
             Ok(Self::make_list(
                 &elements,
-                elements[0].get_source_loc(),
-                elements[1].get_source_loc(),
+                elements[0].get_span(),
+                elements[1].get_span(),
             ))
         }
 
@@ -172,12 +172,10 @@ pub(crate) fn parse(tokens: &[Token]) -> Result<SExpr, CompilationError> {
             );
 
             match self.consume() {
-                Token::Quote(source_loc) => SExpr::Id(Id::new("quote", []), *source_loc),
-                Token::QuasiQuote(source_loc) => SExpr::Id(Id::new("quasiquote", []), *source_loc),
-                Token::Comma(source_loc) => SExpr::Id(Id::new("unquote", []), *source_loc),
-                Token::CommaAt(source_loc) => {
-                    SExpr::Id(Id::new("unquote-splicing", []), *source_loc)
-                }
+                Token::Quote(span) => SExpr::Id(Id::new("quote", []), *span),
+                Token::QuasiQuote(span) => SExpr::Id(Id::new("quasiquote", []), *span),
+                Token::Comma(span) => SExpr::Id(Id::new("unquote", []), *span),
+                Token::CommaAt(span) => SExpr::Id(Id::new("unquote-splicing", []), *span),
                 _ => unreachable!(
                     "parse_abbreviation is only expecting tokens for abbreviated prefix"
                 ),
@@ -189,7 +187,7 @@ pub(crate) fn parse(tokens: &[Token]) -> Result<SExpr, CompilationError> {
                 matches!(self.look_ahead(), Some(Token::HashLParen(_))),
                 "parse_vector is expecting the '#(' token"
             );
-            let start = self.consume().get_source_loc();
+            let start = self.consume().get_span();
             let mut elements: Vec<SExpr> = vec![];
             while let Some(t) = self.look_ahead() {
                 if matches!(t, Token::RParen(_)) || matches!(t, Token::EoF(_)) {
@@ -207,15 +205,15 @@ pub(crate) fn parse(tokens: &[Token]) -> Result<SExpr, CompilationError> {
             }
         }
 
-        fn make_list(elements: &[SExpr], start: SourceLoc, end: SourceLoc) -> SExpr {
+        fn make_list(elements: &[SExpr], start: Span, end: Span) -> SExpr {
             let mut res = SExpr::Nil(end);
             for element in elements.iter().rev() {
                 res = SExpr::cons(element.clone(), res);
             }
-            res.update_source_loc(start.combine(res.get_source_loc()))
+            res.update_span(start.combine(res.get_span()))
         }
 
-        fn make_improper_list(slice: &[SExpr], start: SourceLoc, end: SourceLoc) -> SExpr {
+        fn make_improper_list(slice: &[SExpr], start: Span, end: Span) -> SExpr {
             assert!(
                 slice.len() >= 2,
                 "improper list has to have more than 2 element"
@@ -224,11 +222,11 @@ pub(crate) fn parse(tokens: &[Token]) -> Result<SExpr, CompilationError> {
             let cdr = iter.next().unwrap().clone();
             let car = iter.next().unwrap().clone();
             let mut res = SExpr::cons(car, cdr);
-            res = res.update_source_loc(res.get_source_loc().combine(end));
+            res = res.update_span(res.get_span().combine(end));
             for element in iter {
                 res = SExpr::cons(element.clone(), res);
             }
-            res.update_source_loc(start.combine(res.get_source_loc()))
+            res.update_span(start.combine(res.get_span()))
         }
 
         fn look_ahead(&mut self) -> Option<Token> {
@@ -243,7 +241,7 @@ pub(crate) fn parse(tokens: &[Token]) -> Result<SExpr, CompilationError> {
 
         fn emit_err(&self, reason: &str, token: Token) -> CompilationError {
             CompilationError {
-                source_loc: token.get_source_loc(),
+                span: token.get_span(),
                 reason: format!("{}, but got: {}", reason.to_owned(), token),
             }
         }
@@ -257,7 +255,7 @@ mod tests {
     use crate::compile::{
         lex::tokenize,
         sexpr::{Cons, Num},
-        source_loc::SourceLoc,
+        span::Span,
     };
 
     use super::*;
@@ -265,11 +263,7 @@ mod tests {
     #[test]
     fn parse_nil() {
         let src = "(    )";
-        let list = SExpr::Nil(SourceLoc {
-            line: 0,
-            idx: 0,
-            width: 6,
-        });
+        let list = SExpr::Nil(Span { lo: 0, hi: 6 });
 
         assert!(parse(&tokenize(src).unwrap()).unwrap().is_idential(&list));
     }
@@ -280,25 +274,10 @@ mod tests {
 
         let list = SExpr::Cons(
             Cons {
-                car: Box::new(SExpr::Id(
-                    Id::new("abc", []),
-                    SourceLoc {
-                        line: 0,
-                        idx: 1,
-                        width: 3,
-                    },
-                )),
-                cdr: Box::new(SExpr::Nil(SourceLoc {
-                    line: 0,
-                    idx: 4,
-                    width: 1,
-                })),
+                car: Box::new(SExpr::Id(Id::new("abc", []), Span { lo: 1, hi: 4 })),
+                cdr: Box::new(SExpr::Nil(Span { lo: 4, hi: 5 })),
             },
-            SourceLoc {
-                line: 0,
-                idx: 0,
-                width: 5,
-            },
+            Span { lo: 0, hi: 5 },
         );
 
         assert!(parse(&tokenize(src).unwrap()).unwrap().is_idential(&list));
@@ -310,39 +289,16 @@ mod tests {
 
         let list = SExpr::Cons(
             Cons {
-                car: Box::new(SExpr::Id(
-                    Id::new("quote", []),
-                    SourceLoc {
-                        line: 0,
-                        idx: 0,
-                        width: 1,
-                    },
-                )),
+                car: Box::new(SExpr::Id(Id::new("quote", []), Span { lo: 0, hi: 1 })),
                 cdr: Box::new(SExpr::Cons(
                     Cons {
-                        car: Box::new(SExpr::Nil(SourceLoc {
-                            line: 0,
-                            idx: 1,
-                            width: 2,
-                        })),
-                        cdr: Box::new(SExpr::Nil(SourceLoc {
-                            line: 0,
-                            idx: 1,
-                            width: 2,
-                        })),
+                        car: Box::new(SExpr::Nil(Span { lo: 1, hi: 3 })),
+                        cdr: Box::new(SExpr::Nil(Span { lo: 1, hi: 3 })),
                     },
-                    SourceLoc {
-                        line: 0,
-                        idx: 1,
-                        width: 2,
-                    },
+                    Span { lo: 1, hi: 3 },
                 )),
             },
-            SourceLoc {
-                line: 0,
-                idx: 0,
-                width: 3,
-            },
+            Span { lo: 0, hi: 3 },
         );
 
         assert!(parse(&tokenize(src).unwrap()).unwrap().is_idential(&list));
@@ -356,37 +312,17 @@ mod tests {
             Cons {
                 car: Box::new(SExpr::Id(
                     Id::new("unquote-splicing", []),
-                    SourceLoc {
-                        line: 0,
-                        idx: 0,
-                        width: 2,
-                    },
+                    Span { lo: 0, hi: 2 },
                 )),
                 cdr: Box::new(SExpr::Cons(
                     Cons {
-                        car: Box::new(SExpr::Nil(SourceLoc {
-                            line: 0,
-                            idx: 2,
-                            width: 2,
-                        })),
-                        cdr: Box::new(SExpr::Nil(SourceLoc {
-                            line: 0,
-                            idx: 2,
-                            width: 2,
-                        })),
+                        car: Box::new(SExpr::Nil(Span { lo: 2, hi: 4 })),
+                        cdr: Box::new(SExpr::Nil(Span { lo: 2, hi: 4 })),
                     },
-                    SourceLoc {
-                        line: 0,
-                        idx: 2,
-                        width: 2,
-                    },
+                    Span { lo: 2, hi: 4 },
                 )),
             },
-            SourceLoc {
-                line: 0,
-                idx: 0,
-                width: 4,
-            },
+            Span { lo: 0, hi: 4 },
         );
 
         assert!(parse(&tokenize(src).unwrap()).unwrap().is_idential(&list));
@@ -400,70 +336,34 @@ mod tests {
             Cons {
                 car: Box::new(SExpr::Id(
                     Id::new("unquote-splicing", []),
-                    SourceLoc {
-                        line: 0,
-                        idx: 2,
-                        width: 2,
-                    },
+                    Span { lo: 2, hi: 4 },
                 )),
                 cdr: Box::new(SExpr::Cons(
                     Cons {
-                        car: Box::new(SExpr::Nil(SourceLoc {
-                            line: 0,
-                            idx: 4,
-                            width: 2,
-                        })),
-                        cdr: Box::new(SExpr::Nil(SourceLoc {
-                            line: 0,
-                            idx: 4,
-                            width: 2,
-                        })),
+                        car: Box::new(SExpr::Nil(Span { lo: 4, hi: 6 })),
+                        cdr: Box::new(SExpr::Nil(Span { lo: 4, hi: 6 })),
                     },
-                    SourceLoc {
-                        line: 0,
-                        idx: 4,
-                        width: 2,
-                    },
+                    Span { lo: 4, hi: 6 },
                 )),
             },
-            SourceLoc {
-                line: 0,
-                idx: 2,
-                width: 4,
-            },
+            Span { lo: 2, hi: 6 },
         );
 
         let list = SExpr::Cons(
             Cons {
                 car: Box::new(SExpr::Id(
                     Id::new("unquote-splicing", []),
-                    SourceLoc {
-                        line: 0,
-                        idx: 0,
-                        width: 2,
-                    },
+                    Span { lo: 0, hi: 2 },
                 )),
                 cdr: Box::new(SExpr::Cons(
                     Cons {
                         car: Box::new(inner_list),
-                        cdr: Box::new(SExpr::Nil(SourceLoc {
-                            line: 0,
-                            idx: 2,
-                            width: 4,
-                        })),
+                        cdr: Box::new(SExpr::Nil(Span { lo: 2, hi: 6 })),
                     },
-                    SourceLoc {
-                        line: 0,
-                        idx: 2,
-                        width: 4,
-                    },
+                    Span { lo: 2, hi: 6 },
                 )),
             },
-            SourceLoc {
-                line: 0,
-                idx: 0,
-                width: 6,
-            },
+            Span { lo: 0, hi: 6 },
         );
 
         assert!(parse(&tokenize(src).unwrap()).unwrap().is_idential(&list));
@@ -475,72 +375,33 @@ mod tests {
 
         let inner_list = SExpr::Cons(
             Cons {
-                car: Box::new(SExpr::Id(
-                    Id::new("quote", []),
-                    SourceLoc {
-                        line: 0,
-                        idx: 2,
-                        width: 1,
-                    },
-                )),
+                car: Box::new(SExpr::Id(Id::new("quote", []), Span { lo: 2, hi: 3 })),
                 cdr: Box::new(SExpr::Cons(
                     Cons {
-                        car: Box::new(SExpr::Nil(SourceLoc {
-                            line: 0,
-                            idx: 3,
-                            width: 2,
-                        })),
-                        cdr: Box::new(SExpr::Nil(SourceLoc {
-                            line: 0,
-                            idx: 3,
-                            width: 2,
-                        })),
+                        car: Box::new(SExpr::Nil(Span { lo: 3, hi: 5 })),
+                        cdr: Box::new(SExpr::Nil(Span { lo: 3, hi: 5 })),
                     },
-                    SourceLoc {
-                        line: 0,
-                        idx: 3,
-                        width: 2,
-                    },
+                    Span { lo: 3, hi: 5 },
                 )),
             },
-            SourceLoc {
-                line: 0,
-                idx: 2,
-                width: 3,
-            },
+            Span { lo: 2, hi: 5 },
         );
 
         let list = SExpr::Cons(
             Cons {
                 car: Box::new(SExpr::Id(
                     Id::new("unquote-splicing", []),
-                    SourceLoc {
-                        line: 0,
-                        idx: 0,
-                        width: 2,
-                    },
+                    Span { lo: 0, hi: 2 },
                 )),
                 cdr: Box::new(SExpr::Cons(
                     Cons {
                         car: Box::new(inner_list),
-                        cdr: Box::new(SExpr::Nil(SourceLoc {
-                            line: 0,
-                            idx: 2,
-                            width: 3,
-                        })),
+                        cdr: Box::new(SExpr::Nil(Span { lo: 2, hi: 5 })),
                     },
-                    SourceLoc {
-                        line: 0,
-                        idx: 2,
-                        width: 3,
-                    },
+                    Span { lo: 2, hi: 5 },
                 )),
             },
-            SourceLoc {
-                line: 0,
-                idx: 0,
-                width: 5,
-            },
+            Span { lo: 0, hi: 5 },
         );
 
         assert!(parse(&tokenize(src).unwrap()).unwrap().is_idential(&list));
@@ -554,70 +415,31 @@ mod tests {
             Cons {
                 car: Box::new(SExpr::Id(
                     Id::new("unquote-splicing", []),
-                    SourceLoc {
-                        line: 0,
-                        idx: 1,
-                        width: 2,
-                    },
+                    Span { lo: 1, hi: 3 },
                 )),
                 cdr: Box::new(SExpr::Cons(
                     Cons {
-                        car: Box::new(SExpr::Nil(SourceLoc {
-                            line: 0,
-                            idx: 3,
-                            width: 2,
-                        })),
-                        cdr: Box::new(SExpr::Nil(SourceLoc {
-                            line: 0,
-                            idx: 3,
-                            width: 2,
-                        })),
+                        car: Box::new(SExpr::Nil(Span { lo: 3, hi: 5 })),
+                        cdr: Box::new(SExpr::Nil(Span { lo: 3, hi: 5 })),
                     },
-                    SourceLoc {
-                        line: 0,
-                        idx: 3,
-                        width: 2,
-                    },
+                    Span { lo: 3, hi: 5 },
                 )),
             },
-            SourceLoc {
-                line: 0,
-                idx: 1,
-                width: 4,
-            },
+            Span { lo: 1, hi: 5 },
         );
 
         let list = SExpr::Cons(
             Cons {
-                car: Box::new(SExpr::Id(
-                    Id::new("quote", []),
-                    SourceLoc {
-                        line: 0,
-                        idx: 0,
-                        width: 1,
-                    },
-                )),
+                car: Box::new(SExpr::Id(Id::new("quote", []), Span { lo: 0, hi: 1 })),
                 cdr: Box::new(SExpr::Cons(
                     Cons {
                         car: Box::new(inner_list),
-                        cdr: Box::new(SExpr::Nil(SourceLoc {
-                            line: 0,
-                            idx: 1,
-                            width: 4,
-                        })),
+                        cdr: Box::new(SExpr::Nil(Span { lo: 1, hi: 5 })),
                     },
-                    SourceLoc {
-                        line: 0,
-                        idx: 1,
-                        width: 4,
-                    },
+                    Span { lo: 1, hi: 5 },
                 )),
             },
-            SourceLoc {
-                line: 0,
-                idx: 0,
-                width: 5,
-            },
+            Span { lo: 0, hi: 5 },
         );
 
         assert!(parse(&tokenize(src).unwrap()).unwrap().is_idential(&list));
@@ -628,25 +450,10 @@ mod tests {
         let src = "(1.000)";
         let list = SExpr::Cons(
             Cons {
-                car: Box::new(SExpr::Num(
-                    Num(1.0),
-                    SourceLoc {
-                        line: 0,
-                        idx: 1,
-                        width: 5,
-                    },
-                )),
-                cdr: Box::new(SExpr::Nil(SourceLoc {
-                    line: 0,
-                    idx: 6,
-                    width: 1,
-                })),
+                car: Box::new(SExpr::Num(Num(1.0), Span { lo: 1, hi: 6 })),
+                cdr: Box::new(SExpr::Nil(Span { lo: 6, hi: 7 })),
             },
-            SourceLoc {
-                line: 0,
-                idx: 0,
-                width: 7,
-            },
+            Span { lo: 0, hi: 7 },
         );
 
         assert!(parse(&tokenize(src).unwrap()).unwrap().is_idential(&list));
@@ -664,57 +471,23 @@ mod tests {
 ";
         let inner_list = SExpr::Cons(
             Cons {
-                car: Box::new(SExpr::Num(
-                    Num(1.0),
-                    SourceLoc {
-                        line: 3,
-                        idx: 10,
-                        width: 1,
-                    },
-                )),
+                car: Box::new(SExpr::Num(Num(1.0), Span { lo: 10, hi: 11 })),
                 cdr: Box::new(SExpr::Cons(
                     Cons {
-                        car: Box::new(SExpr::Num(
-                            Num(2.0),
-                            SourceLoc {
-                                line: 4,
-                                idx: 15,
-                                width: 3,
-                            },
-                        )),
-                        cdr: Box::new(SExpr::Nil(SourceLoc {
-                            line: 5,
-                            idx: 21,
-                            width: 1,
-                        })),
+                        car: Box::new(SExpr::Num(Num(2.0), Span { lo: 15, hi: 18 })),
+                        cdr: Box::new(SExpr::Nil(Span { lo: 21, hi: 22 })),
                     },
-                    SourceLoc {
-                        line: 4,
-                        idx: 15,
-                        width: 7,
-                    },
+                    Span { lo: 15, hi: 22 },
                 )),
             },
-            SourceLoc {
-                line: 2,
-                idx: 5,
-                width: 17,
-            },
+            Span { lo: 5, hi: 22 },
         );
         let list = SExpr::Cons(
             Cons {
                 car: Box::new(inner_list),
-                cdr: Box::new(SExpr::Nil(SourceLoc {
-                    line: 6,
-                    idx: 23,
-                    width: 1,
-                })),
+                cdr: Box::new(SExpr::Nil(Span { lo: 23, hi: 24 })),
             },
-            SourceLoc {
-                line: 1,
-                idx: 1,
-                width: 23,
-            },
+            Span { lo: 1, hi: 24 },
         );
         assert!(parse(&tokenize(src).unwrap()).unwrap().is_idential(&list));
     }
@@ -731,38 +504,13 @@ mod tests {
 ";
         let inner_list = SExpr::Vector(
             Vector(vec![
-                SExpr::Num(
-                    Num(1.0),
-                    SourceLoc {
-                        line: 3,
-                        idx: 12,
-                        width: 1,
-                    },
-                ),
-                SExpr::Num(
-                    Num(2.0),
-                    SourceLoc {
-                        line: 4,
-                        idx: 17,
-                        width: 3,
-                    },
-                ),
+                SExpr::Num(Num(1.0), Span { lo: 12, hi: 13 }),
+                SExpr::Num(Num(2.0), Span { lo: 17, hi: 20 }),
             ]),
-            SourceLoc {
-                line: 2,
-                idx: 6,
-                width: 18,
-            },
+            Span { lo: 6, hi: 24 },
         );
 
-        let list = SExpr::Vector(
-            Vector(vec![inner_list]),
-            SourceLoc {
-                line: 1,
-                idx: 1,
-                width: 25,
-            },
-        );
+        let list = SExpr::Vector(Vector(vec![inner_list]), Span { lo: 1, hi: 26 });
 
         assert!(parse(&tokenize(src).unwrap()).unwrap().is_idential(&list));
     }
@@ -783,54 +531,18 @@ mod tests {
 ";
         let inner_list_0 = SExpr::Vector(
             Vector(vec![
-                SExpr::Num(
-                    Num(1.0),
-                    SourceLoc {
-                        line: 3,
-                        idx: 11,
-                        width: 1,
-                    },
-                ),
-                SExpr::Num(
-                    Num(2.0),
-                    SourceLoc {
-                        line: 4,
-                        idx: 16,
-                        width: 3,
-                    },
-                ),
+                SExpr::Num(Num(1.0), Span { lo: 11, hi: 12 }),
+                SExpr::Num(Num(2.0), Span { lo: 16, hi: 19 }),
             ]),
-            SourceLoc {
-                line: 2,
-                idx: 5,
-                width: 18,
-            },
+            Span { lo: 5, hi: 23 },
         );
 
         let inner_list_1 = SExpr::Vector(
             Vector(vec![
-                SExpr::Num(
-                    Num(3.0),
-                    SourceLoc {
-                        line: 7,
-                        idx: 32,
-                        width: 1,
-                    },
-                ),
-                SExpr::Num(
-                    Num(4.0),
-                    SourceLoc {
-                        line: 8,
-                        idx: 37,
-                        width: 3,
-                    },
-                ),
+                SExpr::Num(Num(3.0), Span { lo: 32, hi: 33 }),
+                SExpr::Num(Num(4.0), Span { lo: 37, hi: 40 }),
             ]),
-            SourceLoc {
-                line: 6,
-                idx: 26,
-                width: 18,
-            },
+            Span { lo: 26, hi: 44 },
         );
 
         let list = SExpr::Cons(
@@ -839,24 +551,12 @@ mod tests {
                 cdr: Box::new(SExpr::Cons(
                     Cons {
                         car: Box::new(inner_list_1),
-                        cdr: Box::new(SExpr::Nil(SourceLoc {
-                            line: 10,
-                            idx: 45,
-                            width: 1,
-                        })),
+                        cdr: Box::new(SExpr::Nil(Span { lo: 45, hi: 46 })),
                     },
-                    SourceLoc {
-                        line: 6,
-                        idx: 26,
-                        width: 20,
-                    },
+                    Span { lo: 26, hi: 46 },
                 )),
             },
-            SourceLoc {
-                line: 1,
-                idx: 1,
-                width: 45,
-            },
+            Span { lo: 1, hi: 46 },
         );
 
         assert!(parse(&tokenize(src).unwrap()).unwrap().is_idential(&list));
@@ -873,28 +573,10 @@ mod tests {
 ";
         let pair = SExpr::Cons(
             Cons {
-                car: Box::new(SExpr::Num(
-                    Num(1.0),
-                    SourceLoc {
-                        line: 2,
-                        idx: 11,
-                        width: 1,
-                    },
-                )),
-                cdr: Box::new(SExpr::Num(
-                    Num(2.0),
-                    SourceLoc {
-                        line: 4,
-                        idx: 31,
-                        width: 3,
-                    },
-                )),
+                car: Box::new(SExpr::Num(Num(1.0), Span { lo: 11, hi: 12 })),
+                cdr: Box::new(SExpr::Num(Num(2.0), Span { lo: 31, hi: 34 })),
             },
-            SourceLoc {
-                line: 1,
-                idx: 1,
-                width: 35,
-            },
+            Span { lo: 1, hi: 36 },
         );
 
         assert!(parse(&tokenize(src).unwrap()).unwrap().is_idential(&pair));
@@ -912,47 +594,18 @@ mod tests {
 ";
         let pair = SExpr::Cons(
             Cons {
-                car: Box::new(SExpr::Num(
-                    Num(1.0),
-                    SourceLoc {
-                        line: 3,
-                        idx: 21,
-                        width: 1,
-                    },
-                )),
-                cdr: Box::new(SExpr::Num(
-                    Num(2.0),
-                    SourceLoc {
-                        line: 5,
-                        idx: 41,
-                        width: 3,
-                    },
-                )),
+                car: Box::new(SExpr::Num(Num(1.0), Span { lo: 21, hi: 22 })),
+                cdr: Box::new(SExpr::Num(Num(2.0), Span { lo: 41, hi: 44 })),
             },
-            SourceLoc {
-                line: 3,
-                idx: 21,
-                width: 25,
-            },
+            Span { lo: 21, hi: 46 },
         );
 
         let list = SExpr::Cons(
             Cons {
-                car: Box::new(SExpr::Num(
-                    Num(0.0),
-                    SourceLoc {
-                        line: 2,
-                        idx: 11,
-                        width: 1,
-                    },
-                )),
+                car: Box::new(SExpr::Num(Num(0.0), Span { lo: 11, hi: 12 })),
                 cdr: Box::new(pair),
             },
-            SourceLoc {
-                line: 1,
-                idx: 1,
-                width: 45,
-            },
+            Span { lo: 1, hi: 46 },
         );
 
         assert!(parse(&tokenize(src).unwrap()).unwrap().is_idential(&list));
@@ -965,64 +618,24 @@ mod tests {
          (3 . 4))";
         let inner_pair_0 = SExpr::Cons(
             Cons {
-                car: Box::new(SExpr::Num(
-                    Num(1.0),
-                    SourceLoc {
-                        line: 1,
-                        idx: 11,
-                        width: 1,
-                    },
-                )),
-                cdr: Box::new(SExpr::Num(
-                    Num(2.0),
-                    SourceLoc {
-                        line: 1,
-                        idx: 15,
-                        width: 1,
-                    },
-                )),
+                car: Box::new(SExpr::Num(Num(1.0), Span { lo: 11, hi: 12 })),
+                cdr: Box::new(SExpr::Num(Num(2.0), Span { lo: 15, hi: 16 })),
             },
-            SourceLoc {
-                line: 1,
-                idx: 10,
-                width: 7,
-            },
+            Span { lo: 10, hi: 17 },
         );
         let inner_pair_1 = SExpr::Cons(
             Cons {
-                car: Box::new(SExpr::Num(
-                    Num(3.0),
-                    SourceLoc {
-                        line: 2,
-                        idx: 30,
-                        width: 1,
-                    },
-                )),
-                cdr: Box::new(SExpr::Num(
-                    Num(4.0),
-                    SourceLoc {
-                        line: 2,
-                        idx: 34,
-                        width: 1,
-                    },
-                )),
+                car: Box::new(SExpr::Num(Num(3.0), Span { lo: 30, hi: 31 })),
+                cdr: Box::new(SExpr::Num(Num(4.0), Span { lo: 34, hi: 35 })),
             },
-            SourceLoc {
-                line: 2,
-                idx: 29,
-                width: 7,
-            },
+            Span { lo: 29, hi: 36 },
         );
         let outer_pair = SExpr::Cons(
             Cons {
                 car: Box::new(inner_pair_0),
                 cdr: Box::new(inner_pair_1),
             },
-            SourceLoc {
-                line: 1,
-                idx: 9,
-                width: 28,
-            },
+            Span { lo: 9, hi: 37 },
         );
 
         assert!(
@@ -1039,11 +652,7 @@ mod tests {
             matches!(
                 res,
                 Err(CompilationError {
-                    source_loc: SourceLoc {
-                        line: 0,
-                        idx: 1,
-                        width: 0,
-                    },
+                    span: Span { lo: 1, hi: 1 },
                     reason: _,
                 })
             ),
@@ -1059,11 +668,7 @@ mod tests {
             matches!(
                 res,
                 Err(CompilationError {
-                    source_loc: SourceLoc {
-                        line: 1,
-                        idx: 7,
-                        width: 0,
-                    },
+                    span: Span { lo: 7, hi: 7 },
                     reason: _,
                 })
             ),
@@ -1079,11 +684,7 @@ mod tests {
             matches!(
                 res,
                 Err(CompilationError {
-                    source_loc: SourceLoc {
-                        line: 1,
-                        idx: 8,
-                        width: 0,
-                    },
+                    span: Span { lo: 8, hi: 8 },
                     reason: _,
                 })
             ),
@@ -1099,11 +700,7 @@ mod tests {
             matches!(
                 res,
                 Err(CompilationError {
-                    source_loc: SourceLoc {
-                        line: 1,
-                        idx: 8,
-                        width: 0,
-                    },
+                    span: Span { lo: 8, hi: 8 },
                     reason: _,
                 })
             ),
@@ -1119,11 +716,7 @@ mod tests {
             matches!(
                 res,
                 Err(CompilationError {
-                    source_loc: SourceLoc {
-                        line: 0,
-                        idx: 8,
-                        width: 1,
-                    },
+                    span: Span { lo: 8, hi: 9 },
                     reason: _,
                 })
             ),
@@ -1139,11 +732,7 @@ mod tests {
             matches!(
                 res,
                 Err(CompilationError {
-                    source_loc: SourceLoc {
-                        line: 0,
-                        idx: 8,
-                        width: 1,
-                    },
+                    span: Span { lo: 8, hi: 9 },
                     reason: _,
                 })
             ),

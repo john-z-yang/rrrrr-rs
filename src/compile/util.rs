@@ -3,20 +3,18 @@ use super::sexpr::{Cons, SExpr};
 #[macro_export]
 macro_rules! sexpr {
     () => {
-        $crate::compile::sexpr::SExpr::Nil(SourceLoc {
-            line: 0,
-            idx: 0,
-            width: 1,
+        $crate::compile::sexpr::SExpr::Nil(Span {
+            lo: 0,
+            hi: 1,
         })
     };
     (..$expr:expr) => {
         $expr
     };
     (..#$symbol:literal) => {
-        $crate::compile::sexpr::SExpr::Id(Id::new($symbol), SourceLoc {
-            line: 0,
-            idx: 0,
-            width: 1,
+        $crate::compile::sexpr::SExpr::Id(Id::new($symbol), Span {
+            lo: 0,
+            hi: 1,
         })
     };
     (($($inner:tt)*) $(, $($rest:tt)*)?) => {
@@ -137,14 +135,14 @@ macro_rules! template_sexpr {
     (@
         (($($inner:tt)*) $(, $($rest:tt)*)?) => $targ:ident
     ) => {
-        if let $crate::compile::sexpr::SExpr::Cons(cons, source_loc) = $targ {
+        if let $crate::compile::sexpr::SExpr::Cons(cons, span) = $targ {
             template_sexpr!(($($inner)*) => cons.car.as_ref()).and_then(|car| {
                 Some(
                     $crate::compile::sexpr::SExpr::Cons(
                         $crate::compile::sexpr::Cons::new(
                             car,
                             template_sexpr!(($($($rest)*)?) => cons.cdr.as_ref())?),
-                        *source_loc
+                        *span
                 ))
             })
         } else {
@@ -164,7 +162,7 @@ macro_rules! template_sexpr {
     (@
         ($first:expr $(, $($rest:tt)*)?) => $targ:expr
     ) => {
-        if let $crate::compile::sexpr::SExpr::Cons(cons, source_loc) = $targ {
+        if let $crate::compile::sexpr::SExpr::Cons(cons, span) = $targ {
             template_sexpr!(($($($rest)*)?) => cons.cdr.as_ref()).and_then(
                 |rest| {
                     Some($crate::compile::sexpr::SExpr::Cons(
@@ -172,7 +170,7 @@ macro_rules! template_sexpr {
                             $first,
                             rest
                         ),
-                        *source_loc,
+                        *span,
                     ))
                 }
             )
@@ -212,17 +210,15 @@ where
     F: FnMut(&SExpr) -> SExpr,
 {
     match sexpr {
-        SExpr::Nil(source_loc) => SExpr::Nil(*source_loc),
-        SExpr::Cons(cons, source_loc) => {
-            SExpr::Cons(Cons::new(op(&cons.car), map(op, &cons.cdr)), *source_loc)
-        }
+        SExpr::Nil(span) => SExpr::Nil(*span),
+        SExpr::Cons(cons, span) => SExpr::Cons(Cons::new(op(&cons.car), map(op, &cons.cdr)), *span),
         _ => op(sexpr),
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use crate::compile::{lex::tokenize, parse::parse, sexpr::Num, source_loc::SourceLoc};
+    use crate::compile::{lex::tokenize, parse::parse, sexpr::Num, span::Span};
 
     use super::*;
 
@@ -238,7 +234,7 @@ mod tests {
         let original = parse(&tokenize("(0)").unwrap()).unwrap();
         let templated = template_sexpr!(
             (
-                SExpr::Num(Num(1.0), SourceLoc { line: 0, idx: 1, width: 1 })
+                SExpr::Num(Num(1.0), Span {lo: 1, hi: 2 })
             ) => &original)
         .unwrap();
         assert!(templated.is_idential(&parse(&tokenize("(1)").unwrap()).unwrap()));
@@ -249,8 +245,8 @@ mod tests {
         let original = parse(&tokenize("(0 1)").unwrap()).unwrap();
         let templated = template_sexpr!(
             (
-                SExpr::Num(Num(1.0), SourceLoc { line: 0, idx: 1, width: 1 }),
-                SExpr::Num(Num(2.0), SourceLoc { line: 0, idx: 3, width: 1 })
+                SExpr::Num(Num(1.0), Span { lo: 1, hi: 2 }),
+                SExpr::Num(Num(2.0), Span { lo: 3, hi: 4 })
             ) => &original)
         .unwrap();
         assert!(templated.is_idential(&parse(&tokenize("(1 2)").unwrap()).unwrap()));
@@ -261,8 +257,8 @@ mod tests {
         let original = parse(&tokenize("((0) 1)").unwrap()).unwrap();
         let templated = template_sexpr!(
             (
-                (SExpr::Num(Num(1.0), SourceLoc { line: 0, idx: 2, width: 1 })),
-                SExpr::Num(Num(2.0), SourceLoc { line: 0, idx: 5, width: 1 })
+                (SExpr::Num(Num(1.0), Span { lo: 2, hi: 3 })),
+                SExpr::Num(Num(2.0), Span { lo: 5, hi: 6 })
             ) => &original)
         .unwrap();
         assert!(templated.is_idential(&parse(&tokenize("((1) 2)").unwrap()).unwrap()));
@@ -273,9 +269,9 @@ mod tests {
         let original = parse(&tokenize("(0 (1) 2)").unwrap()).unwrap();
         let templated = template_sexpr!(
             (
-                SExpr::Num(Num(1.0), SourceLoc { line: 0, idx: 1, width: 1 }),
-                (SExpr::Num(Num(2.0), SourceLoc { line: 0, idx: 4, width: 1 })),
-                SExpr::Num(Num(3.0), SourceLoc { line: 0, idx: 7, width: 1 })
+                SExpr::Num(Num(1.0), Span { lo: 1, hi: 2 }),
+                (SExpr::Num(Num(2.0), Span { lo: 4, hi: 5 })),
+                SExpr::Num(Num(3.0), Span { lo: 7, hi: 8 })
             ) => &original)
         .unwrap();
         assert!(templated.is_idential(&parse(&tokenize("(1 (2) 3)").unwrap()).unwrap()));
@@ -286,8 +282,8 @@ mod tests {
         let original = parse(&tokenize("(0 (1))").unwrap()).unwrap();
         let templated = template_sexpr!(
             (
-                SExpr::Num(Num(1.0), SourceLoc { line: 0, idx: 1, width: 1 }),
-                (SExpr::Num(Num(2.0), SourceLoc { line: 0, idx: 4, width: 1 }))
+                SExpr::Num(Num(1.0), Span { lo: 1, hi: 2 }),
+                (SExpr::Num(Num(2.0), Span { lo: 4, hi: 5 }))
             ) => &original)
         .unwrap();
         assert!(templated.is_idential(&parse(&tokenize("(1 (2))").unwrap()).unwrap()));

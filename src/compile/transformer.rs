@@ -4,7 +4,7 @@ use crate::{compile::util::for_each, match_sexpr};
 
 use super::{
     sexpr::{Cons, Id, SExpr, Symbol},
-    source_loc::SourceLoc,
+    span::Span,
 };
 
 // TODO:
@@ -179,41 +179,37 @@ impl SyntaxRule {
         _match_pattern(literals, &self.pattern, sexpr, &mut bindings).map(|_| bindings)
     }
 
-    fn render_template(
-        &self,
-        bindings: &HashMap<Id, SExpr>,
-        application_source_loc: SourceLoc,
-    ) -> SExpr {
+    fn render_template(&self, bindings: &HashMap<Id, SExpr>, application_span: Span) -> SExpr {
         fn _render_template(
             template: &SExpr,
             bindings: &HashMap<Id, SExpr>,
-            application_source_loc: SourceLoc,
+            application_span: Span,
         ) -> SExpr {
             match template {
                 SExpr::Id(pattern, _) => bindings
                     .get(pattern)
-                    .unwrap_or(&template.update_source_loc(application_source_loc))
+                    .unwrap_or(&template.update_span(application_span))
                     .clone(),
                 SExpr::Cons(pattern, _) => match pattern.car.as_ref() {
                     SExpr::Id(id, _) if id.symbol.0 == "..." => bindings.get(id).unwrap().clone(),
                     _ => SExpr::Cons(
                         Cons::new(
-                            _render_template(&pattern.car, bindings, application_source_loc),
-                            _render_template(&pattern.cdr, bindings, application_source_loc),
+                            _render_template(&pattern.car, bindings, application_span),
+                            _render_template(&pattern.cdr, bindings, application_span),
                         ),
-                        application_source_loc,
+                        application_span,
                     ),
                 },
-                _ => template.update_source_loc(application_source_loc),
+                _ => template.update_span(application_span),
             }
         }
 
-        _render_template(&self.template, bindings, application_source_loc)
+        _render_template(&self.template, bindings, application_span)
     }
 
     pub(crate) fn apply(&self, literals: &HashSet<Symbol>, application: &SExpr) -> Option<SExpr> {
         let bindings = self.match_pattern(literals, application)?;
-        Some(self.render_template(&bindings, application.get_source_loc()))
+        Some(self.render_template(&bindings, application.get_span()))
     }
 }
 
@@ -256,7 +252,7 @@ mod tests {
         lex::tokenize,
         parse::parse,
         sexpr::{Bool, Num},
-        source_loc::SourceLoc,
+        span::Span,
     };
 
     use super::*;
@@ -279,11 +275,7 @@ mod tests {
         (
           mac 3
         )";
-        let callsite_src_loc = SourceLoc {
-            line: 1,
-            idx: 9,
-            width: 27,
-        };
+        let callsite_src_loc = Span { lo: 9, hi: 36 };
 
         let result = transformer
             .transform(&introduce(&parse(&tokenize(src).unwrap()).unwrap()))
@@ -294,14 +286,7 @@ mod tests {
                 SExpr::Cons(
                     Cons::new(
                         SExpr::Num(Num(2.0), callsite_src_loc),
-                        SExpr::Num(
-                            Num(3.0),
-                            SourceLoc {
-                                line: 2,
-                                idx: 25,
-                                width: 1,
-                            },
-                        ),
+                        SExpr::Num(Num(3.0), Span { lo: 25, hi: 26 }),
                     ),
                     callsite_src_loc,
                 ),
@@ -335,14 +320,7 @@ mod tests {
         let result = transformer
             .transform(&introduce(&parse(&tokenize("(and)").unwrap()).unwrap()))
             .unwrap();
-        let expected = &SExpr::Bool(
-            Bool(false),
-            SourceLoc {
-                line: 0,
-                idx: 0,
-                width: 5,
-            },
-        );
+        let expected = &SExpr::Bool(Bool(false), Span { lo: 0, hi: 5 });
 
         assert!(
             result.is_idential(expected),
@@ -372,14 +350,7 @@ mod tests {
                 &parse(&tokenize("(macro 1 a)").unwrap()).unwrap(),
             ))
             .unwrap();
-        let expected = SExpr::Id(
-            Id::new("a", [0]),
-            SourceLoc {
-                line: 0,
-                idx: 9,
-                width: 1,
-            },
-        );
+        let expected = SExpr::Id(Id::new("a", [0]), Span { lo: 9, hi: 10 });
 
         assert!(
             result.is_idential(&expected),
@@ -407,14 +378,7 @@ mod tests {
         let result = transformer
             .transform(&introduce(&parse(&tokenize("(and x)").unwrap()).unwrap()))
             .unwrap();
-        let expected = introduce(&SExpr::Id(
-            Id::new("x", []),
-            SourceLoc {
-                line: 0,
-                idx: 5,
-                width: 1,
-            },
-        ));
+        let expected = introduce(&SExpr::Id(Id::new("x", []), Span { lo: 5, hi: 6 }));
 
         assert!(
             result.is_idential(&expected),
@@ -485,14 +449,7 @@ mod tests {
             transformer
                 .transform(&introduce(&parse(&tokenize("(and)").unwrap()).unwrap()))
                 .unwrap()
-                .is_idential(&SExpr::Bool(
-                    Bool(false),
-                    SourceLoc {
-                        line: 0,
-                        idx: 0,
-                        width: 5
-                    }
-                ))
+                .is_idential(&SExpr::Bool(Bool(false), Span { lo: 0, hi: 5 }))
         );
         assert!(
             transformer
@@ -500,11 +457,7 @@ mod tests {
                 .unwrap()
                 .is_idential(&introduce(&SExpr::Id(
                     Id::new("x", []),
-                    SourceLoc {
-                        line: 0,
-                        idx: 5,
-                        width: 1
-                    }
+                    Span { lo: 5, hi: 6 }
                 )))
         );
         assert_eq!(

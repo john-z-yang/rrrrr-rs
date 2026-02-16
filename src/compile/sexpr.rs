@@ -3,19 +3,19 @@ use std::fmt;
 
 use super::{
     bindings::{ScopeId, Scopes},
-    source_loc::SourceLoc,
+    span::Span,
 };
 
 #[derive(Clone, Debug)]
 pub(crate) enum SExpr {
-    Id(Id, SourceLoc),
-    Cons(Cons, SourceLoc),
-    Nil(SourceLoc),
-    Bool(Bool, SourceLoc),
-    Num(Num, SourceLoc),
-    Char(Char, SourceLoc),
-    Str(Str, SourceLoc),
-    Vector(Vector, SourceLoc),
+    Id(Id, Span),
+    Cons(Cons, Span),
+    Nil(Span),
+    Bool(Bool, Span),
+    Num(Num, Span),
+    Char(Char, Span),
+    Str(Str, Span),
+    Vector(Vector, Span),
 }
 
 #[derive(PartialEq, Clone, Eq, Hash, Debug)]
@@ -261,35 +261,35 @@ impl PartialEq for SExpr {
 }
 
 impl SExpr {
-    pub(crate) fn get_source_loc(&self) -> SourceLoc {
+    pub(crate) fn get_span(&self) -> Span {
         *match self {
-            SExpr::Id(_, source_loc) => source_loc,
-            SExpr::Cons(_, source_loc) => source_loc,
-            SExpr::Nil(source_loc) => source_loc,
-            SExpr::Bool(_, source_loc) => source_loc,
-            SExpr::Num(_, source_loc) => source_loc,
-            SExpr::Char(_, source_loc) => source_loc,
-            SExpr::Str(_, source_loc) => source_loc,
-            SExpr::Vector(_, source_loc) => source_loc,
+            SExpr::Id(_, span) => span,
+            SExpr::Cons(_, span) => span,
+            SExpr::Nil(span) => span,
+            SExpr::Bool(_, span) => span,
+            SExpr::Num(_, span) => span,
+            SExpr::Char(_, span) => span,
+            SExpr::Str(_, span) => span,
+            SExpr::Vector(_, span) => span,
         }
     }
 
-    pub(crate) fn update_source_loc(&self, source_loc: SourceLoc) -> Self {
+    pub(crate) fn update_span(&self, span: Span) -> Self {
         match self {
-            SExpr::Id(id, _) => SExpr::Id(id.clone(), source_loc),
-            SExpr::Cons(cons, _) => SExpr::Cons(cons.clone(), source_loc),
-            SExpr::Nil(_) => SExpr::Nil(source_loc),
-            SExpr::Bool(bool, _) => SExpr::Bool(bool.clone(), source_loc),
-            SExpr::Num(num, _) => SExpr::Num(num.clone(), source_loc),
-            SExpr::Char(char, _) => SExpr::Char(char.clone(), source_loc),
-            SExpr::Str(str, _) => SExpr::Str(str.clone(), source_loc),
-            SExpr::Vector(vector, _) => SExpr::Vector(vector.clone(), source_loc),
+            SExpr::Id(id, _) => SExpr::Id(id.clone(), span),
+            SExpr::Cons(cons, _) => SExpr::Cons(cons.clone(), span),
+            SExpr::Nil(_) => SExpr::Nil(span),
+            SExpr::Bool(bool, _) => SExpr::Bool(bool.clone(), span),
+            SExpr::Num(num, _) => SExpr::Num(num.clone(), span),
+            SExpr::Char(char, _) => SExpr::Char(char.clone(), span),
+            SExpr::Str(str, _) => SExpr::Str(str.clone(), span),
+            SExpr::Vector(vector, _) => SExpr::Vector(vector.clone(), span),
         }
     }
 
     pub(crate) fn cons(car: SExpr, cdr: SExpr) -> Self {
-        let start = car.get_source_loc();
-        let end = cdr.get_source_loc();
+        let start = car.get_span();
+        let end = cdr.get_span();
         Self::Cons(Cons::new(car, cdr), start.combine(end))
     }
 
@@ -303,17 +303,17 @@ impl SExpr {
                     symbol,
                     scopes: scope,
                 },
-                source_loc,
+                span,
             ) => Self::Id(
                 Id {
                     symbol: symbol.clone(),
                     scopes: op(scope),
                 },
-                *source_loc,
+                *span,
             ),
-            Self::Cons(cons, source_loc) => Self::Cons(
+            Self::Cons(cons, span) => Self::Cons(
                 Cons::new(cons.car.adjust_scope(op), cons.cdr.adjust_scope(op)),
-                *source_loc,
+                *span,
             ),
             _ => self.clone(),
         }
@@ -343,7 +343,7 @@ impl SExpr {
 
     #[cfg(test)]
     pub(crate) fn is_idential(&self, other: &Self) -> bool {
-        if self.get_source_loc() != other.get_source_loc() {
+        if self.get_span() != other.get_span() {
             return false;
         }
         if let (Self::Cons(self_cons, _), Self::Cons(other_cons, _)) = (self, other) {
@@ -362,48 +362,40 @@ mod tests {
 
     #[test]
     fn test_add_scope() {
-        let source_loc = SourceLoc {
-            line: 0,
-            idx: 0,
-            width: 1,
-        };
+        let span = Span { lo: 0, hi: 1 };
         let list = sexpr!(
-            SExpr::Id(Id::new("a", [1]), source_loc),
-            (SExpr::Id(Id::new("b", [1]), source_loc)),
-            (SExpr::Id(Id::new("c", [0]), source_loc)),
-            SExpr::Id(Id::new("d", [0, 1]), source_loc),
+            SExpr::Id(Id::new("a", [1]), span),
+            (SExpr::Id(Id::new("b", [1]), span)),
+            (SExpr::Id(Id::new("c", [0]), span)),
+            SExpr::Id(Id::new("d", [0, 1]), span),
         );
         assert_eq!(
             list.add_scope(0).add_scope(2),
             sexpr!(
-                SExpr::Id(Id::new("a", [0, 1, 2]), source_loc),
-                (SExpr::Id(Id::new("b", [0, 1, 2]), source_loc)),
-                (SExpr::Id(Id::new("c", [0, 2]), source_loc)),
-                SExpr::Id(Id::new("d", [0, 1, 2]), source_loc),
+                SExpr::Id(Id::new("a", [0, 1, 2]), span),
+                (SExpr::Id(Id::new("b", [0, 1, 2]), span)),
+                (SExpr::Id(Id::new("c", [0, 2]), span)),
+                SExpr::Id(Id::new("d", [0, 1, 2]), span),
             )
         )
     }
 
     #[test]
     fn test_flip_scope() {
-        let source_loc = SourceLoc {
-            line: 0,
-            idx: 0,
-            width: 1,
-        };
+        let span = Span { lo: 0, hi: 1 };
         let list = sexpr!(
-            SExpr::Id(Id::new("a", [1]), source_loc),
-            (SExpr::Id(Id::new("b", [1]), source_loc)),
-            (SExpr::Id(Id::new("c", [0]), source_loc)),
-            SExpr::Id(Id::new("d", [0, 1]), source_loc),
+            SExpr::Id(Id::new("a", [1]), span),
+            (SExpr::Id(Id::new("b", [1]), span)),
+            (SExpr::Id(Id::new("c", [0]), span)),
+            SExpr::Id(Id::new("d", [0, 1]), span),
         );
         assert_eq!(
             list.flip_scope(0),
             sexpr!(
-                SExpr::Id(Id::new("a", [1, 0]), source_loc),
-                (SExpr::Id(Id::new("b", [1, 0]), source_loc)),
-                (SExpr::Id(Id::new("c", []), source_loc)),
-                SExpr::Id(Id::new("d", [1]), source_loc),
+                SExpr::Id(Id::new("a", [1, 0]), span),
+                (SExpr::Id(Id::new("b", [1, 0]), span)),
+                (SExpr::Id(Id::new("c", []), span)),
+                SExpr::Id(Id::new("d", [1]), span),
             )
         )
     }

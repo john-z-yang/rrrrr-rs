@@ -33,7 +33,7 @@ All compilation modules live under `src/compile/`:
 - **expand.rs** — Macro expander. Entry points: `introduce()` adds core scope to identifiers, `expand()` recursively expands forms (`quote`, `lambda`, `letrec-syntax`, macro applications).
 - **transformer.rs** — Implements R5RS `syntax-rules` pattern matching and template instantiation, including ellipsis (`...`) repetition.
 - **bindings.rs** — Scope-based name resolution for hygienic macros. Maps symbols to binding candidates with scope sets. Core bindings: `letrec-syntax`, `if`, `lambda`, `list`, `cons`, `first`, `second`, `rest`.
-- **source_loc.rs** — Source position tracking (line, index, width) for error reporting.
+- **span.rs** — Source position tracking (lo, hi) for error reporting.
 - **compilation_error.rs** — Error types with pretty-printed source location display.
 - **util.rs** — Helper macros: `sexpr!` (construct S-expressions), `match_sexpr!` (pattern match), `template_sexpr!` (construct templates). Also `first()`, `for_each()`, `map()` utility functions.
 

@@ -114,7 +114,7 @@ mod tests {
             lex::tokenize,
             parse::parse,
             sexpr::{Bool, Id, Num},
-            source_loc::SourceLoc,
+            span::Span,
         },
         sexpr,
     };
@@ -145,17 +145,13 @@ mod tests {
     #[test]
     fn test_introduce() {
         let list = parse(&tokenize("(cons 0 1)").unwrap()).unwrap();
-        let source_loc = SourceLoc {
-            line: 0,
-            idx: 0,
-            width: 0,
-        };
+        let span = Span { lo: 0, hi: 0 };
         assert_eq!(
             introduce(&list),
             sexpr!(
-                SExpr::Id(Id::new("cons", [Bindings::CORE_SCOPE]), source_loc),
-                SExpr::Num(Num(0.0), source_loc),
-                SExpr::Num(Num(1.0), source_loc),
+                SExpr::Id(Id::new("cons", [Bindings::CORE_SCOPE]), span),
+                SExpr::Num(Num(0.0), span),
+                SExpr::Num(Num(1.0), span),
             )
         );
     }
@@ -166,28 +162,24 @@ mod tests {
         let mut env = HashMap::<Symbol, Transformer>::new();
         let lambda_expr = parse(&tokenize("(lambda (x y) (cons x y))").unwrap()).unwrap();
         let result = expand(&introduce(&lambda_expr), &mut bindings, &mut env);
-        let source_loc = SourceLoc {
-            line: 0,
-            idx: 0,
-            width: 0,
-        };
+        let span = Span { lo: 0, hi: 0 };
         let expected = sexpr!(
-            SExpr::Id(Id::new("lambda", [Bindings::CORE_SCOPE]), source_loc),
+            SExpr::Id(Id::new("lambda", [Bindings::CORE_SCOPE]), span),
             (
-                SExpr::Id(Id::new("x", [Bindings::CORE_SCOPE, 1]), source_loc),
-                SExpr::Id(Id::new("y", [Bindings::CORE_SCOPE, 1]), source_loc),
+                SExpr::Id(Id::new("x", [Bindings::CORE_SCOPE, 1]), span),
+                SExpr::Id(Id::new("y", [Bindings::CORE_SCOPE, 1]), span),
             ),
             (
-                SExpr::Id(Id::new("cons", [Bindings::CORE_SCOPE, 1]), source_loc),
-                SExpr::Id(Id::new("x", [Bindings::CORE_SCOPE, 1]), source_loc),
-                SExpr::Id(Id::new("y", [Bindings::CORE_SCOPE, 1]), source_loc),
+                SExpr::Id(Id::new("cons", [Bindings::CORE_SCOPE, 1]), span),
+                SExpr::Id(Id::new("x", [Bindings::CORE_SCOPE, 1]), span),
+                SExpr::Id(Id::new("y", [Bindings::CORE_SCOPE, 1]), span),
             ),
         );
         assert_eq!(result, expected);
     }
 
     #[test]
-    fn test_expand_maintains_source_loc() {
+    fn test_expand_maintains_span() {
         let mut bindings = Bindings::new();
         let mut env = HashMap::<Symbol, Transformer>::new();
         let src = "
@@ -202,15 +194,15 @@ mod tests {
         let result = expand(&introduce(&lambda_expr), &mut bindings, &mut env);
         let expected = template_sexpr!(
             (
-                SExpr::Id(Id::new("lambda", [Bindings::CORE_SCOPE]), SourceLoc { line: 1, idx: 10, width: 6 }),
+                SExpr::Id(Id::new("lambda", [Bindings::CORE_SCOPE]), Span { lo: 10, hi: 16 }),
                 (
-                    SExpr::Id(Id::new("x", [Bindings::CORE_SCOPE, 1]), SourceLoc { line: 2, idx: 28, width: 1 }),
-                    SExpr::Id(Id::new("y", [Bindings::CORE_SCOPE, 1]), SourceLoc { line: 2, idx: 30, width: 1 }),
+                    SExpr::Id(Id::new("x", [Bindings::CORE_SCOPE, 1]), Span { lo: 28, hi: 29 }),
+                    SExpr::Id(Id::new("y", [Bindings::CORE_SCOPE, 1]), Span { lo: 30, hi: 31 }),
                 ),
                 (
-                    SExpr::Id(Id::new("cons", [Bindings::CORE_SCOPE, 1]), SourceLoc { line: 3, idx: 44, width: 4 }),
-                    SExpr::Id(Id::new("x", [Bindings::CORE_SCOPE, 1]), SourceLoc { line: 4, idx: 61, width: 1 }),
-                    SExpr::Id(Id::new("y", [Bindings::CORE_SCOPE, 1]), SourceLoc { line: 5, idx: 75, width: 1 }),
+                    SExpr::Id(Id::new("cons", [Bindings::CORE_SCOPE, 1]), Span { lo: 44, hi: 48 }),
+                    SExpr::Id(Id::new("x", [Bindings::CORE_SCOPE, 1]), Span { lo: 61, hi: 62 }),
+                    SExpr::Id(Id::new("y", [Bindings::CORE_SCOPE, 1]), Span { lo: 75, hi: 76 }),
                 )
             ) => &parse(&tokenize(src).unwrap()).unwrap()
         )
@@ -235,27 +227,23 @@ mod tests {
         )
         .unwrap();
         let result = expand(&introduce(&lambda_expr), &mut bindings, &mut env);
-        let source_loc = SourceLoc {
-            line: 0,
-            idx: 0,
-            width: 0,
-        };
+        let span = Span { lo: 0, hi: 0 };
         let expected = sexpr!(
-            SExpr::Id(Id::new("lambda", [Bindings::CORE_SCOPE]), source_loc),
-            (SExpr::Id(Id::new("x", [Bindings::CORE_SCOPE, 1]), source_loc)),
+            SExpr::Id(Id::new("lambda", [Bindings::CORE_SCOPE]), span),
+            (SExpr::Id(Id::new("x", [Bindings::CORE_SCOPE, 1]), span)),
             (
-                SExpr::Id(Id::new("lambda", [Bindings::CORE_SCOPE, 1]), source_loc),
-                (SExpr::Id(Id::new("y", [Bindings::CORE_SCOPE, 1, 2]), source_loc)),
+                SExpr::Id(Id::new("lambda", [Bindings::CORE_SCOPE, 1]), span),
+                (SExpr::Id(Id::new("y", [Bindings::CORE_SCOPE, 1, 2]), span)),
                 (
-                    SExpr::Id(Id::new("cons", [Bindings::CORE_SCOPE, 1, 2]), source_loc),
-                    SExpr::Id(Id::new("x", [Bindings::CORE_SCOPE, 1, 2]), source_loc),
-                    SExpr::Id(Id::new("y", [Bindings::CORE_SCOPE, 1, 2]), source_loc),
+                    SExpr::Id(Id::new("cons", [Bindings::CORE_SCOPE, 1, 2]), span),
+                    SExpr::Id(Id::new("x", [Bindings::CORE_SCOPE, 1, 2]), span),
+                    SExpr::Id(Id::new("y", [Bindings::CORE_SCOPE, 1, 2]), span),
                 )
             ),
             (
-                SExpr::Id(Id::new("cons", [Bindings::CORE_SCOPE, 1]), source_loc),
-                SExpr::Id(Id::new("x", [Bindings::CORE_SCOPE, 1]), source_loc),
-                SExpr::Id(Id::new("x", [Bindings::CORE_SCOPE, 1]), source_loc),
+                SExpr::Id(Id::new("cons", [Bindings::CORE_SCOPE, 1]), span),
+                SExpr::Id(Id::new("x", [Bindings::CORE_SCOPE, 1]), span),
+                SExpr::Id(Id::new("x", [Bindings::CORE_SCOPE, 1]), span),
             ),
         );
         assert_eq!(result, expected);
@@ -274,14 +262,10 @@ mod tests {
             .unwrap(),
         )
         .unwrap();
-        let source_loc = SourceLoc {
-            line: 0,
-            idx: 0,
-            width: 0,
-        };
+        let span = Span { lo: 0, hi: 0 };
         assert_eq!(
             expand(&introduce(&sexpr), &mut bindings, &mut env),
-            sexpr!(SExpr::Bool(Bool(false), source_loc))
+            sexpr!(SExpr::Bool(Bool(false), span))
         );
     }
 
@@ -386,16 +370,12 @@ mod tests {
 
         let sexpr = parse(&tokenize("(and list list)").unwrap()).unwrap();
         let result = expand(&introduce(&sexpr), &mut bindings, &mut env);
-        let source_loc = SourceLoc {
-            line: 0,
-            idx: 0,
-            width: 0,
-        };
+        let span = Span { lo: 0, hi: 0 };
         let expected = sexpr!(
-            SExpr::Id(Id::new("if", [Bindings::CORE_SCOPE, 1]), source_loc),
-            SExpr::Id(Id::new("list", [Bindings::CORE_SCOPE]), source_loc),
-            SExpr::Id(Id::new("list", [Bindings::CORE_SCOPE]), source_loc),
-            SExpr::Bool(Bool(false), source_loc),
+            SExpr::Id(Id::new("if", [Bindings::CORE_SCOPE, 1]), span),
+            SExpr::Id(Id::new("list", [Bindings::CORE_SCOPE]), span),
+            SExpr::Id(Id::new("list", [Bindings::CORE_SCOPE]), span),
+            SExpr::Bool(Bool(false), span),
         );
         assert_eq!(result, expected);
     }
@@ -436,26 +416,22 @@ mod tests {
         // (if t (if t (if t (and t) f) f) f)
         // (if t (if t (if t t f) f) f) f)
         let result = expand(&introduce(&sexpr), &mut bindings, &mut env);
-        let source_loc = SourceLoc {
-            line: 0,
-            idx: 0,
-            width: 0,
-        };
+        let span = Span { lo: 0, hi: 0 };
         let expected = sexpr!(
-            SExpr::Id(Id::new("if", [Bindings::CORE_SCOPE, 1]), source_loc),
-            SExpr::Bool(Bool(true), source_loc),
+            SExpr::Id(Id::new("if", [Bindings::CORE_SCOPE, 1]), span),
+            SExpr::Bool(Bool(true), span),
             (
-                SExpr::Id(Id::new("if", [Bindings::CORE_SCOPE, 2]), source_loc),
-                SExpr::Bool(Bool(true), source_loc),
+                SExpr::Id(Id::new("if", [Bindings::CORE_SCOPE, 2]), span),
+                SExpr::Bool(Bool(true), span),
                 (
-                    SExpr::Id(Id::new("if", [Bindings::CORE_SCOPE, 3]), source_loc),
-                    SExpr::Bool(Bool(true), source_loc),
-                    SExpr::Bool(Bool(true), source_loc),
-                    SExpr::Bool(Bool(false), source_loc),
+                    SExpr::Id(Id::new("if", [Bindings::CORE_SCOPE, 3]), span),
+                    SExpr::Bool(Bool(true), span),
+                    SExpr::Bool(Bool(true), span),
+                    SExpr::Bool(Bool(false), span),
                 ),
-                SExpr::Bool(Bool(false), source_loc),
+                SExpr::Bool(Bool(false), span),
             ),
-            SExpr::Bool(Bool(false), source_loc),
+            SExpr::Bool(Bool(false), span),
         );
         assert_eq!(result, expected);
         assert_eq!(
@@ -498,15 +474,11 @@ mod tests {
 
         let sexpr = parse(&tokenize("(my-macro x)").unwrap()).unwrap();
         let result = expand(&introduce(&sexpr), &mut bindings, &mut env);
-        let source_loc = SourceLoc {
-            line: 0,
-            idx: 0,
-            width: 0,
-        };
+        let span = Span { lo: 0, hi: 0 };
         let expected = sexpr!(
-            SExpr::Id(Id::new("lambda", [Bindings::CORE_SCOPE, 1]), source_loc),
-            (SExpr::Id(Id::new("x", [Bindings::CORE_SCOPE, 1, 2]), source_loc)),
-            SExpr::Id(Id::new("x", [Bindings::CORE_SCOPE, 2]), source_loc),
+            SExpr::Id(Id::new("lambda", [Bindings::CORE_SCOPE, 1]), span),
+            (SExpr::Id(Id::new("x", [Bindings::CORE_SCOPE, 1, 2]), span)),
+            SExpr::Id(Id::new("x", [Bindings::CORE_SCOPE, 2]), span),
         );
         assert_eq!(result, expected);
         assert_ne!(
@@ -566,31 +538,27 @@ mod tests {
 
         let sexpr = parse(&tokenize("((lambda (temp) (my-or #f temp)) #t)").unwrap()).unwrap();
         let result = expand(&introduce(&sexpr), &mut bindings, &mut env);
-        let source_loc = SourceLoc {
-            line: 0,
-            idx: 0,
-            width: 0,
-        };
+        let span = Span { lo: 0, hi: 0 };
 
         let expected = sexpr!(
             (
-                SExpr::Id(Id::new("lambda", [Bindings::CORE_SCOPE]), source_loc),
-                (SExpr::Id(Id::new("temp", [Bindings::CORE_SCOPE, 1]), source_loc)),
+                SExpr::Id(Id::new("lambda", [Bindings::CORE_SCOPE]), span),
+                (SExpr::Id(Id::new("temp", [Bindings::CORE_SCOPE, 1]), span)),
                 (
                     (
-                        SExpr::Id(Id::new("lambda", [Bindings::CORE_SCOPE, 2]), source_loc),
-                        (SExpr::Id(Id::new("temp", [Bindings::CORE_SCOPE, 2, 3]), source_loc)),
+                        SExpr::Id(Id::new("lambda", [Bindings::CORE_SCOPE, 2]), span),
+                        (SExpr::Id(Id::new("temp", [Bindings::CORE_SCOPE, 2, 3]), span)),
                         (
-                            SExpr::Id(Id::new("if", [Bindings::CORE_SCOPE, 2, 3]), source_loc),
-                            SExpr::Id(Id::new("temp", [Bindings::CORE_SCOPE, 0, 2, 3]), source_loc),
-                            SExpr::Id(Id::new("temp", [Bindings::CORE_SCOPE, 0, 2, 3]), source_loc),
-                            SExpr::Id(Id::new("temp", [Bindings::CORE_SCOPE, 1, 3]), source_loc),
+                            SExpr::Id(Id::new("if", [Bindings::CORE_SCOPE, 2, 3]), span),
+                            SExpr::Id(Id::new("temp", [Bindings::CORE_SCOPE, 0, 2, 3]), span),
+                            SExpr::Id(Id::new("temp", [Bindings::CORE_SCOPE, 0, 2, 3]), span),
+                            SExpr::Id(Id::new("temp", [Bindings::CORE_SCOPE, 1, 3]), span),
                         )
                     ),
-                    SExpr::Bool(Bool(false), source_loc)
+                    SExpr::Bool(Bool(false), span)
                 )
             ),
-            SExpr::Bool(Bool(true), source_loc),
+            SExpr::Bool(Bool(true), span),
         );
 
         assert_eq!(result, expected);
@@ -674,12 +642,8 @@ mod tests {
         .unwrap();
         let result = expand(&introduce(let_syntax_expr), &mut bindings, &mut env);
 
-        let source_loc = SourceLoc {
-            line: 0,
-            idx: 0,
-            width: 0,
-        };
-        let expected = SExpr::Num(Num(1.0), source_loc);
+        let span = Span { lo: 0, hi: 0 };
+        let expected = SExpr::Num(Num(1.0), span);
         assert_eq!(result, expected);
     }
 
@@ -707,30 +671,26 @@ mod tests {
         )
         .unwrap();
         let result = expand(&introduce(let_syntax_expr), &mut bindings, &mut env);
-        let source_loc = SourceLoc {
-            line: 0,
-            idx: 0,
-            width: 0,
-        };
+        let span = Span { lo: 0, hi: 0 };
         let expected = sexpr!(
             (
-                SExpr::Id(Id::new("lambda", [Bindings::CORE_SCOPE, 1]), source_loc),
-                (SExpr::Id(Id::new("temp", [Bindings::CORE_SCOPE, 1, 2]), source_loc)),
+                SExpr::Id(Id::new("lambda", [Bindings::CORE_SCOPE, 1]), span),
+                (SExpr::Id(Id::new("temp", [Bindings::CORE_SCOPE, 1, 2]), span)),
                 (
                     (
-                        SExpr::Id(Id::new("lambda", [Bindings::CORE_SCOPE, 1, 3]), source_loc),
-                        (SExpr::Id(Id::new("temp", [Bindings::CORE_SCOPE, 1, 3, 4]), source_loc)),
+                        SExpr::Id(Id::new("lambda", [Bindings::CORE_SCOPE, 1, 3]), span),
+                        (SExpr::Id(Id::new("temp", [Bindings::CORE_SCOPE, 1, 3, 4]), span)),
                         (
-                            SExpr::Id(Id::new("if", [Bindings::CORE_SCOPE, 1, 3, 4]), source_loc),
-                            SExpr::Id(Id::new("temp", [Bindings::CORE_SCOPE, 1, 3, 4]), source_loc),
-                            SExpr::Id(Id::new("temp", [Bindings::CORE_SCOPE, 1, 3, 4]), source_loc),
-                            SExpr::Id(Id::new("temp", [Bindings::CORE_SCOPE, 1, 2, 4]), source_loc)
+                            SExpr::Id(Id::new("if", [Bindings::CORE_SCOPE, 1, 3, 4]), span),
+                            SExpr::Id(Id::new("temp", [Bindings::CORE_SCOPE, 1, 3, 4]), span),
+                            SExpr::Id(Id::new("temp", [Bindings::CORE_SCOPE, 1, 3, 4]), span),
+                            SExpr::Id(Id::new("temp", [Bindings::CORE_SCOPE, 1, 2, 4]), span)
                         )
                     ),
-                    SExpr::Bool(Bool(false), source_loc)
+                    SExpr::Bool(Bool(false), span)
                 ),
             ),
-            SExpr::Bool(Bool(true), source_loc),
+            SExpr::Bool(Bool(true), span),
         );
         assert_eq!(result, expected);
 
@@ -796,7 +756,7 @@ mod tests {
     }
 
     #[test]
-    fn test_expand_let_syntax_or_macro_0_arg_maintains_source_loc() {
+    fn test_expand_let_syntax_or_macro_0_arg_maintains_span() {
         let mut bindings = Bindings::new();
         let mut env = HashMap::<Symbol, Transformer>::new();
         let let_syntax_expr = &parse(
@@ -819,14 +779,7 @@ mod tests {
         )
         .unwrap();
         let result = expand(&introduce(let_syntax_expr), &mut bindings, &mut env);
-        let expected = SExpr::Bool(
-            Bool(false),
-            SourceLoc {
-                line: 11,
-                idx: 420,
-                width: 4,
-            },
-        );
+        let expected = SExpr::Bool(Bool(false), Span { lo: 420, hi: 424 });
 
         assert!(
             result.is_idential(&expected),
@@ -837,7 +790,7 @@ mod tests {
     }
 
     #[test]
-    fn test_expand_let_syntax_or_macro_1_arg_maintains_source_loc() {
+    fn test_expand_let_syntax_or_macro_1_arg_maintains_span() {
         let mut bindings = Bindings::new();
         let mut env = HashMap::<Symbol, Transformer>::new();
         let let_syntax_expr = &parse(
@@ -860,14 +813,7 @@ mod tests {
         )
         .unwrap();
         let result = expand(&introduce(let_syntax_expr), &mut bindings, &mut env);
-        let expected = SExpr::Num(
-            Num(1.0),
-            SourceLoc {
-                line: 11,
-                idx: 424,
-                width: 1,
-            },
-        );
+        let expected = SExpr::Num(Num(1.0), Span { lo: 424, hi: 425 });
 
         assert!(
             result.is_idential(&expected),

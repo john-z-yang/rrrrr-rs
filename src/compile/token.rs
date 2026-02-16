@@ -2,46 +2,46 @@ use std::fmt;
 
 use super::{
     sexpr::{Bool, Char, Num, Str, Symbol},
-    source_loc::SourceLoc,
+    span::Span,
 };
 
 #[derive(Clone, Debug, PartialEq)]
 pub(crate) enum Token {
-    Id(Symbol, SourceLoc),
-    Bool(Bool, SourceLoc),
-    Num(Num, SourceLoc),
-    Char(Char, SourceLoc),
-    Str(Str, SourceLoc),
-    HashLParen(SourceLoc),
-    CommaAt(SourceLoc),
-    Comma(SourceLoc),
-    LParen(SourceLoc),
-    RParen(SourceLoc),
-    Quote(SourceLoc),
-    Dot(SourceLoc),
-    QuasiQuote(SourceLoc),
-    Pipe(SourceLoc),
-    EoF(SourceLoc),
+    Id(Symbol, Span),
+    Bool(Bool, Span),
+    Num(Num, Span),
+    Char(Char, Span),
+    Str(Str, Span),
+    HashLParen(Span),
+    CommaAt(Span),
+    Comma(Span),
+    LParen(Span),
+    RParen(Span),
+    Quote(Span),
+    Dot(Span),
+    QuasiQuote(Span),
+    Pipe(Span),
+    EoF(Span),
 }
 
 impl Token {
-    pub(crate) fn get_source_loc(&self) -> SourceLoc {
+    pub(crate) fn get_span(&self) -> Span {
         *match self {
-            Token::Id(_, source_loc) => source_loc,
-            Token::Bool(_, source_loc) => source_loc,
-            Token::Num(_, source_loc) => source_loc,
-            Token::Char(_, source_loc) => source_loc,
-            Token::Str(_, source_loc) => source_loc,
-            Token::HashLParen(source_loc) => source_loc,
-            Token::CommaAt(source_loc) => source_loc,
-            Token::Comma(source_loc) => source_loc,
-            Token::LParen(source_loc) => source_loc,
-            Token::RParen(source_loc) => source_loc,
-            Token::Quote(source_loc) => source_loc,
-            Token::Dot(source_loc) => source_loc,
-            Token::QuasiQuote(source_loc) => source_loc,
-            Token::Pipe(source_loc) => source_loc,
-            Token::EoF(source_loc) => source_loc,
+            Token::Id(_, span) => span,
+            Token::Bool(_, span) => span,
+            Token::Num(_, span) => span,
+            Token::Char(_, span) => span,
+            Token::Str(_, span) => span,
+            Token::HashLParen(span) => span,
+            Token::CommaAt(span) => span,
+            Token::Comma(span) => span,
+            Token::LParen(span) => span,
+            Token::RParen(span) => span,
+            Token::Quote(span) => span,
+            Token::Dot(span) => span,
+            Token::QuasiQuote(span) => span,
+            Token::Pipe(span) => span,
+            Token::EoF(span) => span,
         }
     }
 }
