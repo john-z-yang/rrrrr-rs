@@ -2,11 +2,18 @@ use std::collections::HashMap;
 
 use super::{
     bindings::Bindings,
+    compilation_error::Result,
     sexpr::{SExpr, Symbol},
     transformer::Transformer,
-    util::{first, map},
+    util::first,
 };
-use crate::{compile::util::for_each, match_sexpr, template_sexpr};
+use crate::{
+    compile::{
+        compilation_error::CompilationError,
+        util::{try_for_each, try_map},
+    },
+    match_sexpr, template_sexpr,
+};
 
 type Env = HashMap<Symbol, Transformer>;
 
@@ -14,9 +21,12 @@ pub(crate) fn introduce(sexpr: &SExpr) -> SExpr {
     sexpr.add_scope(Bindings::CORE_SCOPE)
 }
 
-pub(crate) fn expand(sexpr: &SExpr, bindings: &mut Bindings, env: &mut Env) -> SExpr {
-    if let SExpr::Nil(_) = sexpr {
-        panic!("Bad syntax");
+pub(crate) fn expand(sexpr: &SExpr, bindings: &mut Bindings, env: &mut Env) -> Result<SExpr> {
+    if let SExpr::Nil(span) = sexpr {
+        return Err(CompilationError {
+            span: *span,
+            reason: "Unexpected nil".to_owned(),
+        });
     };
     if let SExpr::Id(..) = sexpr {
         return expand_id(sexpr, bindings);
@@ -27,32 +37,47 @@ pub(crate) fn expand(sexpr: &SExpr, bindings: &mut Bindings, env: &mut Env) -> S
     match_sexpr! {(..) = sexpr =>
         return expand_fn_application(sexpr, bindings, env);
     };
-    sexpr.clone()
+    Ok(sexpr.clone())
 }
 
-fn expand_id(sexpr: &SExpr, bindings: &mut Bindings) -> SExpr {
-    let SExpr::Id(id, _) = sexpr else {
+fn expand_id(sexpr: &SExpr, bindings: &mut Bindings) -> Result<SExpr> {
+    let SExpr::Id(id, span) = sexpr else {
         unreachable!("expand_id is expecting an ID");
     };
-    assert!(bindings.resolve(id).is_some(), "ID must have a binding");
-    sexpr.clone()
+    bindings.resolve(id).ok_or(CompilationError {
+        span: *span,
+        reason: format!("ID: {} is unbound", id),
+    })?;
+    Ok(sexpr.clone())
 }
 
-fn expand_id_application(sexpr: &SExpr, bindings: &mut Bindings, env: &mut Env) -> SExpr {
+fn expand_id_application(sexpr: &SExpr, bindings: &mut Bindings, env: &mut Env) -> Result<SExpr> {
     let binding = match first(sexpr) {
-        Some(SExpr::Id(id, _)) => bindings.resolve(&id).unwrap(),
+        Some(SExpr::Id(id, span)) => bindings.resolve(&id).ok_or_else(|| CompilationError {
+            span,
+            reason: format!("ID: {} is unbound", id),
+        })?,
         _ => unreachable!("first element of ID application must be an ID"),
     };
 
     match binding.0.as_str() {
-        "quote" | "quote-syntax" => sexpr.clone(),
+        "quote" | "quote-syntax" => Ok(sexpr.clone()),
         "letrec-syntax" => expand_letrec_syntax(sexpr, bindings, env),
         "lambda" => expand_lambda(sexpr, bindings, env),
         _ => {
             if let Some(transformer) = env.get(&binding) {
                 let scope_id = bindings.new_scope_id();
                 let sexpr = sexpr.add_scope(scope_id);
-                let transformed_sexpr = transformer.transform(&sexpr).unwrap();
+                let transformed_sexpr =
+                    transformer
+                        .transform(&sexpr)
+                        .ok_or_else(|| CompilationError {
+                            span: sexpr.get_span(),
+                            reason: format!(
+                                "Unable to apply transformer: {}, no rules match",
+                                binding
+                            ),
+                        })?;
                 expand(&transformed_sexpr.flip_scope(scope_id), bindings, env)
             } else {
                 expand_fn_application(sexpr, bindings, env)
@@ -61,41 +86,57 @@ fn expand_id_application(sexpr: &SExpr, bindings: &mut Bindings, env: &mut Env) 
     }
 }
 
-fn expand_fn_application(sexpr: &SExpr, bindings: &mut Bindings, env: &mut Env) -> SExpr {
-    map(|sub_sexpr| expand(sub_sexpr, bindings, env), sexpr)
+fn expand_fn_application(sexpr: &SExpr, bindings: &mut Bindings, env: &mut Env) -> Result<SExpr> {
+    try_map(|sub_sexpr| expand(sub_sexpr, bindings, env), sexpr)
 }
 
-fn expand_lambda(sexpr: &SExpr, bindings: &mut Bindings, env: &mut Env) -> SExpr {
+fn expand_lambda(sexpr: &SExpr, bindings: &mut Bindings, env: &mut Env) -> Result<SExpr> {
     match_sexpr! {(lambda, (args @ ..), body @ ..) = sexpr =>
         let scope_id = bindings.new_scope_id();
         let args = args.add_scope(scope_id);
 
-        for_each(|arg| {
-            let SExpr::Id(id, _) = arg else {
-                unreachable!("Expected identifiers in function parameters");
-            };
-            let binding = bindings.gen_sym();
-            bindings.add_binding(id, &binding);
-        }, &args);
+        try_for_each(
+            |arg| {
+                let SExpr::Id(id, _) = arg else {
+                    return Err(CompilationError {
+                        span: arg.get_span(),
+                        reason: format!(
+                            "Expected identifiers in function parameters, but got: {}",
+                            arg
+                        ),
+                    });
+                };
+                let binding = bindings.gen_sym();
+                bindings.add_binding(id, &binding);
+                Ok(())
+            },
+            &args,
+        )?;
 
-        let body = map(|sexpr| expand(&sexpr.add_scope(scope_id), bindings, env), body);
-        return template_sexpr!((lambda.clone(), args, ..body) => sexpr).unwrap();
+        let body = try_map(|sexpr| expand(&sexpr.add_scope(scope_id), bindings, env), body)?;
+        return Ok(template_sexpr!((lambda.clone(), args, ..body) => sexpr).unwrap());
     };
-    unreachable!("Invalid use of lambda form: {}", sexpr);
+    Err(CompilationError {
+        span: sexpr.get_span(),
+        reason: "Invalid use of lambda form".to_owned(),
+    })
 }
 
-fn expand_letrec_syntax(sexpr: &SExpr, bindings: &mut Bindings, env: &mut Env) -> SExpr {
+fn expand_letrec_syntax(sexpr: &SExpr, bindings: &mut Bindings, env: &mut Env) -> Result<SExpr> {
     match_sexpr! {(sym("letrec-syntax"), ((keyword, transformer_spec)), body) = sexpr =>
         let scope_id = bindings.new_scope_id();
         let keyword = keyword.add_scope(scope_id);
 
         let SExpr::Id(id, _) = keyword else {
-            unreachable!("Expected identifiers in syntax keyword");
+            return Err(CompilationError {
+                span: keyword.get_span(),
+                reason: format!("Expected identifiers in syntax keyword, but got: {}", keyword)
+            });
         };
         let binding = bindings.gen_sym();
         bindings.add_binding(&id, &binding);
 
-        let transformer = Transformer::new(&transformer_spec.add_scope(scope_id));
+        let transformer = Transformer::new(&transformer_spec.add_scope(scope_id))?;
         env.insert(binding.clone(), transformer);
 
         let res = expand(&body.add_scope(scope_id), bindings, env);
@@ -103,7 +144,10 @@ fn expand_letrec_syntax(sexpr: &SExpr, bindings: &mut Bindings, env: &mut Env) -
 
         return res;
     }
-    unreachable!("Invalid use of let_syntax form: {}", sexpr);
+    Err(CompilationError {
+        span: sexpr.get_span(),
+        reason: "Invalid use of letrec-syntax form".to_owned(),
+    })
 }
 
 #[cfg(test)]
@@ -161,7 +205,7 @@ mod tests {
         let mut bindings = Bindings::new();
         let mut env = HashMap::<Symbol, Transformer>::new();
         let lambda_expr = parse(&tokenize("(lambda (x y) (cons x y))").unwrap()).unwrap();
-        let result = expand(&introduce(&lambda_expr), &mut bindings, &mut env);
+        let result = expand(&introduce(&lambda_expr), &mut bindings, &mut env).unwrap();
         let span = Span { lo: 0, hi: 0 };
         let expected = sexpr!(
             SExpr::Id(Id::new("lambda", [Bindings::CORE_SCOPE]), span),
@@ -191,7 +235,7 @@ mod tests {
           )
         )";
         let lambda_expr = parse(&tokenize(src).unwrap()).unwrap();
-        let result = expand(&introduce(&lambda_expr), &mut bindings, &mut env);
+        let result = expand(&introduce(&lambda_expr), &mut bindings, &mut env).unwrap();
         let expected = template_sexpr!(
             (
                 SExpr::Id(Id::new("lambda", [Bindings::CORE_SCOPE]), Span { lo: 10, hi: 16 }),
@@ -226,7 +270,7 @@ mod tests {
             .unwrap(),
         )
         .unwrap();
-        let result = expand(&introduce(&lambda_expr), &mut bindings, &mut env);
+        let result = expand(&introduce(&lambda_expr), &mut bindings, &mut env).unwrap();
         let span = Span { lo: 0, hi: 0 };
         let expected = sexpr!(
             SExpr::Id(Id::new("lambda", [Bindings::CORE_SCOPE]), span),
@@ -264,7 +308,7 @@ mod tests {
         .unwrap();
         let span = Span { lo: 0, hi: 0 };
         assert_eq!(
-            expand(&introduce(&sexpr), &mut bindings, &mut env),
+            expand(&introduce(&sexpr), &mut bindings, &mut env).unwrap(),
             sexpr!(SExpr::Bool(Bool(false), span))
         );
     }
@@ -289,7 +333,8 @@ mod tests {
                 .unwrap(),
             )
             .unwrap(),
-        ));
+        ))
+        .unwrap();
 
         let mut env = HashMap::from([(
             bindings
@@ -299,7 +344,7 @@ mod tests {
         )]);
 
         let sexpr = parse(&tokenize("(and)").unwrap()).unwrap();
-        let result = expand(&introduce(&sexpr), &mut bindings, &mut env);
+        let result = expand(&introduce(&sexpr), &mut bindings, &mut env).unwrap();
         let expected = parse(&tokenize("#f").unwrap()).unwrap();
         assert_eq!(result, expected);
     }
@@ -324,7 +369,8 @@ mod tests {
                 .unwrap(),
             )
             .unwrap(),
-        ));
+        ))
+        .unwrap();
 
         let mut env = HashMap::from([(
             bindings
@@ -334,7 +380,7 @@ mod tests {
         )]);
 
         let sexpr = introduce(&parse(&tokenize("(and list)").unwrap()).unwrap());
-        let result = expand(&introduce(&sexpr), &mut bindings, &mut env);
+        let result = expand(&introduce(&sexpr), &mut bindings, &mut env).unwrap();
         let expected = introduce(&parse(&tokenize("list").unwrap()).unwrap());
         assert_eq!(result, expected);
     }
@@ -359,7 +405,8 @@ mod tests {
                 .unwrap(),
             )
             .unwrap(),
-        ));
+        ))
+        .unwrap();
 
         let mut env = HashMap::from([(
             bindings
@@ -369,7 +416,7 @@ mod tests {
         )]);
 
         let sexpr = parse(&tokenize("(and list list)").unwrap()).unwrap();
-        let result = expand(&introduce(&sexpr), &mut bindings, &mut env);
+        let result = expand(&introduce(&sexpr), &mut bindings, &mut env).unwrap();
         let span = Span { lo: 0, hi: 0 };
         let expected = sexpr!(
             SExpr::Id(Id::new("if", [Bindings::CORE_SCOPE, 1]), span),
@@ -400,7 +447,8 @@ mod tests {
                 .unwrap(),
             )
             .unwrap(),
-        ));
+        ))
+        .unwrap();
 
         let mut env = HashMap::from([(
             bindings
@@ -415,7 +463,7 @@ mod tests {
         // (if t (if t (and t t) f) f)
         // (if t (if t (if t (and t) f) f) f)
         // (if t (if t (if t t f) f) f) f)
-        let result = expand(&introduce(&sexpr), &mut bindings, &mut env);
+        let result = expand(&introduce(&sexpr), &mut bindings, &mut env).unwrap();
         let span = Span { lo: 0, hi: 0 };
         let expected = sexpr!(
             SExpr::Id(Id::new("if", [Bindings::CORE_SCOPE, 1]), span),
@@ -463,7 +511,8 @@ mod tests {
                 .unwrap(),
             )
             .unwrap(),
-        ));
+        ))
+        .unwrap();
 
         let mut env = HashMap::from([(
             bindings
@@ -473,7 +522,7 @@ mod tests {
         )]);
 
         let sexpr = parse(&tokenize("(my-macro x)").unwrap()).unwrap();
-        let result = expand(&introduce(&sexpr), &mut bindings, &mut env);
+        let result = expand(&introduce(&sexpr), &mut bindings, &mut env).unwrap();
         let span = Span { lo: 0, hi: 0 };
         let expected = sexpr!(
             SExpr::Id(Id::new("lambda", [Bindings::CORE_SCOPE, 1]), span),
@@ -527,7 +576,8 @@ mod tests {
                 .unwrap(),
             )
             .unwrap(),
-        ));
+        ))
+        .unwrap();
 
         let mut env = HashMap::from([(
             bindings
@@ -537,7 +587,7 @@ mod tests {
         )]);
 
         let sexpr = parse(&tokenize("((lambda (temp) (my-or #f temp)) #t)").unwrap()).unwrap();
-        let result = expand(&introduce(&sexpr), &mut bindings, &mut env);
+        let result = expand(&introduce(&sexpr), &mut bindings, &mut env).unwrap();
         let span = Span { lo: 0, hi: 0 };
 
         let expected = sexpr!(
@@ -640,7 +690,7 @@ mod tests {
             .unwrap(),
         )
         .unwrap();
-        let result = expand(&introduce(let_syntax_expr), &mut bindings, &mut env);
+        let result = expand(&introduce(let_syntax_expr), &mut bindings, &mut env).unwrap();
 
         let span = Span { lo: 0, hi: 0 };
         let expected = SExpr::Num(Num(1.0), span);
@@ -670,7 +720,7 @@ mod tests {
             .unwrap(),
         )
         .unwrap();
-        let result = expand(&introduce(let_syntax_expr), &mut bindings, &mut env);
+        let result = expand(&introduce(let_syntax_expr), &mut bindings, &mut env).unwrap();
         let span = Span { lo: 0, hi: 0 };
         let expected = sexpr!(
             (
@@ -778,7 +828,7 @@ mod tests {
             .unwrap(),
         )
         .unwrap();
-        let result = expand(&introduce(let_syntax_expr), &mut bindings, &mut env);
+        let result = expand(&introduce(let_syntax_expr), &mut bindings, &mut env).unwrap();
         let expected = SExpr::Bool(Bool(false), Span { lo: 420, hi: 424 });
 
         assert!(
@@ -812,7 +862,7 @@ mod tests {
             .unwrap(),
         )
         .unwrap();
-        let result = expand(&introduce(let_syntax_expr), &mut bindings, &mut env);
+        let result = expand(&introduce(let_syntax_expr), &mut bindings, &mut env).unwrap();
         let expected = SExpr::Num(Num(1.0), Span { lo: 424, hi: 425 });
 
         assert!(

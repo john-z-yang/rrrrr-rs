@@ -24,7 +24,7 @@ fn main() {
                     let expanded =
                         tokenize(&lines)
                             .and_then(|tokens| parse(&tokens))
-                            .map(|sexpr| {
+                            .and_then(|sexpr| {
                                 expand(
                                     &introduce(&sexpr),
                                     &mut Bindings::new(),

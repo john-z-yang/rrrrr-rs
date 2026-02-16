@@ -1,6 +1,12 @@
 use std::collections::{HashMap, HashSet};
 
-use crate::{compile::util::for_each, match_sexpr};
+use crate::{
+    compile::{
+        compilation_error::{CompilationError, Result},
+        util::try_for_each,
+    },
+    match_sexpr,
+};
 
 use super::{
     sexpr::{Cons, Id, SExpr, Symbol},
@@ -214,27 +220,48 @@ impl SyntaxRule {
 }
 
 impl Transformer {
-    pub(crate) fn new(spec: &SExpr) -> Self {
+    pub(crate) fn new(spec: &SExpr) -> Result<Self> {
         match_sexpr! {(sym("syntax-rules"), (literals_list @ ..), rules @ ..) = spec =>
             let mut literals = HashSet::<Symbol>::new();
-            for_each(|literal| {
-                if let SExpr::Id(Id { symbol, scopes: _ }, _) = literal{
-                    literals.insert(symbol.clone());
-                } else {
-                    unreachable!("Expected symbols in syntax transformer literals");
-                }
-            }, literals_list);
+            try_for_each(
+                |literal| {
+                    if let SExpr::Id(Id { symbol, scopes: _ }, _) = literal {
+                        literals.insert(symbol.clone());
+                        Ok(())
+                    } else {
+                        Err(CompilationError {
+                            span: literal.get_span(),
+                            reason: format!(
+                                "Expected symbols in syntax transformer literals, but got: {}",
+                                literal
+                            ),
+                        })
+                    }
+                },
+                literals_list,
+            )?;
 
             let mut syntax_rules = Vec::<SyntaxRule>::new();
-            for_each(|rule_pair| {
-                match_sexpr! {(pattern, template) = rule_pair =>
-                    syntax_rules.push(SyntaxRule { pattern: pattern.clone(), template: template.clone() });
-                }
-            }, rules);
+            try_for_each(
+                |rule_pair| {
+                    match_sexpr! {(pattern, template) = rule_pair =>
+                        syntax_rules.push(SyntaxRule { pattern: pattern.clone(), template: template.clone() });
+                        return Ok(());
+                    }
+                    Err(CompilationError {
+                        span: rule_pair.get_span(),
+                        reason: "Unrecognized syntax for syntax transformer rule pair".to_owned(),
+                    })
+                },
+                rules,
+            )?;
 
-            return Self { literals, syntax_rules }
+            return Ok(Self { literals, syntax_rules })
         }
-        unreachable!("Unrecognized syntax for syntax transformer")
+        Err(CompilationError {
+            span: spec.get_span(),
+            reason: "Unrecognized syntax for syntax transformer".to_owned(),
+        })
     }
 
     pub(crate) fn transform(&self, application: &SExpr) -> Option<SExpr> {
@@ -269,7 +296,8 @@ mod tests {
                 .unwrap(),
             )
             .unwrap(),
-        ));
+        ))
+        .unwrap();
 
         let src = "
         (
@@ -315,7 +343,8 @@ mod tests {
                 .unwrap(),
             )
             .unwrap(),
-        ));
+        ))
+        .unwrap();
 
         let result = transformer
             .transform(&introduce(&parse(&tokenize("(and)").unwrap()).unwrap()))
@@ -343,7 +372,8 @@ mod tests {
                 .unwrap(),
             )
             .unwrap(),
-        ));
+        ))
+        .unwrap();
 
         let result = transformer
             .transform(&introduce(
@@ -373,7 +403,8 @@ mod tests {
                 .unwrap(),
             )
             .unwrap(),
-        ));
+        ))
+        .unwrap();
 
         let result = transformer
             .transform(&introduce(&parse(&tokenize("(and x)").unwrap()).unwrap()))
@@ -401,7 +432,8 @@ mod tests {
                 .unwrap(),
             )
             .unwrap(),
-        ));
+        ))
+        .unwrap();
 
         assert_eq!(
             transformer
@@ -443,7 +475,8 @@ mod tests {
                 .unwrap(),
             )
             .unwrap(),
-        ));
+        ))
+        .unwrap();
 
         assert!(
             transformer

@@ -195,23 +195,27 @@ pub(crate) fn first(sexpr: &SExpr) -> Option<SExpr> {
     }
 }
 
-pub(crate) fn for_each<F>(mut op: F, sexpr: &SExpr)
+pub(crate) fn try_for_each<F, E>(mut op: F, sexpr: &SExpr) -> Result<(), E>
 where
-    F: FnMut(&SExpr),
+    F: FnMut(&SExpr) -> Result<(), E>,
 {
     if let SExpr::Cons(cons, _) = sexpr {
-        op(&cons.car);
-        for_each(op, &cons.cdr);
+        op(&cons.car)?;
+        try_for_each(op, &cons.cdr)?;
     }
+    Ok(())
 }
 
-pub(crate) fn map<F>(mut op: F, sexpr: &SExpr) -> SExpr
+pub(crate) fn try_map<F, E>(mut op: F, sexpr: &SExpr) -> Result<SExpr, E>
 where
-    F: FnMut(&SExpr) -> SExpr,
+    F: FnMut(&SExpr) -> Result<SExpr, E>,
 {
     match sexpr {
-        SExpr::Nil(span) => SExpr::Nil(*span),
-        SExpr::Cons(cons, span) => SExpr::Cons(Cons::new(op(&cons.car), map(op, &cons.cdr)), *span),
+        SExpr::Nil(span) => Ok(SExpr::Nil(*span)),
+        SExpr::Cons(cons, span) => Ok(SExpr::Cons(
+            Cons::new(op(&cons.car)?, try_map(op, &cons.cdr)?),
+            *span,
+        )),
         _ => op(sexpr),
     }
 }
