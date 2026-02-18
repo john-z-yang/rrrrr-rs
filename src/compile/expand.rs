@@ -136,7 +136,17 @@ fn expand_letrec_syntax(sexpr: &SExpr, bindings: &mut Bindings, env: &mut Env) -
         let binding = bindings.gen_sym(&id);
         bindings.add_binding(&id, &binding);
 
-        let transformer = Transformer::new(&transformer_spec.add_scope(scope_id))?;
+        let transformer_spec = transformer_spec.add_scope(scope_id);
+        if !matches!(
+            first(&transformer_spec),
+            Some(SExpr::Id(id, _)) if bindings.resolve(&id) == Some(Symbol::new("syntax-rules"))
+        ) {
+            return Err(CompilationError {
+                span: transformer_spec.get_span(),
+                reason: "Expected syntax-rules transformer spec".to_owned(),
+            });
+        }
+        let transformer = Transformer::new(&transformer_spec)?;
         env.insert(binding.clone(), transformer);
 
         let res = expand(&body.add_scope(scope_id), bindings, env);
@@ -870,6 +880,30 @@ mod tests {
             "result: {:?}\nexpected: {:?}",
             result,
             expected
+        );
+    }
+
+    #[test]
+    fn test_shadowed_syntax_rules_is_rejected() {
+        let mut bindings = Bindings::new();
+        let mut env = HashMap::<Symbol, Transformer>::new();
+        let expr = parse(
+            &tokenize(
+                r#"
+                (lambda (syntax-rules)
+                  (letrec-syntax
+                    ((my-mac (syntax-rules ()
+                               ((_) 1))))
+                    (my-mac)))
+                "#,
+            )
+            .unwrap(),
+        )
+        .unwrap();
+        let result = expand(&introduce(&expr), &mut bindings, &mut env);
+        assert!(
+            result.is_err(),
+            "Expected error when syntax-rules is shadowed by a lambda parameter"
         );
     }
 

@@ -233,7 +233,7 @@ impl SyntaxRule {
 
 impl Transformer {
     pub(crate) fn new(spec: &SExpr) -> Result<Self> {
-        match_sexpr! {(sym("syntax-rules"), (literals_list @ ..), rules @ ..) = spec =>
+        match_sexpr! {(_, (literals_list @ ..), rules @ ..) = spec =>
             let mut literals = HashSet::<Symbol>::new();
             try_for_each(
                 |literal| {

@@ -15,6 +15,7 @@ impl Bindings {
 
     pub(crate) const CORE_BINDINGS: &[&str] = &[
         "letrec-syntax",
+        "syntax-rules",
         "quote",
         "quote-syntax",
         "if",

@@ -87,23 +87,7 @@ macro_rules! match_sexpr {
         };
     };
 
-    // Compare if the first element is an exact symbol or id i.e. `('lambda, ...)`
-    (
-        (sym($symbol:literal) $(, $($rest:tt)*)?) = $targ:expr => $($handler:tt)*
-    ) => {
-        if let $crate::compile::sexpr::SExpr::Cons(cons, _) = $targ {
-            let symbol = $crate::compile::sexpr::Symbol::new($symbol);
-            if let $crate::compile::sexpr::SExpr::Id(id, _) = cons.car.as_ref() {
-                if id.symbol == symbol {
-                    match_sexpr! {($($($rest)*)?) = cons.cdr.as_ref() =>
-                        $($handler)*
-                    }
-                }
-            };
-        };
-    };
-
-    // Match a structual pattern for first element in a list i.e. `(Symbol(var_name), 'b, 'c)`
+    // Match a structural pattern for first element in a list i.e. `(Symbol(var_name), 'b, 'c)`
     (
         ($pat:pat $(, $($rest:tt)*)?) = $targ:expr => $($handler:tt)*
     ) => {
