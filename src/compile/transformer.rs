@@ -5,7 +5,7 @@ use crate::{
         compilation_error::{CompilationError, Result},
         util::try_for_each,
     },
-    match_sexpr,
+    if_let_sexpr,
 };
 
 use super::{
@@ -233,7 +233,7 @@ impl SyntaxRule {
 
 impl Transformer {
     pub(crate) fn new(spec: &SExpr) -> Result<Self> {
-        match_sexpr! {(_, (literals_list @ ..), rules @ ..) = spec =>
+        if_let_sexpr! {(_, (literals_list @ ..), rules @ ..) = spec =>
             let mut literals = HashSet::<Symbol>::new();
             try_for_each(
                 |literal| {
@@ -256,7 +256,7 @@ impl Transformer {
             let mut syntax_rules = Vec::<SyntaxRule>::new();
             try_for_each(
                 |rule_pair| {
-                    match_sexpr! {(pattern, template) = rule_pair =>
+                    if_let_sexpr! {(pattern, template) = rule_pair =>
                         syntax_rules.push(SyntaxRule { pattern: pattern.clone(), template: template.clone() });
                         return Ok(());
                     }

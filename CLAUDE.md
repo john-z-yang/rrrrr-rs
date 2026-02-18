@@ -44,7 +44,7 @@ All compilation modules live under `src/compile/`:
 - **bindings.rs** — Scope-based name resolution for hygienic macros. Maps symbols to binding candidates with scope sets. Core bindings are defined in `Bindings::CORE_BINDINGS`: `letrec-syntax`, `syntax-rules`, `quote`, `quote-syntax`, `if`, `lambda`, `list`, `cons`, `first`, `second`, `rest`.
 - **span.rs** — Source position tracking (lo, hi) for error reporting.
 - **compilation_error.rs** — `CompilationError` type (span + reason) with pretty-printed source location display. Defines `Result<T>` alias used by the lexer, parser, and expander.
-- **util.rs** — Helper macros: `sexpr!` (construct S-expressions), `match_sexpr!` (pattern match), `template_sexpr!` (construct templates). Also `first()`, `try_for_each()`, `try_map()` utility functions.
+- **util.rs** — Helper macros: `sexpr!` (construct S-expressions), `if_let_sexpr!` (single-pattern destructuring, like `if let`), `match_sexpr!` (multi-arm pattern match, like `match`), `template_sexpr!` (construct templates). Also `first()`, `try_for_each()`, `try_map()` utility functions.
 
 **main.rs** — REPL loop using rustyline, accumulates multi-line expressions, runs the compile pipeline. Errors from any stage are pretty-printed with source context.
 

@@ -12,7 +12,7 @@ use crate::{
         compilation_error::CompilationError,
         util::{try_for_each, try_map},
     },
-    match_sexpr, template_sexpr,
+    if_let_sexpr, template_sexpr,
 };
 
 type Env = HashMap<Symbol, Transformer>;
@@ -31,10 +31,10 @@ pub(crate) fn expand(sexpr: &SExpr, bindings: &mut Bindings, env: &mut Env) -> R
     if let SExpr::Id(..) = sexpr {
         return expand_id(sexpr, bindings);
     }
-    match_sexpr! {(SExpr::Id(..), ..) = sexpr =>
+    if_let_sexpr! {(SExpr::Id(..), ..) = sexpr =>
         return expand_id_application(sexpr, bindings, env);
     };
-    match_sexpr! {(..) = sexpr =>
+    if_let_sexpr! {(..) = sexpr =>
         return expand_fn_application(sexpr, bindings, env);
     };
     Ok(sexpr.clone())
@@ -91,7 +91,7 @@ fn expand_fn_application(sexpr: &SExpr, bindings: &mut Bindings, env: &mut Env) 
 }
 
 fn expand_lambda(sexpr: &SExpr, bindings: &mut Bindings, env: &mut Env) -> Result<SExpr> {
-    match_sexpr! {(lambda, (args @ ..), body @ ..) = sexpr =>
+    if_let_sexpr! {(lambda, (args @ ..), body @ ..) = sexpr =>
         let scope_id = bindings.new_scope_id();
         let args = args.add_scope(scope_id);
 
@@ -123,7 +123,7 @@ fn expand_lambda(sexpr: &SExpr, bindings: &mut Bindings, env: &mut Env) -> Resul
 }
 
 fn expand_letrec_syntax(sexpr: &SExpr, bindings: &mut Bindings, env: &mut Env) -> Result<SExpr> {
-    match_sexpr! {(_, ((keyword, transformer_spec)), body) = sexpr =>
+    if_let_sexpr! {(_, ((keyword, transformer_spec)), body) = sexpr =>
         let scope_id = bindings.new_scope_id();
         let keyword = keyword.add_scope(scope_id);
 

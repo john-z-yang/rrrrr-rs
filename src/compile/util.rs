@@ -29,7 +29,7 @@ macro_rules! sexpr {
 }
 
 #[macro_export]
-macro_rules! match_sexpr {
+macro_rules! if_let_sexpr {
     // Empty list aka Nil
     (
         () = $targ:expr => $($handler:tt)*
@@ -44,8 +44,8 @@ macro_rules! match_sexpr {
         (($($inner:tt)*) $(, $($rest:tt)*)?) = $targ:expr => $($handler:tt)*
     ) => {
         if let $crate::compile::sexpr::SExpr::Cons(cons, _) = $targ {
-            match_sexpr! {($($inner)*) = cons.car.as_ref() => {
-                match_sexpr! {($($($rest)*)?) = cons.cdr.as_ref() =>
+            if_let_sexpr! {($($inner)*) = cons.car.as_ref() => {
+                if_let_sexpr! {($($($rest)*)?) = cons.cdr.as_ref() =>
                     $($handler)*
                 }
             }}
@@ -81,7 +81,7 @@ macro_rules! match_sexpr {
         (_ $(, $($rest:tt)*)?) = $targ:expr => $($handler:tt)*
     ) => {
         if let $crate::compile::sexpr::SExpr::Cons(cons, _) = $targ {
-            match_sexpr! {($($($rest)*)?) = cons.cdr.as_ref() =>
+            if_let_sexpr! {($($($rest)*)?) = cons.cdr.as_ref() =>
                 $($handler)*
             }
         };
@@ -94,12 +94,36 @@ macro_rules! match_sexpr {
         if let $crate::compile::sexpr::SExpr::Cons(cons, _) = $targ {
             #[allow(irrefutable_let_patterns)]
             if let $pat = cons.car.as_ref() {
-                match_sexpr! {($($($rest)*)?) = cons.cdr.as_ref() =>
+                if_let_sexpr! {($($($rest)*)?) = cons.cdr.as_ref() =>
                     $($handler)*
                 }
             }
         };
     };
+}
+
+#[macro_export]
+macro_rules! match_sexpr {
+    // Entry point: bind target, start processing arms
+    ($targ:expr; $($arms:tt)*) => {{
+        let __targ = $targ;
+        match_sexpr!(@arms __targ, $($arms)*)
+    }};
+
+    // Default arm (base case)
+    (@arms $targ:ident, _ => $default:block $(,)?) => {
+        $default
+    };
+
+    // Regular arm followed by more arms
+    (@arms $targ:ident, ($($pat:tt)*) => $handler:block, $($rest:tt)*) => {{
+        let mut __result = None;
+        if_let_sexpr! { ($($pat)*) = $targ => { __result = Some($handler); } }
+        match __result {
+            Some(__val) => __val,
+            None => match_sexpr!(@arms $targ, $($rest)*)
+        }
+    }};
 }
 
 #[macro_export]
@@ -207,6 +231,102 @@ mod tests {
     use crate::compile::{lex::tokenize, parse::parse, sexpr::Num, span::Span};
 
     use super::*;
+
+    #[test]
+    fn test_multi_match_sexpr() {
+        let nil = parse(&tokenize("()").unwrap()).unwrap();
+        let list = parse(&tokenize("(1 2 3)").unwrap()).unwrap();
+        let num = parse(&tokenize("42").unwrap()).unwrap();
+
+        let classify = |sexpr: &SExpr| -> &str {
+            match_sexpr! {
+                sexpr;
+
+                () => { "nil" },
+                (..) => { "list" },
+                _ => { "other" },
+            }
+        };
+
+        assert_eq!(classify(&nil), "nil");
+        assert_eq!(classify(&list), "list");
+        assert_eq!(classify(&num), "other");
+    }
+
+    #[test]
+    fn test_multi_match_sexpr_arm_priority() {
+        let list = parse(&tokenize("(1 2)").unwrap()).unwrap();
+
+        // First matching arm wins — (_, _) matches before (..)
+        let result: &str = match_sexpr! {
+            &list;
+
+            (_, _) => { "two" },
+            (..) => { "any-list" },
+            _ => { "other" },
+        };
+        assert_eq!(result, "two");
+
+        // Single-element list should skip (_, _) and match (..)
+        let single = parse(&tokenize("(1)").unwrap()).unwrap();
+        let result: &str = match_sexpr! {
+            &single;
+
+            (_, _) => { "two" },
+            (..) => { "any-list" },
+            _ => { "other" },
+        };
+        assert_eq!(result, "any-list");
+    }
+
+    #[test]
+    fn test_multi_match_sexpr_nested_list() {
+        let nested = parse(&tokenize("((a b) c)").unwrap()).unwrap();
+        let flat = parse(&tokenize("(a b c)").unwrap()).unwrap();
+
+        let classify = |sexpr: &SExpr| -> &str {
+            match_sexpr! {
+                sexpr;
+
+                ((_first, _), _) => { "nested-pair" },
+                (_, _, _) => { "three" },
+                _ => { "other" },
+            }
+        };
+
+        assert_eq!(classify(&nested), "nested-pair");
+        assert_eq!(classify(&flat), "three");
+    }
+
+    #[test]
+    fn test_multi_match_sexpr_with_try_operator() {
+        fn extract_second(sexpr: &SExpr) -> Result<&SExpr, &str> {
+            match_sexpr! {
+                sexpr;
+
+                (_, second, _) => { Ok(second) },
+                _ => { Err("expected a 3-element list") },
+            }
+        }
+
+        let list = parse(&tokenize("(1 2 3)").unwrap()).unwrap();
+        let short = parse(&tokenize("(1)").unwrap()).unwrap();
+
+        assert!(matches!(extract_second(&list), Ok(SExpr::Num(Num(2.0), _))));
+        assert!(extract_second(&short).is_err());
+    }
+
+    #[test]
+    fn test_multi_match_sexpr_default_arm() {
+        let num = parse(&tokenize("42").unwrap()).unwrap();
+        let result: i32 = match_sexpr! {
+            &num;
+            () => { 0 },
+            (..) => { 1 },
+            _ => { 2 },
+        };
+        assert_eq!(result, 2);
+    }
 
     #[test]
     fn test_template_sexpr_nil() {
