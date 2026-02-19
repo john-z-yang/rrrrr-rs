@@ -37,7 +37,7 @@ pub(crate) struct Symbol(pub(crate) String);
 pub(crate) struct Bool(pub(crate) bool);
 
 #[derive(Debug, PartialEq, Clone)]
-pub(crate) struct Num(pub(crate) f32);
+pub(crate) struct Num(pub(crate) f64);
 
 #[derive(Debug, PartialEq, Clone)]
 pub(crate) struct Char(pub(crate) char);
