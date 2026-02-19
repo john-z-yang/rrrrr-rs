@@ -110,7 +110,10 @@ pub(crate) fn parse(tokens: &[Token]) -> Result<SExpr> {
                 elements.push(self.parse_datum()?);
             }
             match self.look_ahead() {
-                Some(Token::Dot(_)) => {
+                Some(dot @ Token::Dot(_)) => {
+                    if elements.is_empty() {
+                        return Err(self.emit_err("Expected datum after '('", dot));
+                    }
                     elements.push(self.parse_dot_notation()?);
                     assert!(
                         matches!(self.look_ahead(), Some(Token::RParen(_))),
@@ -734,6 +737,38 @@ mod tests {
                 res,
                 Err(CompilationError {
                     span: Span { lo: 8, hi: 9 },
+                    reason: _,
+                })
+            ),
+            "{:?}",
+            res
+        )
+    }
+
+    #[test]
+    fn test_parse_dotted_pair_without_head_datum() {
+        let res = parse(&tokenize("( . 1 )").unwrap());
+        assert!(
+            matches!(
+                res,
+                Err(CompilationError {
+                    span: Span { lo: 2, hi: 3 },
+                    reason: _,
+                })
+            ),
+            "{:?}",
+            res
+        )
+    }
+
+    #[test]
+    fn test_parse_dotted_pair_without_head_datum_and_tail() {
+        let res = parse(&tokenize("( . )").unwrap());
+        assert!(
+            matches!(
+                res,
+                Err(CompilationError {
+                    span: Span { lo: 2, hi: 3 },
                     reason: _,
                 })
             ),
