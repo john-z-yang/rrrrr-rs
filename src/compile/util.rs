@@ -216,14 +216,13 @@ pub(crate) fn try_map<F, E>(mut op: F, sexpr: &SExpr) -> Result<SExpr, E>
 where
     F: FnMut(&SExpr) -> Result<SExpr, E>,
 {
-    match sexpr {
-        SExpr::Nil(span) => Ok(SExpr::Nil(*span)),
-        SExpr::Cons(cons, span) => Ok(SExpr::Cons(
+    if let SExpr::Cons(cons, span) = sexpr {
+        return Ok(SExpr::Cons(
             Cons::new(op(&cons.car)?, try_map(op, &cons.cdr)?),
             *span,
-        )),
-        _ => op(sexpr),
+        ));
     }
+    Ok(sexpr.clone())
 }
 
 #[cfg(test)]
