@@ -47,29 +47,33 @@ pub(crate) fn tokenize(source: &str) -> Result<Vec<Token>> {
                 '`' => Some(Token::QuasiQuote(self.get_span())),
                 '|' => Some(Token::Pipe(self.get_span())),
                 '\'' => Some(Token::Quote(self.get_span())),
-                '.' => Some(if !self.consume_if('.') {
+                '.' => Some(if !self.consume_if(".") {
                     Token::Dot(self.get_span())
-                } else if self.consume_if('.') {
+                } else if self.consume_if(".") {
                     Token::Id(Symbol::new("..."), self.get_span())
                 } else {
                     return Err(self.emit_err("Expecting '.' after '..'"));
                 }),
-                ',' => Some(if self.consume_if('@') {
+                ',' => Some(if self.consume_if("@") {
                     Token::CommaAt(self.get_span())
                 } else {
                     Token::Comma(self.get_span())
                 }),
-                '#' => Some(if self.consume_if('t') {
+                '#' => Some(if self.consume_if("t") {
                     Token::Bool(Bool(true), self.get_span())
-                } else if self.consume_if('f') {
+                } else if self.consume_if("f") {
                     Token::Bool(Bool(false), self.get_span())
-                } else if self.consume_if('(') {
+                } else if self.consume_if("(") {
                     Token::HashLParen(self.get_span())
-                } else if self.consume_if('\\') && self.look_ahead().is_some() {
+                } else if self.consume_if("\\space") {
+                    Token::Char(Char(' '), self.get_span())
+                } else if self.consume_if("\\newline") {
+                    Token::Char(Char('\n'), self.get_span())
+                } else if self.consume_if("\\") && self.look_ahead().is_some() {
                     Token::Char(Char(self.consume()), self.get_span())
                 } else {
                     return Err(
-                        self.emit_err("Expectin 't', 'f', '(' or character literal after '#'")
+                        self.emit_err("Expecting 't', 'f', '(' or character literal after '#'")
                     );
                 }),
                 '-' => Some(self.parse_minus()?),
@@ -148,14 +152,21 @@ pub(crate) fn tokenize(source: &str) -> Result<Vec<Token>> {
             }
         }
 
-        fn consume_if(&mut self, c: char) -> bool {
-            self.it
-                .next_if(|next| c == *next)
-                .map(|c| {
-                    self.cur.push(c);
-                    true
-                })
-                .unwrap_or(false)
+        fn consume_if(&mut self, s: &str) -> bool {
+            let mut it = self.it.clone();
+            for target in s.chars() {
+                let Some(cur) = it.next() else {
+                    return false;
+                };
+                if cur != target {
+                    return false;
+                }
+            }
+            self.cur.push_str(s);
+            for _ in s.chars() {
+                let _ = self.it.next();
+            }
+            true
         }
 
         fn look_ahead(&mut self) -> Option<char> {
@@ -442,6 +453,38 @@ mod tests {
                 Token::Char(Char('λ'), Span { lo: 0, hi: 4 }),
                 Token::Num(Num(1.0), Span { lo: 5, hi: 6 }),
                 Token::EoF(Span { lo: 6, hi: 6 }),
+            ]
+        );
+    }
+
+    #[test]
+    fn test_tokenize_named_char_literals() {
+        let src = "#\\space #\\newline";
+        let tokens = tokenize(src).unwrap();
+        assert_eq!(
+            tokens,
+            vec![
+                Token::Char(Char(' '), Span { lo: 0, hi: 7 }),
+                Token::Char(Char('\n'), Span { lo: 8, hi: 17 }),
+                Token::EoF(Span { lo: 17, hi: 17 }),
+            ]
+        );
+    }
+
+    #[test]
+    fn test_tokenize_named_char_literals_at_eof() {
+        assert_eq!(
+            tokenize("#\\space").unwrap(),
+            vec![
+                Token::Char(Char(' '), Span { lo: 0, hi: 7 }),
+                Token::EoF(Span { lo: 7, hi: 7 }),
+            ]
+        );
+        assert_eq!(
+            tokenize("#\\newline").unwrap(),
+            vec![
+                Token::Char(Char('\n'), Span { lo: 0, hi: 9 }),
+                Token::EoF(Span { lo: 9, hi: 9 }),
             ]
         );
     }

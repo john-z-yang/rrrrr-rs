@@ -152,7 +152,13 @@ impl fmt::Display for Num {
 
 impl fmt::Display for Char {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "#\\{}", self.0)
+        if self.0 == ' ' {
+            write!(f, "#\\space")
+        } else if self.0 == '\n' {
+            write!(f, "#\\newline")
+        } else {
+            write!(f, "#\\{}", self.0)
+        }
     }
 }
 
