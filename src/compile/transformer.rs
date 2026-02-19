@@ -159,7 +159,7 @@ impl SyntaxRule {
                         let SExpr::Id(id, _) = sexpr else {
                             return None;
                         };
-                        match (resolver.resolve(pattern), resolver.resolve(id)) {
+                        match (resolver.resolve_sym(pattern), resolver.resolve_sym(id)) {
                             (Some(p), Some(i)) => (p == i).then_some(()),
                             (None, None) => (pattern.symbol == id.symbol).then_some(()),
                             _ => None,

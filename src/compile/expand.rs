@@ -21,7 +21,22 @@ pub(crate) fn introduce(sexpr: &SExpr) -> SExpr {
     sexpr.add_scope(Bindings::CORE_SCOPE)
 }
 
-pub(crate) fn expand(sexpr: &SExpr, bindings: &mut Bindings, env: &mut Env) -> Result<SExpr> {
+pub fn expand(sexpr: &SExpr, bindings: &mut Bindings, env: &mut Env) -> Result<SExpr> {
+    expand_sexpr(sexpr, bindings, env, Context::TopLevel)
+}
+
+#[derive(PartialEq, Clone, Copy, Eq, Hash, Debug)]
+enum Context {
+    TopLevel,
+    Body,
+}
+
+fn expand_sexpr(
+    sexpr: &SExpr,
+    bindings: &mut Bindings,
+    env: &mut Env,
+    ctx: Context,
+) -> Result<SExpr> {
     if let SExpr::Nil(span) = sexpr {
         return Err(CompilationError {
             span: *span,
@@ -32,10 +47,10 @@ pub(crate) fn expand(sexpr: &SExpr, bindings: &mut Bindings, env: &mut Env) -> R
         return expand_id(sexpr, bindings);
     }
     if_let_sexpr! {(SExpr::Id(..), ..) = sexpr =>
-        return expand_id_application(sexpr, bindings, env);
+        return expand_id_application(sexpr, bindings, env, ctx);
     };
     if_let_sexpr! {(..) = sexpr =>
-        return expand_fn_application(sexpr, bindings, env);
+        return expand_fn_application(sexpr, bindings, env, ctx);
     };
     Ok(sexpr.clone())
 }
@@ -44,16 +59,21 @@ fn expand_id(sexpr: &SExpr, bindings: &mut Bindings) -> Result<SExpr> {
     let SExpr::Id(id, span) = sexpr else {
         unreachable!("expand_id is expecting an ID");
     };
-    bindings.resolve(id).ok_or(CompilationError {
+    bindings.resolve_sym(id).ok_or(CompilationError {
         span: *span,
         reason: format!("ID: {} is unbound", id),
     })?;
     Ok(sexpr.clone())
 }
 
-fn expand_id_application(sexpr: &SExpr, bindings: &mut Bindings, env: &mut Env) -> Result<SExpr> {
+fn expand_id_application(
+    sexpr: &SExpr,
+    bindings: &mut Bindings,
+    env: &mut Env,
+    ctx: Context,
+) -> Result<SExpr> {
     let binding = match first(sexpr) {
-        Some(SExpr::Id(id, span)) => bindings.resolve(&id).ok_or_else(|| CompilationError {
+        Some(SExpr::Id(id, span)) => bindings.resolve_sym(&id).ok_or_else(|| CompilationError {
             span,
             reason: format!("ID: {} is unbound", id),
         })?,
@@ -62,8 +82,10 @@ fn expand_id_application(sexpr: &SExpr, bindings: &mut Bindings, env: &mut Env) 
 
     match binding.0.as_str() {
         "quote" | "quote-syntax" => Ok(sexpr.clone()),
-        "letrec-syntax" => expand_letrec_syntax(sexpr, bindings, env),
+        "letrec-syntax" => expand_letrec_syntax(sexpr, bindings, env, ctx),
         "lambda" => expand_lambda(sexpr, bindings, env),
+        "define" => expand_define(sexpr, bindings, env, ctx),
+        "set!" => expand_set(sexpr, bindings, env, ctx),
         _ => {
             if let Some(transformer) = env.get(&binding) {
                 let scope_id = bindings.new_scope_id();
@@ -78,16 +100,73 @@ fn expand_id_application(sexpr: &SExpr, bindings: &mut Bindings, env: &mut Env) 
                                 binding
                             ),
                         })?;
-                expand(&transformed_sexpr.flip_scope(scope_id), bindings, env)
+                expand_sexpr(&transformed_sexpr.flip_scope(scope_id), bindings, env, ctx)
             } else {
-                expand_fn_application(sexpr, bindings, env)
+                expand_fn_application(sexpr, bindings, env, ctx)
             }
         }
     }
 }
 
-fn expand_fn_application(sexpr: &SExpr, bindings: &mut Bindings, env: &mut Env) -> Result<SExpr> {
-    try_map(|sub_sexpr| expand(sub_sexpr, bindings, env), sexpr)
+fn expand_fn_application(
+    sexpr: &SExpr,
+    bindings: &mut Bindings,
+    env: &mut Env,
+    ctx: Context,
+) -> Result<SExpr> {
+    try_map(
+        |sub_sexpr| expand_sexpr(sub_sexpr, bindings, env, ctx),
+        sexpr,
+    )
+}
+
+fn expand_set(
+    sexpr: &SExpr,
+    bindings: &mut Bindings,
+    env: &mut Env,
+    ctx: Context,
+) -> Result<SExpr> {
+    if_let_sexpr! {(set, var @ SExpr::Id(id, span), exp) = sexpr =>
+        let resolved = bindings.resolve_sym(id);
+        let Some(resolved) = resolved else {
+            return Err(CompilationError {
+                span: *span,
+                reason: format!("ID: {} is unbound", id),
+            })
+        };
+        if Bindings::CORE_BINDINGS.contains(&resolved.0.as_str()) {
+            return Err(CompilationError {
+                span: sexpr.get_span(),
+                reason: format!("Cannot mutate core binding: {}", id),
+            })
+        }
+        let exp = expand_sexpr(exp, bindings, env, ctx)?;
+        return Ok(template_sexpr!((set.clone(), var.clone(), exp) => sexpr).unwrap());
+    }
+    Err(CompilationError {
+        span: sexpr.get_span(),
+        reason: "Invalid use of set! form".to_owned(),
+    })
+}
+
+fn expand_define(
+    sexpr: &SExpr,
+    bindings: &mut Bindings,
+    env: &mut Env,
+    ctx: Context,
+) -> Result<SExpr> {
+    if_let_sexpr! {(define, var @ SExpr::Id(id, _), exp) = sexpr =>
+        if ctx == Context::TopLevel {
+            let binding = bindings.gen_sym(id);
+            bindings.add_binding(id, &binding);
+        }
+        let exp = expand_sexpr(exp, bindings, env, ctx)?;
+        return Ok(template_sexpr!((define.clone(), var.clone(), exp) => sexpr).unwrap());
+    }
+    Err(CompilationError {
+        span: sexpr.get_span(),
+        reason: "Invalid use of define form".to_owned(),
+    })
 }
 
 fn expand_lambda(sexpr: &SExpr, bindings: &mut Bindings, env: &mut Env) -> Result<SExpr> {
@@ -133,7 +212,7 @@ fn expand_lambda(sexpr: &SExpr, bindings: &mut Bindings, env: &mut Env) -> Resul
                 }
             };
 
-            let body = try_map(|sexpr| expand(&sexpr.add_scope(scope_id), bindings, env), body)?;
+            let body = expand_body(&body.add_scope(scope_id), bindings, env)?;
             Ok(template_sexpr!((lambda.clone(), args, ..body) => sexpr).unwrap())
         },
         (lambda, arg @ SExpr::Id(..), body @ ..) => {
@@ -144,7 +223,8 @@ fn expand_lambda(sexpr: &SExpr, bindings: &mut Bindings, env: &mut Env) -> Resul
             };
             let binding = bindings.gen_sym(id);
             bindings.add_binding(id, &binding);
-            let body = try_map(|sexpr| expand(&sexpr.add_scope(scope_id), bindings, env), body)?;
+
+            let body = expand_body(&body.add_scope(scope_id), bindings, env)?;
             Ok(template_sexpr!((lambda.clone(), arg, ..body) => sexpr).unwrap())
         },
         _ => {
@@ -156,7 +236,68 @@ fn expand_lambda(sexpr: &SExpr, bindings: &mut Bindings, env: &mut Env) -> Resul
     }
 }
 
-fn expand_letrec_syntax(sexpr: &SExpr, bindings: &mut Bindings, env: &mut Env) -> Result<SExpr> {
+fn expand_body(body: &SExpr, bindings: &mut Bindings, env: &mut Env) -> Result<SExpr> {
+    let body = body.add_scope(bindings.new_scope_id());
+
+    let mut cur = &body;
+    while let SExpr::Cons(cons, _) = cur {
+        if let Some(SExpr::Id(id, _)) = first(&cons.car)
+            && bindings
+                .resolve_sym(&id)
+                .is_some_and(|symbol| symbol.0 == "define")
+        {
+            collect_define(&cons.car, bindings)?;
+            cur = &cons.cdr;
+            continue;
+        }
+        break;
+    }
+
+    while let SExpr::Cons(cons, _) = cur {
+        if let Some(SExpr::Id(id, _)) = first(&cons.car)
+            && bindings
+                .resolve_sym(&id)
+                .is_some_and(|symbol| symbol.0 == "define")
+        {
+            return Err(CompilationError {
+                span: cons.car.get_span(),
+                reason: "Definitions must appear at the beginning of the body".to_owned(),
+            });
+        }
+        cur = &cons.cdr;
+    }
+
+    try_map(
+        |sexpr| expand_sexpr(sexpr, bindings, env, Context::Body),
+        &body,
+    )
+}
+
+fn collect_define(sexpr: &SExpr, bindings: &mut Bindings) -> Result<()> {
+    if_let_sexpr! {(_, var @ SExpr::Id(id, span), _) = sexpr =>
+        let resolved = bindings.resolve_scopes(id);
+        if let Some(resolved) = resolved && resolved == id.scopes {
+            return Err(CompilationError {
+                span: *span,
+                reason: format!("ID: {} is already bound within the same scope", var),
+            })
+        }
+        let binding = bindings.gen_sym(id);
+        bindings.add_binding(id, &binding);
+        return Ok(());
+    }
+    Err(CompilationError {
+        span: sexpr.get_span(),
+        reason: "Invalid use of define form".to_owned(),
+    })
+}
+
+fn expand_letrec_syntax(
+    sexpr: &SExpr,
+    bindings: &mut Bindings,
+    env: &mut Env,
+    ctx: Context,
+) -> Result<SExpr> {
     if_let_sexpr! {(_, ((keyword, transformer_spec)), body) = sexpr =>
         let scope_id = bindings.new_scope_id();
         let keyword = keyword.add_scope(scope_id);
@@ -173,7 +314,7 @@ fn expand_letrec_syntax(sexpr: &SExpr, bindings: &mut Bindings, env: &mut Env) -
         let transformer_spec = transformer_spec.add_scope(scope_id);
         if !matches!(
             first(&transformer_spec),
-            Some(SExpr::Id(id, _)) if bindings.resolve(&id) == Some(Symbol::new("syntax-rules"))
+            Some(SExpr::Id(id, _)) if bindings.resolve_sym(&id) == Some(Symbol::new("syntax-rules"))
         ) {
             return Err(CompilationError {
                 span: transformer_spec.get_span(),
@@ -183,7 +324,7 @@ fn expand_letrec_syntax(sexpr: &SExpr, bindings: &mut Bindings, env: &mut Env) -
         let transformer = Transformer::new(&transformer_spec)?;
         env.insert(binding.clone(), transformer);
 
-        let res = expand(&body.add_scope(scope_id), bindings, env);
+        let res = expand_sexpr(&body.add_scope(scope_id), bindings, env, ctx);
         env.remove_entry(&binding);
 
         return res;
@@ -258,9 +399,9 @@ mod tests {
                 SExpr::Id(Id::new("y", [Bindings::CORE_SCOPE, 1]), span),
             ),
             (
-                SExpr::Id(Id::new("cons", [Bindings::CORE_SCOPE, 1]), span),
-                SExpr::Id(Id::new("x", [Bindings::CORE_SCOPE, 1]), span),
-                SExpr::Id(Id::new("y", [Bindings::CORE_SCOPE, 1]), span),
+                SExpr::Id(Id::new("cons", [Bindings::CORE_SCOPE, 1, 2]), span),
+                SExpr::Id(Id::new("x", [Bindings::CORE_SCOPE, 1, 2]), span),
+                SExpr::Id(Id::new("y", [Bindings::CORE_SCOPE, 1, 2]), span),
             ),
         );
         assert_eq!(result, expected);
@@ -288,9 +429,9 @@ mod tests {
                     SExpr::Id(Id::new("y", [Bindings::CORE_SCOPE, 1]), Span { lo: 30, hi: 31 }),
                 ),
                 (
-                    SExpr::Id(Id::new("cons", [Bindings::CORE_SCOPE, 1]), Span { lo: 44, hi: 48 }),
-                    SExpr::Id(Id::new("x", [Bindings::CORE_SCOPE, 1]), Span { lo: 61, hi: 62 }),
-                    SExpr::Id(Id::new("y", [Bindings::CORE_SCOPE, 1]), Span { lo: 75, hi: 76 }),
+                    SExpr::Id(Id::new("cons", [Bindings::CORE_SCOPE, 1, 2]), Span { lo: 44, hi: 48 }),
+                    SExpr::Id(Id::new("x", [Bindings::CORE_SCOPE, 1, 2]), Span { lo: 61, hi: 62 }),
+                    SExpr::Id(Id::new("y", [Bindings::CORE_SCOPE, 1, 2]), Span { lo: 75, hi: 76 }),
                 )
             ) => &parse(&tokenize(src).unwrap()).unwrap()
         )
@@ -320,18 +461,18 @@ mod tests {
             SExpr::Id(Id::new("lambda", [Bindings::CORE_SCOPE]), span),
             (SExpr::Id(Id::new("x", [Bindings::CORE_SCOPE, 1]), span)),
             (
-                SExpr::Id(Id::new("lambda", [Bindings::CORE_SCOPE, 1]), span),
-                (SExpr::Id(Id::new("y", [Bindings::CORE_SCOPE, 1, 2]), span)),
+                SExpr::Id(Id::new("lambda", [Bindings::CORE_SCOPE, 1, 2]), span),
+                (SExpr::Id(Id::new("y", [Bindings::CORE_SCOPE, 1, 2, 3]), span)),
                 (
-                    SExpr::Id(Id::new("cons", [Bindings::CORE_SCOPE, 1, 2]), span),
-                    SExpr::Id(Id::new("x", [Bindings::CORE_SCOPE, 1, 2]), span),
-                    SExpr::Id(Id::new("y", [Bindings::CORE_SCOPE, 1, 2]), span),
+                    SExpr::Id(Id::new("cons", [Bindings::CORE_SCOPE, 1, 2, 3, 4]), span),
+                    SExpr::Id(Id::new("x", [Bindings::CORE_SCOPE, 1, 2, 3, 4]), span),
+                    SExpr::Id(Id::new("y", [Bindings::CORE_SCOPE, 1, 2, 3, 4]), span),
                 )
             ),
             (
-                SExpr::Id(Id::new("cons", [Bindings::CORE_SCOPE, 1]), span),
-                SExpr::Id(Id::new("x", [Bindings::CORE_SCOPE, 1]), span),
-                SExpr::Id(Id::new("x", [Bindings::CORE_SCOPE, 1]), span),
+                SExpr::Id(Id::new("cons", [Bindings::CORE_SCOPE, 1, 2]), span),
+                SExpr::Id(Id::new("x", [Bindings::CORE_SCOPE, 1, 2]), span),
+                SExpr::Id(Id::new("x", [Bindings::CORE_SCOPE, 1, 2]), span),
             ),
         );
         assert_eq!(result, expected);
@@ -352,9 +493,9 @@ mod tests {
                 ..SExpr::Id(Id::new("z", [Bindings::CORE_SCOPE, 1]), span)
             ),
             (
-                SExpr::Id(Id::new("cons", [Bindings::CORE_SCOPE, 1]), span),
-                SExpr::Id(Id::new("x", [Bindings::CORE_SCOPE, 1]), span),
-                SExpr::Id(Id::new("z", [Bindings::CORE_SCOPE, 1]), span),
+                SExpr::Id(Id::new("cons", [Bindings::CORE_SCOPE, 1, 2]), span),
+                SExpr::Id(Id::new("x", [Bindings::CORE_SCOPE, 1, 2]), span),
+                SExpr::Id(Id::new("z", [Bindings::CORE_SCOPE, 1, 2]), span),
             ),
         );
         assert_eq!(result, expected);
@@ -371,9 +512,9 @@ mod tests {
             SExpr::Id(Id::new("lambda", [Bindings::CORE_SCOPE]), span),
             SExpr::Id(Id::new("x", [Bindings::CORE_SCOPE, 1]), span),
             (
-                SExpr::Id(Id::new("cons", [Bindings::CORE_SCOPE, 1]), span),
-                SExpr::Id(Id::new("x", [Bindings::CORE_SCOPE, 1]), span),
-                SExpr::Id(Id::new("x", [Bindings::CORE_SCOPE, 1]), span),
+                SExpr::Id(Id::new("cons", [Bindings::CORE_SCOPE, 1, 2]), span),
+                SExpr::Id(Id::new("x", [Bindings::CORE_SCOPE, 1, 2]), span),
+                SExpr::Id(Id::new("x", [Bindings::CORE_SCOPE, 1, 2]), span),
             ),
         );
         assert_eq!(result, expected);
@@ -442,7 +583,7 @@ mod tests {
 
         let mut env = HashMap::from([(
             bindings
-                .resolve(&Id::new("and", [Bindings::CORE_SCOPE]))
+                .resolve_sym(&Id::new("and", [Bindings::CORE_SCOPE]))
                 .unwrap(),
             transformer,
         )]);
@@ -478,7 +619,7 @@ mod tests {
 
         let mut env = HashMap::from([(
             bindings
-                .resolve(&Id::new("and", [Bindings::CORE_SCOPE]))
+                .resolve_sym(&Id::new("and", [Bindings::CORE_SCOPE]))
                 .unwrap(),
             transformer,
         )]);
@@ -514,7 +655,7 @@ mod tests {
 
         let mut env = HashMap::from([(
             bindings
-                .resolve(&Id::new("and", [Bindings::CORE_SCOPE]))
+                .resolve_sym(&Id::new("and", [Bindings::CORE_SCOPE]))
                 .unwrap(),
             transformer,
         )]);
@@ -556,7 +697,7 @@ mod tests {
 
         let mut env = HashMap::from([(
             bindings
-                .resolve(&Id::new("and", [Bindings::CORE_SCOPE]))
+                .resolve_sym(&Id::new("and", [Bindings::CORE_SCOPE]))
                 .unwrap(),
             transformer,
         )]);
@@ -588,7 +729,7 @@ mod tests {
         assert_eq!(result, expected);
         assert_eq!(
             bindings
-                .resolve(&(first(&result).unwrap().try_into().unwrap()))
+                .resolve_sym(&(first(&result).unwrap().try_into().unwrap()))
                 .unwrap(),
             Symbol::new("if")
         );
@@ -620,7 +761,7 @@ mod tests {
 
         let mut env = HashMap::from([(
             bindings
-                .resolve(&Id::new("my-macro", [Bindings::CORE_SCOPE]))
+                .resolve_sym(&Id::new("my-macro", [Bindings::CORE_SCOPE]))
                 .unwrap(),
             transformer,
         )]);
@@ -631,12 +772,12 @@ mod tests {
         let expected = sexpr!(
             SExpr::Id(Id::new("lambda", [Bindings::CORE_SCOPE, 1]), span),
             (SExpr::Id(Id::new("x", [Bindings::CORE_SCOPE, 1, 2]), span)),
-            SExpr::Id(Id::new("x", [Bindings::CORE_SCOPE, 2]), span),
+            SExpr::Id(Id::new("x", [Bindings::CORE_SCOPE, 2, 3]), span),
         );
         assert_eq!(result, expected);
         assert_ne!(
             bindings
-                .resolve(
+                .resolve_sym(
                     &first(&nth(&result, 1).unwrap())
                         .unwrap()
                         .try_into()
@@ -644,15 +785,15 @@ mod tests {
                 )
                 .unwrap(),
             bindings
-                .resolve(&last(&result).unwrap().try_into().unwrap())
+                .resolve_sym(&last(&result).unwrap().try_into().unwrap())
                 .unwrap(),
         );
         assert_eq!(
             bindings
-                .resolve(&Id::new("x", [Bindings::CORE_SCOPE]))
+                .resolve_sym(&Id::new("x", [Bindings::CORE_SCOPE]))
                 .unwrap(),
             bindings
-                .resolve(&last(&result).unwrap().try_into().unwrap())
+                .resolve_sym(&last(&result).unwrap().try_into().unwrap())
                 .unwrap(),
         )
     }
@@ -685,7 +826,7 @@ mod tests {
 
         let mut env = HashMap::from([(
             bindings
-                .resolve(&Id::new("my-or", [Bindings::CORE_SCOPE]))
+                .resolve_sym(&Id::new("my-or", [Bindings::CORE_SCOPE]))
                 .unwrap(),
             transformer,
         )]);
@@ -700,13 +841,13 @@ mod tests {
                 (SExpr::Id(Id::new("temp", [Bindings::CORE_SCOPE, 1]), span)),
                 (
                     (
-                        SExpr::Id(Id::new("lambda", [Bindings::CORE_SCOPE, 2]), span),
-                        (SExpr::Id(Id::new("temp", [Bindings::CORE_SCOPE, 2, 3]), span)),
+                        SExpr::Id(Id::new("lambda", [Bindings::CORE_SCOPE, 3]), span),
+                        (SExpr::Id(Id::new("temp", [Bindings::CORE_SCOPE, 3, 4]), span)),
                         (
-                            SExpr::Id(Id::new("if", [Bindings::CORE_SCOPE, 2, 3]), span),
-                            SExpr::Id(Id::new("temp", [Bindings::CORE_SCOPE, 0, 2, 3]), span),
-                            SExpr::Id(Id::new("temp", [Bindings::CORE_SCOPE, 0, 2, 3]), span),
-                            SExpr::Id(Id::new("temp", [Bindings::CORE_SCOPE, 1, 3]), span),
+                            SExpr::Id(Id::new("if", [Bindings::CORE_SCOPE, 3, 4, 5]), span),
+                            SExpr::Id(Id::new("temp", [Bindings::CORE_SCOPE, 3, 4, 5]), span),
+                            SExpr::Id(Id::new("temp", [Bindings::CORE_SCOPE, 3, 4, 5]), span),
+                            SExpr::Id(Id::new("temp", [Bindings::CORE_SCOPE, 1, 2, 4, 5]), span),
                         )
                     ),
                     SExpr::Bool(Bool(false), span)
@@ -734,46 +875,46 @@ mod tests {
 
         assert_ne!(
             bindings
-                .resolve(&outer_temp_id.clone().try_into().unwrap())
+                .resolve_sym(&outer_temp_id.clone().try_into().unwrap())
                 .unwrap(),
             bindings
-                .resolve(&inner_temp_id.clone().try_into().unwrap())
+                .resolve_sym(&inner_temp_id.clone().try_into().unwrap())
                 .unwrap(),
         );
 
         assert_eq!(
             bindings
-                .resolve(&(nth(&if_expr, 1).unwrap()).try_into().unwrap())
+                .resolve_sym(&(nth(&if_expr, 1).unwrap()).try_into().unwrap())
                 .unwrap(),
             bindings
-                .resolve(&(nth(&if_expr, 2).unwrap()).try_into().unwrap())
+                .resolve_sym(&(nth(&if_expr, 2).unwrap()).try_into().unwrap())
                 .unwrap(),
         );
 
         assert_ne!(
             bindings
-                .resolve(&(nth(&if_expr, 1).unwrap()).try_into().unwrap())
+                .resolve_sym(&(nth(&if_expr, 1).unwrap()).try_into().unwrap())
                 .unwrap(),
             bindings
-                .resolve(&(nth(&if_expr, 3).unwrap()).try_into().unwrap())
-                .unwrap(),
-        );
-
-        assert_eq!(
-            bindings
-                .resolve(&inner_temp_id.clone().try_into().unwrap())
-                .unwrap(),
-            bindings
-                .resolve(&(nth(&if_expr, 2).unwrap()).try_into().unwrap())
+                .resolve_sym(&(nth(&if_expr, 3).unwrap()).try_into().unwrap())
                 .unwrap(),
         );
 
         assert_eq!(
             bindings
-                .resolve(&outer_temp_id.clone().try_into().unwrap())
+                .resolve_sym(&inner_temp_id.clone().try_into().unwrap())
                 .unwrap(),
             bindings
-                .resolve(&(nth(&if_expr, 3).unwrap()).try_into().unwrap())
+                .resolve_sym(&(nth(&if_expr, 2).unwrap()).try_into().unwrap())
+                .unwrap(),
+        );
+
+        assert_eq!(
+            bindings
+                .resolve_sym(&outer_temp_id.clone().try_into().unwrap())
+                .unwrap(),
+            bindings
+                .resolve_sym(&(nth(&if_expr, 3).unwrap()).try_into().unwrap())
                 .unwrap(),
         );
     }
@@ -832,13 +973,13 @@ mod tests {
                 (SExpr::Id(Id::new("temp", [Bindings::CORE_SCOPE, 1, 2]), span)),
                 (
                     (
-                        SExpr::Id(Id::new("lambda", [Bindings::CORE_SCOPE, 1, 3]), span),
-                        (SExpr::Id(Id::new("temp", [Bindings::CORE_SCOPE, 1, 3, 4]), span)),
+                        SExpr::Id(Id::new("lambda", [Bindings::CORE_SCOPE, 1, 4]), span),
+                        (SExpr::Id(Id::new("temp", [Bindings::CORE_SCOPE, 1, 4, 5]), span)),
                         (
-                            SExpr::Id(Id::new("if", [Bindings::CORE_SCOPE, 1, 3, 4]), span),
-                            SExpr::Id(Id::new("temp", [Bindings::CORE_SCOPE, 1, 3, 4]), span),
-                            SExpr::Id(Id::new("temp", [Bindings::CORE_SCOPE, 1, 3, 4]), span),
-                            SExpr::Id(Id::new("temp", [Bindings::CORE_SCOPE, 1, 2, 4]), span)
+                            SExpr::Id(Id::new("if", [Bindings::CORE_SCOPE, 1, 4, 5, 6]), span),
+                            SExpr::Id(Id::new("temp", [Bindings::CORE_SCOPE, 1, 4, 5, 6]), span),
+                            SExpr::Id(Id::new("temp", [Bindings::CORE_SCOPE, 1, 4, 5, 6]), span),
+                            SExpr::Id(Id::new("temp", [Bindings::CORE_SCOPE, 1, 2, 3, 5, 6]), span)
                         )
                     ),
                     SExpr::Bool(Bool(false), span)
@@ -865,46 +1006,46 @@ mod tests {
 
         assert_ne!(
             bindings
-                .resolve(&outer_temp_id.clone().try_into().unwrap())
+                .resolve_sym(&outer_temp_id.clone().try_into().unwrap())
                 .unwrap(),
             bindings
-                .resolve(&inner_temp_id.clone().try_into().unwrap())
+                .resolve_sym(&inner_temp_id.clone().try_into().unwrap())
                 .unwrap(),
         );
 
         assert_eq!(
             bindings
-                .resolve(&(nth(&if_expr, 1).unwrap()).try_into().unwrap())
+                .resolve_sym(&(nth(&if_expr, 1).unwrap()).try_into().unwrap())
                 .unwrap(),
             bindings
-                .resolve(&(nth(&if_expr, 2).unwrap()).try_into().unwrap())
+                .resolve_sym(&(nth(&if_expr, 2).unwrap()).try_into().unwrap())
                 .unwrap(),
         );
 
         assert_ne!(
             bindings
-                .resolve(&(nth(&if_expr, 1).unwrap()).try_into().unwrap())
+                .resolve_sym(&(nth(&if_expr, 1).unwrap()).try_into().unwrap())
                 .unwrap(),
             bindings
-                .resolve(&(nth(&if_expr, 3).unwrap()).try_into().unwrap())
-                .unwrap(),
-        );
-
-        assert_eq!(
-            bindings
-                .resolve(&inner_temp_id.clone().try_into().unwrap())
-                .unwrap(),
-            bindings
-                .resolve(&(nth(&if_expr, 2).unwrap()).try_into().unwrap())
+                .resolve_sym(&(nth(&if_expr, 3).unwrap()).try_into().unwrap())
                 .unwrap(),
         );
 
         assert_eq!(
             bindings
-                .resolve(&outer_temp_id.clone().try_into().unwrap())
+                .resolve_sym(&inner_temp_id.clone().try_into().unwrap())
                 .unwrap(),
             bindings
-                .resolve(&(nth(&if_expr, 3).unwrap()).try_into().unwrap())
+                .resolve_sym(&(nth(&if_expr, 2).unwrap()).try_into().unwrap())
+                .unwrap(),
+        );
+
+        assert_eq!(
+            bindings
+                .resolve_sym(&outer_temp_id.clone().try_into().unwrap())
+                .unwrap(),
+            bindings
+                .resolve_sym(&(nth(&if_expr, 3).unwrap()).try_into().unwrap())
                 .unwrap(),
         );
     }

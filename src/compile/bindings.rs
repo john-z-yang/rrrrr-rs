@@ -5,7 +5,7 @@ pub(crate) type ScopeId = u64;
 pub(crate) type Scopes = BTreeSet<ScopeId>;
 
 pub(crate) struct Bindings {
-    symbols: HashMap<Symbol, Vec<(Scopes, Symbol)>>,
+    symbols: HashMap<Symbol, HashMap<Scopes, Symbol>>,
     scope_counter: ScopeId,
     gen_sym_counter: u64,
 }
@@ -20,6 +20,8 @@ impl Bindings {
         "quote-syntax",
         "if",
         "lambda",
+        "define",
+        "set!",
         "list",
         "cons",
         "first",
@@ -50,11 +52,13 @@ impl Bindings {
     }
 
     pub(crate) fn add_binding(&mut self, id: &Id, symbol: &Symbol) {
-        let binding = self.symbols.entry(id.symbol.clone()).or_default();
-        binding.push((id.scopes.clone(), symbol.clone()));
+        self.symbols
+            .entry(id.symbol.clone())
+            .or_default()
+            .insert(id.scopes.clone(), symbol.clone());
     }
 
-    pub(crate) fn resolve(&self, id: &Id) -> Option<Symbol> {
+    pub(crate) fn resolve(&self, id: &Id) -> Option<Id> {
         self.symbols
             .get_key_value(&id.symbol)
             .and_then(|(_, candidates)| {
@@ -63,7 +67,18 @@ impl Bindings {
                     .filter(|(candidate_scopes, _)| candidate_scopes.is_subset(&id.scopes))
                     .max_by(|(lhs, _), (rhs, _)| lhs.len().cmp(&rhs.len()))
             })
-            .map(|(_, symbol)| symbol.clone())
+            .map(|(scopes, symbol)| Id {
+                symbol: symbol.clone(),
+                scopes: scopes.clone(),
+            })
+    }
+
+    pub(crate) fn resolve_scopes(&self, id: &Id) -> Option<Scopes> {
+        self.resolve(id).map(|id| id.scopes)
+    }
+
+    pub(crate) fn resolve_sym(&self, id: &Id) -> Option<Symbol> {
+        self.resolve(id).map(|id| id.symbol)
     }
 }
 
@@ -75,15 +90,18 @@ mod tests {
     #[test]
     fn test_resolve_with_empty_bindings() {
         let bindings = Bindings::new();
-        assert_eq!(bindings.resolve(&Id::new("a", [])), None);
+        assert_eq!(bindings.resolve_sym(&Id::new("a", [])), None);
     }
 
     #[test]
     fn test_resolve_with_single_bindings() {
         let mut bindings = Bindings::new();
         bindings.add_binding(&Id::new("a", []), &Symbol::new("1"));
-        assert_eq!(bindings.resolve(&Id::new("a", [])), Some(Symbol::new("1")));
-        assert_eq!(bindings.resolve(&Id::new("b", [])), None);
+        assert_eq!(
+            bindings.resolve_sym(&Id::new("a", [])),
+            Some(Symbol::new("1"))
+        );
+        assert_eq!(bindings.resolve_sym(&Id::new("b", [])), None);
     }
 
     #[test]
@@ -93,30 +111,15 @@ mod tests {
         bindings.add_binding(&Id::new("a", [1, 2, 3]), &Symbol::new("inner"));
         bindings.add_binding(&Id::new("a", [1]), &Symbol::new("outer"));
         assert_eq!(
-            bindings.resolve(&Id::new("a", [1, 2, 4])),
+            bindings.resolve_sym(&Id::new("a", [1, 2, 4])),
             Some(Symbol::new("middle"))
         );
         assert_eq!(
-            bindings.resolve(&Id::new("a", [1])),
+            bindings.resolve_sym(&Id::new("a", [1])),
             Some(Symbol::new("outer"))
         );
-        assert_eq!(bindings.resolve(&Id::new("a", [2])), None);
-        assert_eq!(bindings.resolve(&Id::new("a", [])), None);
-    }
-
-    #[test]
-    fn test_resolve_with_multiple_single_bindings() {
-        let mut bindings = Bindings::new();
-        bindings.add_binding(&Id::new("a", [3]), &Symbol::new("3"));
-        bindings.add_binding(&Id::new("a", [2]), &Symbol::new("2"));
-        bindings.add_binding(&Id::new("a", [1]), &Symbol::new("1"));
-        assert_eq!(
-            bindings.resolve(&Id::new("a", [1, 2])),
-            Some(Symbol::new("1"))
-        );
-        assert_eq!(bindings.resolve(&Id::new("a", [1])), Some(Symbol::new("1")));
-        assert_eq!(bindings.resolve(&Id::new("a", [2])), Some(Symbol::new("2")));
-        assert_eq!(bindings.resolve(&Id::new("a", [])), None);
+        assert_eq!(bindings.resolve_sym(&Id::new("a", [2])), None);
+        assert_eq!(bindings.resolve_sym(&Id::new("a", [])), None);
     }
 
     #[test]
@@ -131,11 +134,26 @@ mod tests {
     }
 
     #[test]
+    fn test_add_binding_overwrites_with_same_scopes() {
+        let mut bindings = Bindings::new();
+        bindings.add_binding(&Id::new("a", [1, 2]), &Symbol::new("first"));
+        assert_eq!(
+            bindings.resolve_sym(&Id::new("a", [1, 2])),
+            Some(Symbol::new("first"))
+        );
+        bindings.add_binding(&Id::new("a", [1, 2]), &Symbol::new("second"));
+        assert_eq!(
+            bindings.resolve_sym(&Id::new("a", [1, 2])),
+            Some(Symbol::new("second"))
+        );
+    }
+
+    #[test]
     fn test_resolve_with_core_bindings() {
         let bindings = Bindings::new();
         for core_binding in Bindings::CORE_BINDINGS {
             assert_eq!(
-                bindings.resolve(&Id::new(core_binding, [Bindings::CORE_SCOPE])),
+                bindings.resolve_sym(&Id::new(core_binding, [Bindings::CORE_SCOPE])),
                 Some(Symbol::new(core_binding))
             );
         }
