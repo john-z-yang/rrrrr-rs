@@ -72,11 +72,24 @@ pub(crate) fn tokenize(source: &str) -> Result<Vec<Token>> {
                         self.emit_err("Expectin 't', 'f', '(' or character literal after '#'")
                     );
                 }),
-                '0'..='9' | '-' => Some(self.parse_num()?),
+                '-' => Some(self.parse_minus()?),
+                '0'..='9' => Some(self.parse_num()?),
                 '"' => Some(self.parse_string()?),
                 c if Self::is_id_initial(c) => Some(self.parse_id()?),
                 c => return Err(self.emit_err(&format!("Unexpeted character: '{}'", c))),
             })
+        }
+
+        fn parse_minus(&mut self) -> Result<Token> {
+            let Some(_) = self.look_ahead() else {
+                return Ok(Token::Id(Symbol::new(&self.cur), self.get_span()));
+            };
+            self.consume_until(&|c| !Self::is_id_subsequent(c) && !c.is_ascii_digit());
+            if let Ok(num) = self.cur.parse() {
+                Ok(Token::Num(Num(num), self.get_span()))
+            } else {
+                Ok(Token::Id(Symbol::new(&self.cur), self.get_span()))
+            }
         }
 
         fn parse_num(&mut self) -> Result<Token> {
@@ -271,6 +284,43 @@ mod tests {
                     Span { lo: 104, hi: 119 }
                 ),
                 Token::EoF(Span { lo: 119, hi: 119 })
+            ]
+        );
+    }
+
+    #[test]
+    fn test_tokenize_minus_as_identifier() {
+        assert_eq!(
+            tokenize("-").unwrap(),
+            vec![
+                Token::Id(Symbol::new("-"), Span { lo: 0, hi: 1 }),
+                Token::EoF(Span { lo: 1, hi: 1 }),
+            ]
+        );
+    }
+
+    #[test]
+    fn test_tokenize_minus_identifier_in_list_head() {
+        assert_eq!(
+            tokenize("(- 1 2)").unwrap(),
+            vec![
+                Token::LParen(Span { lo: 0, hi: 1 }),
+                Token::Id(Symbol::new("-"), Span { lo: 1, hi: 2 }),
+                Token::Num(Num(1.0), Span { lo: 3, hi: 4 }),
+                Token::Num(Num(2.0), Span { lo: 5, hi: 6 }),
+                Token::RParen(Span { lo: 6, hi: 7 }),
+                Token::EoF(Span { lo: 7, hi: 7 }),
+            ]
+        );
+    }
+
+    #[test]
+    fn test_tokenize_hyphen_prefixed_identifier() {
+        assert_eq!(
+            tokenize("-foo").unwrap(),
+            vec![
+                Token::Id(Symbol::new("-foo"), Span { lo: 0, hi: 4 }),
+                Token::EoF(Span { lo: 4, hi: 4 }),
             ]
         );
     }
