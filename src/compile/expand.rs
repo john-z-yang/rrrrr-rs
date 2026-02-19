@@ -10,9 +10,9 @@ use super::{
 use crate::{
     compile::{
         compilation_error::CompilationError,
-        util::{try_for_each, try_map},
+        util::{dotted_tail, try_for_each, try_map},
     },
-    if_let_sexpr, template_sexpr,
+    if_let_sexpr, match_sexpr, template_sexpr,
 };
 
 type Env = HashMap<Symbol, Transformer>;
@@ -91,35 +91,69 @@ fn expand_fn_application(sexpr: &SExpr, bindings: &mut Bindings, env: &mut Env) 
 }
 
 fn expand_lambda(sexpr: &SExpr, bindings: &mut Bindings, env: &mut Env) -> Result<SExpr> {
-    if_let_sexpr! {(lambda, (args @ ..), body @ ..) = sexpr =>
-        let scope_id = bindings.new_scope_id();
-        let args = args.add_scope(scope_id);
+    match_sexpr! {
+        sexpr;
 
-        try_for_each(
-            |arg| {
-                let SExpr::Id(id, _) = arg else {
+        (lambda, (args @ ..), body @ ..) => {
+            let scope_id = bindings.new_scope_id();
+            let args = args.add_scope(scope_id);
+
+            try_for_each(
+                |arg| {
+                    let SExpr::Id(id, _) = arg else {
+                        return Err(CompilationError {
+                            span: arg.get_span(),
+                            reason: format!(
+                                "Expected identifiers in function parameters, but got: {}",
+                                arg
+                            ),
+                        });
+                    };
+                    let binding = bindings.gen_sym(id);
+                    bindings.add_binding(id, &binding);
+                    Ok(())
+                },
+                &args,
+            )?;
+
+            match dotted_tail(&args) {
+                None => {}
+                Some(SExpr::Id(id, _)) => {
+                    let binding = bindings.gen_sym(&id);
+                    bindings.add_binding(&id, &binding);
+                }
+                Some(tail) => {
                     return Err(CompilationError {
-                        span: arg.get_span(),
+                        span: tail.get_span(),
                         reason: format!(
                             "Expected identifiers in function parameters, but got: {}",
-                            arg
+                            tail
                         ),
                     });
-                };
-                let binding = bindings.gen_sym(id);
-                bindings.add_binding(id, &binding);
-                Ok(())
-            },
-            &args,
-        )?;
+                }
+            };
 
-        let body = try_map(|sexpr| expand(&sexpr.add_scope(scope_id), bindings, env), body)?;
-        return Ok(template_sexpr!((lambda.clone(), args, ..body) => sexpr).unwrap());
-    };
-    Err(CompilationError {
-        span: sexpr.get_span(),
-        reason: "Invalid use of lambda form".to_owned(),
-    })
+            let body = try_map(|sexpr| expand(&sexpr.add_scope(scope_id), bindings, env), body)?;
+            Ok(template_sexpr!((lambda.clone(), args, ..body) => sexpr).unwrap())
+        },
+        (lambda, arg @ SExpr::Id(..), body @ ..) => {
+            let scope_id = bindings.new_scope_id();
+            let arg = arg.add_scope(scope_id);
+            let SExpr::Id(id, _) = &arg else {
+                unreachable!("arg is already a SExpr::Id(..)")
+            };
+            let binding = bindings.gen_sym(id);
+            bindings.add_binding(id, &binding);
+            let body = try_map(|sexpr| expand(&sexpr.add_scope(scope_id), bindings, env), body)?;
+            Ok(template_sexpr!((lambda.clone(), arg, ..body) => sexpr).unwrap())
+        },
+        _ => {
+            Err(CompilationError {
+                span: sexpr.get_span(),
+                reason: "Invalid use of lambda form".to_owned(),
+            })
+        }
+    }
 }
 
 fn expand_letrec_syntax(sexpr: &SExpr, bindings: &mut Bindings, env: &mut Env) -> Result<SExpr> {
@@ -301,6 +335,66 @@ mod tests {
             ),
         );
         assert_eq!(result, expected);
+    }
+
+    #[test]
+    fn test_expand_lambda_dotted_params() {
+        let mut bindings = Bindings::new();
+        let mut env = HashMap::<Symbol, Transformer>::new();
+        let lambda_expr = parse(&tokenize("(lambda (x y . z) (cons x z))").unwrap()).unwrap();
+        let result = expand(&introduce(&lambda_expr), &mut bindings, &mut env).unwrap();
+        let span = Span { lo: 0, hi: 0 };
+        let expected = sexpr!(
+            SExpr::Id(Id::new("lambda", [Bindings::CORE_SCOPE]), span),
+            (
+                SExpr::Id(Id::new("x", [Bindings::CORE_SCOPE, 1]), span),
+                SExpr::Id(Id::new("y", [Bindings::CORE_SCOPE, 1]), span),
+                ..SExpr::Id(Id::new("z", [Bindings::CORE_SCOPE, 1]), span)
+            ),
+            (
+                SExpr::Id(Id::new("cons", [Bindings::CORE_SCOPE, 1]), span),
+                SExpr::Id(Id::new("x", [Bindings::CORE_SCOPE, 1]), span),
+                SExpr::Id(Id::new("z", [Bindings::CORE_SCOPE, 1]), span),
+            ),
+        );
+        assert_eq!(result, expected);
+    }
+
+    #[test]
+    fn test_expand_lambda_symbol_param() {
+        let mut bindings = Bindings::new();
+        let mut env = HashMap::<Symbol, Transformer>::new();
+        let lambda_expr = parse(&tokenize("(lambda x (cons x x))").unwrap()).unwrap();
+        let result = expand(&introduce(&lambda_expr), &mut bindings, &mut env).unwrap();
+        let span = Span { lo: 0, hi: 0 };
+        let expected = sexpr!(
+            SExpr::Id(Id::new("lambda", [Bindings::CORE_SCOPE]), span),
+            SExpr::Id(Id::new("x", [Bindings::CORE_SCOPE, 1]), span),
+            (
+                SExpr::Id(Id::new("cons", [Bindings::CORE_SCOPE, 1]), span),
+                SExpr::Id(Id::new("x", [Bindings::CORE_SCOPE, 1]), span),
+                SExpr::Id(Id::new("x", [Bindings::CORE_SCOPE, 1]), span),
+            ),
+        );
+        assert_eq!(result, expected);
+    }
+
+    #[test]
+    fn test_expand_lambda_invalid_non_id_param() {
+        let mut bindings = Bindings::new();
+        let mut env = HashMap::<Symbol, Transformer>::new();
+        let lambda_expr = parse(&tokenize("(lambda 42 x)").unwrap()).unwrap();
+        let result = expand(&introduce(&lambda_expr), &mut bindings, &mut env);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_expand_lambda_invalid_dotted_param() {
+        let mut bindings = Bindings::new();
+        let mut env = HashMap::<Symbol, Transformer>::new();
+        let lambda_expr = parse(&tokenize("(lambda (x . 42) x)").unwrap()).unwrap();
+        let result = expand(&introduce(&lambda_expr), &mut bindings, &mut env);
+        assert!(result.is_err());
     }
 
     #[test]

@@ -201,6 +201,16 @@ pub(crate) fn first(sexpr: &SExpr) -> Option<SExpr> {
     }
 }
 
+pub(crate) fn dotted_tail(sexpr: &SExpr) -> Option<SExpr> {
+    if let SExpr::Nil(_) = sexpr {
+        None
+    } else if let SExpr::Cons(cons, _) = sexpr {
+        dotted_tail(&cons.cdr)
+    } else {
+        Some(sexpr.clone())
+    }
+}
+
 pub(crate) fn try_for_each<F, E>(mut op: F, sexpr: &SExpr) -> Result<(), E>
 where
     F: FnMut(&SExpr) -> Result<(), E>,
