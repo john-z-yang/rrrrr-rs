@@ -776,4 +776,27 @@ mod tests {
             res
         )
     }
+
+    #[test]
+    #[should_panic(expected = "Token stream must have at least 1 token")]
+    fn test_parse_empty_token_stream_panics_as_internal_error() {
+        let _ = parse(&[]);
+    }
+
+    #[test]
+    #[should_panic(expected = "parse is expecting token stream to end with the EoF token")]
+    fn test_parse_missing_eof_panics_as_internal_error() {
+        let tokens = vec![
+            Token::LParen(Span { lo: 0, hi: 1 }),
+            Token::RParen(Span { lo: 1, hi: 2 }),
+        ];
+        let _ = parse(&tokens);
+    }
+
+    #[test]
+    #[should_panic(expected = "parse_datum is expecting token stream to end with the EoF token")]
+    fn test_parse_unclosed_list_without_eof_panics_as_internal_error() {
+        let tokens = vec![Token::LParen(Span { lo: 0, hi: 1 })];
+        let _ = parse(&tokens);
+    }
 }
