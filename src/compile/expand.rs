@@ -87,7 +87,7 @@ fn expand_id_application(
         "letrec-syntax" => expand_letrec_syntax(sexpr, bindings, env, ctx),
         "lambda" => expand_lambda(sexpr, bindings, env),
         "define" => expand_define(sexpr, bindings, env, ctx),
-        "set!" => expand_set(sexpr, bindings, env, ctx),
+        "set!" => expand_set(sexpr, bindings, env),
         "begin" => expand_begin(sexpr, bindings, env, ctx),
         _ => {
             if let Some(transformer) = env.get(&binding) {
@@ -142,12 +142,7 @@ fn expand_begin(
     )
 }
 
-fn expand_set(
-    sexpr: &SExpr,
-    bindings: &mut Bindings,
-    env: &mut Env,
-    ctx: Context,
-) -> Result<SExpr> {
+fn expand_set(sexpr: &SExpr, bindings: &mut Bindings, env: &mut Env) -> Result<SExpr> {
     if_let_sexpr! {(set, var @ SExpr::Id(id, span), exp) = sexpr =>
         let resolved = bindings.resolve_sym(id);
         let Some(resolved) = resolved else {
@@ -162,7 +157,7 @@ fn expand_set(
                 reason: format!("Cannot mutate core binding: {}", id),
             })
         }
-        let exp = expand_sexpr(exp, bindings, env, ctx)?;
+        let exp = expand_sexpr(exp, bindings, env, Context::Expression)?;
         return Ok(template_sexpr!((set.clone(), var.clone(), exp) => sexpr).unwrap());
     }
     Err(CompilationError {
@@ -188,7 +183,7 @@ fn expand_define(
             let binding = bindings.gen_sym(id);
             bindings.add_binding(id, &binding);
         }
-        let exp = expand_sexpr(exp, bindings, env, ctx)?;
+        let exp = expand_sexpr(exp, bindings, env, Context::Expression)?;
         return Ok(template_sexpr!((define.clone(), var.clone(), exp) => sexpr).unwrap());
     }
     Err(CompilationError {
@@ -667,6 +662,35 @@ mod tests {
                 })
             ),
             "Expected set! on core binding to report whole-form span"
+        );
+    }
+
+    #[test]
+    fn test_expand_define_rhs_rejects_nested_define_in_expression_context() {
+        let mut bindings = Bindings::new();
+        let mut env = HashMap::<Symbol, Transformer>::new();
+        let expr = parse(&tokenize("(define x (define y 1))").unwrap()).unwrap();
+        assert!(
+            matches!(
+                expand(&introduce(&expr), &mut bindings, &mut env),
+                Err(CompilationError { reason, .. }) if reason == "Cannot use define in an expression context"
+            ),
+            "Expected define RHS to be expanded in expression context"
+        );
+    }
+
+    #[test]
+    fn test_expand_set_rhs_rejects_nested_define_in_expression_context() {
+        let mut bindings = Bindings::new();
+        let mut env = HashMap::<Symbol, Transformer>::new();
+        let expr = parse(&tokenize("(begin (define x 1) (set! x (define y 2)) x)").unwrap())
+            .unwrap();
+        assert!(
+            matches!(
+                expand(&introduce(&expr), &mut bindings, &mut env),
+                Err(CompilationError { reason, .. }) if reason == "Cannot use define in an expression context"
+            ),
+            "Expected set! RHS to be expanded in expression context"
         );
     }
 
