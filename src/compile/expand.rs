@@ -298,34 +298,45 @@ fn expand_letrec_syntax(
     env: &mut Env,
     ctx: Context,
 ) -> Result<SExpr> {
-    if_let_sexpr! {(_, ((keyword, transformer_spec)), body) = sexpr =>
+    if_let_sexpr! {(_, (specs @ ..), body) = sexpr =>
         let scope_id = bindings.new_scope_id();
-        let keyword = keyword.add_scope(scope_id);
+        let mut transformer_bindings = vec![];
 
-        let SExpr::Id(id, _) = keyword else {
-            return Err(CompilationError {
-                span: keyword.get_span(),
-                reason: format!("Expected identifiers in syntax keyword, but got: {}", keyword)
-            });
-        };
-        let binding = bindings.gen_sym(&id);
-        bindings.add_binding(&id, &binding);
+        if let Err(e) = try_for_each(|spec| {
+            if_let_sexpr! {(keyword, transformer_spec) = spec =>
+                let keyword = keyword.add_scope(scope_id);
 
-        let transformer_spec = transformer_spec.add_scope(scope_id);
-        if !matches!(
-            first(&transformer_spec),
-            Some(SExpr::Id(id, _)) if bindings.resolve_sym(&id) == Some(Symbol::new("syntax-rules"))
-        ) {
-            return Err(CompilationError {
-                span: transformer_spec.get_span(),
-                reason: "Expected syntax-rules transformer spec".to_owned(),
-            });
+                let SExpr::Id(id, _) = keyword else {
+                    return Err(CompilationError {
+                        span: keyword.get_span(),
+                        reason: format!("Expected identifiers in syntax keyword, but got: {}", keyword)
+                    });
+                };
+                let binding = bindings.gen_sym(&id);
+                bindings.add_binding(&id, &binding);
+
+                let transformer_spec = transformer_spec.add_scope(scope_id);
+                if !matches!(
+                    first(&transformer_spec),
+                    Some(SExpr::Id(id, _)) if bindings.resolve_sym(&id) == Some(Symbol::new("syntax-rules"))
+                ) {
+                    return Err(CompilationError {
+                        span: transformer_spec.get_span(),
+                        reason: "Expected syntax-rules transformer spec".to_owned(),
+                    });
+                }
+                let transformer = Transformer::new(&transformer_spec)?;
+                env.insert(binding.clone(), transformer);
+                transformer_bindings.push(binding);
+            }
+            Ok(())
+        }, specs) {
+            transformer_bindings.iter().for_each(|transformer_binding| { env.remove_entry(transformer_binding); });
+            return Err(e);
         }
-        let transformer = Transformer::new(&transformer_spec)?;
-        env.insert(binding.clone(), transformer);
 
         let res = expand_sexpr(&body.add_scope(scope_id), bindings, env, ctx);
-        env.remove_entry(&binding);
+        transformer_bindings.iter().for_each(|transformer_binding| { env.remove_entry(transformer_binding); });
 
         return res;
     }
@@ -1163,5 +1174,31 @@ mod tests {
 
         let body = nth(&result, 2).unwrap();
         assert_eq!(body, SExpr::Num(Num(2.0), body.get_span()));
+    }
+
+    #[test]
+    fn test_letrec_syntax_allows_multiple_transformer_bindings() {
+        let mut bindings = Bindings::new();
+        let mut env = HashMap::<Symbol, Transformer>::new();
+        let expr = parse(
+            &tokenize(
+                r#"
+                (letrec-syntax
+                  ((one (syntax-rules () ((_) 1)))
+                   (two (syntax-rules () ((_) 2))))
+                  (one))
+                "#,
+            )
+            .unwrap(),
+        )
+        .unwrap();
+        let result = expand(&introduce(&expr), &mut bindings, &mut env);
+        assert!(
+            result.is_ok(),
+            "Expected multi-binding letrec-syntax to expand, got: {:?}",
+            result
+        );
+        let result = result.unwrap();
+        assert_eq!(result, SExpr::Num(Num(1.0), result.get_span()));
     }
 }
