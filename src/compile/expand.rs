@@ -102,7 +102,7 @@ fn expand_id_application(
                                 "Unable to apply transformer: {}, no rules match",
                                 binding
                             ),
-                        })?;
+                        })??;
                 expand_sexpr(&transformed_sexpr.flip_scope(scope_id), bindings, env, ctx)
             } else {
                 expand_fn_application(sexpr, bindings, env)
@@ -1410,6 +1410,25 @@ mod tests {
         assert!(
             env.is_empty(),
             "Expected letrec-syntax error path to remove inserted transformer bindings from env"
+        );
+    }
+
+    #[test]
+    fn test_expand_letrec_syntax_unbound_ellipsis_in_template_reports_error() {
+        let mut bindings = Bindings::new();
+        let mut env = HashMap::<Symbol, Transformer>::new();
+        let expr =
+            parse(&tokenize("(letrec-syntax ((m (syntax-rules () ((_ x) (...))))) (m 1))").unwrap())
+                .unwrap();
+        assert!(
+            matches!(
+                expand(&introduce(&expr), &mut bindings, &mut env),
+                Err(CompilationError {
+                    span: Span { lo: 44, hi: 47 },
+                    reason
+                }) if reason == "Unbound '...'"
+            ),
+            "Expected malformed ellipsis template usage to return a compilation error"
         );
     }
 

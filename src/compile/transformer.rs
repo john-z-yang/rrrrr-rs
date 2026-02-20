@@ -192,28 +192,38 @@ impl SyntaxRule {
         _match_pattern(literals, bindings, &self.pattern, sexpr, &mut matches).map(|_| matches)
     }
 
-    fn render_template(&self, matches: &HashMap<Id, SExpr>, application_span: Span) -> SExpr {
+    fn render_template(
+        &self,
+        matches: &HashMap<Id, SExpr>,
+        application_span: Span,
+    ) -> Result<SExpr> {
         fn _render_template(
             template: &SExpr,
             matches: &HashMap<Id, SExpr>,
             application_span: Span,
-        ) -> SExpr {
+        ) -> Result<SExpr> {
             match template {
-                SExpr::Id(pattern, _) => matches
+                SExpr::Id(pattern, _) => Ok(matches
                     .get(pattern)
                     .unwrap_or(&template.update_span(application_span))
-                    .clone(),
+                    .clone()),
                 SExpr::Cons(pattern, _) => match pattern.car.as_ref() {
-                    SExpr::Id(id, _) if id.symbol.0 == "..." => matches.get(id).unwrap().clone(),
-                    _ => SExpr::Cons(
+                    SExpr::Id(id, span) if id.symbol.0 == "..." => Ok(matches
+                        .get(id)
+                        .ok_or_else(|| CompilationError {
+                            span: *span,
+                            reason: "Unbound '...'".to_owned(),
+                        })?
+                        .clone()),
+                    _ => Ok(SExpr::Cons(
                         Cons::new(
-                            _render_template(&pattern.car, matches, application_span),
-                            _render_template(&pattern.cdr, matches, application_span),
+                            _render_template(&pattern.car, matches, application_span)?,
+                            _render_template(&pattern.cdr, matches, application_span)?,
                         ),
                         application_span,
-                    ),
+                    )),
                 },
-                _ => template.update_span(application_span),
+                _ => Ok(template.update_span(application_span)),
             }
         }
 
@@ -225,7 +235,7 @@ impl SyntaxRule {
         application: &SExpr,
         literals: &HashSet<Symbol>,
         resolver: &Bindings,
-    ) -> Option<SExpr> {
+    ) -> Option<Result<SExpr>> {
         let bindings = self.match_pattern(application, literals, resolver)?;
         Some(self.render_template(&bindings, application.get_span()))
     }
@@ -276,7 +286,11 @@ impl Transformer {
         })
     }
 
-    pub(crate) fn transform(&self, application: &SExpr, bindings: &Bindings) -> Option<SExpr> {
+    pub(crate) fn transform(
+        &self,
+        application: &SExpr,
+        bindings: &Bindings,
+    ) -> Option<Result<SExpr>> {
         self.syntax_rules
             .iter()
             .filter_map(|syntax_rule| syntax_rule.apply(application, &self.literals, bindings))
@@ -323,6 +337,7 @@ mod tests {
                 &introduce(&parse(&tokenize(src).unwrap()).unwrap()),
                 &Bindings::new(),
             )
+            .unwrap()
             .unwrap();
         let expected = &SExpr::Cons(
             Cons::new(
@@ -367,6 +382,7 @@ mod tests {
                 &introduce(&parse(&tokenize("(and)").unwrap()).unwrap()),
                 &Bindings::new(),
             )
+            .unwrap()
             .unwrap();
         let expected = &SExpr::Bool(Bool(false), Span { lo: 0, hi: 5 });
 
@@ -399,6 +415,7 @@ mod tests {
                 &introduce(&parse(&tokenize("(macro 1 a)").unwrap()).unwrap()),
                 &Bindings::new(),
             )
+            .unwrap()
             .unwrap();
         let expected = SExpr::Id(Id::new("a", [0]), Span { lo: 9, hi: 10 });
 
@@ -431,6 +448,7 @@ mod tests {
                 &introduce(&parse(&tokenize("(and x)").unwrap()).unwrap()),
                 &Bindings::new(),
             )
+            .unwrap()
             .unwrap();
         let expected = introduce(&SExpr::Id(Id::new("x", []), Span { lo: 5, hi: 6 }));
 
@@ -464,6 +482,7 @@ mod tests {
                     &introduce(&parse(&tokenize("(and a b)").unwrap()).unwrap()),
                     &Bindings::new(),
                 )
+                .unwrap()
                 .unwrap(),
             introduce(&parse(&tokenize("(if a (and b) #f)").unwrap()).unwrap())
         );
@@ -473,6 +492,7 @@ mod tests {
                     &introduce(&parse(&tokenize("(and a b c)").unwrap()).unwrap()),
                     &Bindings::new(),
                 )
+                .unwrap()
                 .unwrap(),
             introduce(&parse(&tokenize("(if a (and b c) #f)").unwrap()).unwrap())
         );
@@ -482,6 +502,7 @@ mod tests {
                     &introduce(&parse(&tokenize("(and a b c d)").unwrap()).unwrap()),
                     &Bindings::new(),
                 )
+                .unwrap()
                 .unwrap(),
             introduce(&parse(&tokenize("(if a (and b c d) #f)").unwrap()).unwrap())
         );
@@ -513,6 +534,7 @@ mod tests {
                     &Bindings::new(),
                 )
                 .unwrap()
+                .unwrap()
                 .is_idential(&SExpr::Bool(Bool(false), Span { lo: 0, hi: 5 }))
         );
         assert!(
@@ -521,6 +543,7 @@ mod tests {
                     &introduce(&parse(&tokenize("(and x)").unwrap()).unwrap()),
                     &Bindings::new(),
                 )
+                .unwrap()
                 .unwrap()
                 .is_idential(&introduce(&SExpr::Id(
                     Id::new("x", []),
@@ -533,6 +556,7 @@ mod tests {
                     &introduce(&parse(&tokenize("(and a b)").unwrap()).unwrap()),
                     &Bindings::new(),
                 )
+                .unwrap()
                 .unwrap(),
             introduce(&parse(&tokenize("(if a (and b) #f)").unwrap()).unwrap())
         );
@@ -542,6 +566,7 @@ mod tests {
                     &introduce(&parse(&tokenize("(and a b c)").unwrap()).unwrap()),
                     &Bindings::new(),
                 )
+                .unwrap()
                 .unwrap(),
             introduce(&parse(&tokenize("(if a (and b c) #f)").unwrap()).unwrap())
         );
@@ -551,6 +576,7 @@ mod tests {
                     &introduce(&parse(&tokenize("(and a b c d)").unwrap()).unwrap()),
                     &Bindings::new(),
                 )
+                .unwrap()
                 .unwrap(),
             introduce(&parse(&tokenize("(if a (and b c d) #f)").unwrap()).unwrap())
         );
