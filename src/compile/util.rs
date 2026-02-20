@@ -201,6 +201,23 @@ pub(crate) fn first(sexpr: &SExpr) -> Option<SExpr> {
     }
 }
 
+pub(crate) fn rest(sexpr: &SExpr) -> Option<SExpr> {
+    match sexpr {
+        SExpr::Cons(cons, _) => Some((*cons.cdr).clone()),
+        _ => None,
+    }
+}
+
+pub(crate) fn len(sexpr: &SExpr) -> usize {
+    let mut res = 0;
+    let mut cur = sexpr;
+    while let SExpr::Cons(Cons { cdr, .. }, _) = cur {
+        res += 1;
+        cur = cdr;
+    }
+    res
+}
+
 pub(crate) fn dotted_tail(sexpr: &SExpr) -> Option<SExpr> {
     if let SExpr::Nil(_) = sexpr {
         None

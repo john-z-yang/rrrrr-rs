@@ -22,6 +22,7 @@ impl Bindings {
         "lambda",
         "define",
         "set!",
+        "begin",
         "list",
         "cons",
         "first",
