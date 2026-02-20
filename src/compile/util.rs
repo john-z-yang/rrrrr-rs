@@ -144,15 +144,21 @@ macro_rules! template_sexpr {
         (($($inner:tt)*) $(, $($rest:tt)*)?) => $targ:ident
     ) => {
         if let $crate::compile::sexpr::SExpr::Cons(cons, span) = $targ {
-            template_sexpr!(($($inner)*) => cons.car.as_ref()).and_then(|car| {
-                Some(
-                    $crate::compile::sexpr::SExpr::Cons(
+            if let Some(car) = template_sexpr!(($($inner)*) => cons.car.as_ref()) {
+                if let Some(cdr) = template_sexpr!(($($($rest)*)?) => cons.cdr.as_ref()) {
+                    Some($crate::compile::sexpr::SExpr::Cons(
                         $crate::compile::sexpr::Cons::new(
                             car,
-                            template_sexpr!(($($($rest)*)?) => cons.cdr.as_ref())?),
+                            cdr,
+                        ),
                         *span
-                ))
-            })
+                    ))
+                } else {
+                    None
+                }
+            } else {
+                None
+            }
         } else {
             None
         }
@@ -170,17 +176,17 @@ macro_rules! template_sexpr {
         ($first:expr $(, $($rest:tt)*)?) => $targ:expr
     ) => {
         if let $crate::compile::sexpr::SExpr::Cons(cons, span) = $targ {
-            template_sexpr!(($($($rest)*)?) => cons.cdr.as_ref()).and_then(
-                |rest| {
-                    Some($crate::compile::sexpr::SExpr::Cons(
-                        $crate::compile::sexpr::Cons::new(
-                            $first,
-                            rest
-                        ),
-                        *span,
-                    ))
-                }
-            )
+            if let Some(rest) = template_sexpr!(($($($rest)*)?) => cons.cdr.as_ref()) {
+                Some($crate::compile::sexpr::SExpr::Cons(
+                    $crate::compile::sexpr::Cons::new(
+                        $first,
+                        rest,
+                    ),
+                    *span,
+                ))
+            } else {
+                None
+            }
         } else {
             None
         }
