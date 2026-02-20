@@ -207,7 +207,6 @@ pub(crate) fn try_first(sexpr: &SExpr) -> Option<SExpr> {
     }
 }
 
-#[cfg(test)]
 pub(crate) fn first(sexpr: &SExpr) -> SExpr {
     let SExpr::Cons(cons, _) = sexpr else {
         unreachable!("Expecting parameter to be a cons")
