@@ -194,18 +194,25 @@ macro_rules! template_sexpr {
     }};
 }
 
-pub(crate) fn first(sexpr: &SExpr) -> Option<SExpr> {
+pub(crate) fn try_first(sexpr: &SExpr) -> Option<SExpr> {
     match sexpr {
-        SExpr::Cons(cons, _) => Some((*cons.car).clone()),
+        SExpr::Cons(cons, _) => Some(*cons.car.clone()),
         _ => None,
     }
 }
 
-pub(crate) fn rest(sexpr: &SExpr) -> Option<SExpr> {
-    match sexpr {
-        SExpr::Cons(cons, _) => Some((*cons.cdr).clone()),
-        _ => None,
-    }
+pub(crate) fn first(sexpr: &SExpr) -> SExpr {
+    let SExpr::Cons(cons, _) = sexpr else {
+        unreachable!("Expecting parameter to be a cons")
+    };
+    *cons.car.clone()
+}
+
+pub(crate) fn rest(sexpr: &SExpr) -> SExpr {
+    let SExpr::Cons(cons, _) = sexpr else {
+        unreachable!("Expecting parameter to be a cons")
+    };
+    *cons.cdr.clone()
 }
 
 pub(crate) fn len(sexpr: &SExpr) -> usize {
@@ -218,11 +225,11 @@ pub(crate) fn len(sexpr: &SExpr) -> usize {
     res
 }
 
-pub(crate) fn dotted_tail(sexpr: &SExpr) -> Option<SExpr> {
+pub(crate) fn try_dotted_tail(sexpr: &SExpr) -> Option<SExpr> {
     if let SExpr::Nil(_) = sexpr {
         None
     } else if let SExpr::Cons(cons, _) = sexpr {
-        dotted_tail(&cons.cdr)
+        try_dotted_tail(&cons.cdr)
     } else {
         Some(sexpr.clone())
     }

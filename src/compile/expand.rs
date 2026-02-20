@@ -5,13 +5,13 @@ use super::{
     compilation_error::Result,
     sexpr::{SExpr, Symbol},
     transformer::Transformer,
-    util::first,
+    util::try_first,
 };
 use crate::{
     compile::{
         compilation_error::CompilationError,
         sexpr::Cons,
-        util::{dotted_tail, len, rest, try_for_each, try_map},
+        util::{first, len, rest, try_dotted_tail, try_for_each, try_map},
     },
     if_let_sexpr, match_sexpr, template_sexpr,
 };
@@ -74,7 +74,7 @@ fn expand_id_application(
     env: &mut Env,
     ctx: Context,
 ) -> Result<SExpr> {
-    let binding = match first(sexpr) {
+    let binding = match try_first(sexpr) {
         Some(SExpr::Id(id, span)) => bindings.resolve_sym(&id).ok_or_else(|| CompilationError {
             span,
             reason: format!("ID: {} is unbound", id),
@@ -124,7 +124,7 @@ fn expand_begin(
     env: &mut Env,
     ctx: Context,
 ) -> Result<SExpr> {
-    if dotted_tail(sexpr).is_some() {
+    if try_dotted_tail(sexpr).is_some() {
         return Err(CompilationError {
             span: sexpr.get_span(),
             reason: "Invalid use of begin form: expected a proper list".to_owned(),
@@ -223,7 +223,7 @@ fn expand_lambda(sexpr: &SExpr, bindings: &mut Bindings, env: &mut Env) -> Resul
                 &args,
             )?;
 
-            match dotted_tail(&args) {
+            match try_dotted_tail(&args) {
                 None => {}
                 Some(SExpr::Id(id, _)) => {
                     let binding = bindings.gen_sym(&id);
@@ -291,7 +291,7 @@ fn normalize_body(
 
     if_let_sexpr! {((SExpr::Id(id, _), ..), remaining @ ..) = body =>
         if bindings.resolve(id).is_some_and(|id| id.symbol.0 == "define") {
-            let define = first(body).unwrap();
+            let define = first(body);
             if phase != NormalizationPhase::Define {
                 return Err(CompilationError {
                     span: define.get_span(),
@@ -307,8 +307,8 @@ fn normalize_body(
             ));
         }
         if bindings.resolve(id).is_some_and(|id| id.symbol.0 == "begin") {
-            let begin = &first(body).unwrap();
-            if dotted_tail(begin).is_some() {
+            let begin = &first(body);
+            if try_dotted_tail(begin).is_some() {
                 return Err(CompilationError {
                     span: begin.get_span(),
                     reason: "Invalid use of begin form: expected a proper list".to_owned(),
@@ -321,7 +321,7 @@ fn normalize_body(
                 });
             }
             let (head, next_phase) = normalize_body(
-                &rest(begin).unwrap(),
+                &rest(begin),
                 bindings,
                 phase,
             )?;
@@ -400,7 +400,7 @@ fn expand_letrec_syntax(
 
                 let transformer_spec = transformer_spec.add_scope(scope_id);
                 if !matches!(
-                    first(&transformer_spec),
+                    try_first(&transformer_spec),
                     Some(SExpr::Id(id, _)) if bindings.resolve_sym(&id) == Some(Symbol::new("syntax-rules"))
                 ) {
                     return Err(CompilationError {
@@ -896,7 +896,7 @@ mod tests {
         assert_eq!(result, expected);
         assert_eq!(
             bindings
-                .resolve_sym(&(first(&result).unwrap().try_into().unwrap()))
+                .resolve_sym(&(first(&result).try_into().unwrap()))
                 .unwrap(),
             Symbol::new("if")
         );
@@ -944,12 +944,7 @@ mod tests {
         assert_eq!(result, expected);
         assert_ne!(
             bindings
-                .resolve_sym(
-                    &first(&nth(&result, 1).unwrap())
-                        .unwrap()
-                        .try_into()
-                        .unwrap()
-                )
+                .resolve_sym(&first(&nth(&result, 1).unwrap()).try_into().unwrap())
                 .unwrap(),
             bindings
                 .resolve_sym(&last(&result).unwrap().try_into().unwrap())
@@ -1025,20 +1020,9 @@ mod tests {
 
         assert_eq!(result, expected);
 
-        let outer_temp_id = first(&nth(&first(&result).unwrap(), 1).unwrap()).unwrap();
-        let inner_temp_id = first(
-            &nth(
-                &first(&nth(&first(&result).unwrap(), 2).unwrap()).unwrap(),
-                1,
-            )
-            .unwrap(),
-        )
-        .unwrap();
-        let if_expr = nth(
-            &first(&nth(&first(&result).unwrap(), 2).unwrap()).unwrap(),
-            2,
-        )
-        .unwrap();
+        let outer_temp_id = first(&nth(&first(&result), 1).unwrap());
+        let inner_temp_id = first(&nth(&first(&nth(&first(&result), 2).unwrap()), 1).unwrap());
+        let if_expr = nth(&first(&nth(&first(&result), 2).unwrap()), 2).unwrap();
 
         assert_ne!(
             bindings
@@ -1156,20 +1140,9 @@ mod tests {
         );
         assert_eq!(result, expected);
 
-        let outer_temp_id = first(&nth(&first(&result).unwrap(), 1).unwrap()).unwrap();
-        let inner_temp_id = first(
-            &nth(
-                &first(&nth(&first(&result).unwrap(), 2).unwrap()).unwrap(),
-                1,
-            )
-            .unwrap(),
-        )
-        .unwrap();
-        let if_expr = nth(
-            &first(&nth(&first(&result).unwrap(), 2).unwrap()).unwrap(),
-            2,
-        )
-        .unwrap();
+        let outer_temp_id = first(&nth(&first(&result), 1).unwrap());
+        let inner_temp_id = first(&nth(&first(&nth(&first(&result), 2).unwrap()), 1).unwrap());
+        let if_expr = nth(&first(&nth(&first(&result), 2).unwrap()), 2).unwrap();
 
         assert_ne!(
             bindings
@@ -1417,9 +1390,10 @@ mod tests {
     fn test_expand_letrec_syntax_unbound_ellipsis_in_template_reports_error() {
         let mut bindings = Bindings::new();
         let mut env = HashMap::<Symbol, Transformer>::new();
-        let expr =
-            parse(&tokenize("(letrec-syntax ((m (syntax-rules () ((_ x) (...))))) (m 1))").unwrap())
-                .unwrap();
+        let expr = parse(
+            &tokenize("(letrec-syntax ((m (syntax-rules () ((_ x) (...))))) (m 1))").unwrap(),
+        )
+        .unwrap();
         assert!(
             matches!(
                 expand(&introduce(&expr), &mut bindings, &mut env),
@@ -1498,7 +1472,7 @@ mod tests {
 
         let defined_var = nth(&nth(&result, 2).unwrap(), 1).unwrap();
         let begin_call = nth(&result, 3).unwrap();
-        let begin_head = first(&begin_call).unwrap();
+        let begin_head = first(&begin_call);
         assert!(
             nth(&result, 4).is_none(),
             "Expected shadowed begin call to remain as a single body form"
@@ -1529,7 +1503,7 @@ mod tests {
 
         let define_begin_var = nth(&nth(&result, 2).unwrap(), 1).unwrap();
         let nested_begin_call = nth(&result, 3).unwrap();
-        let nested_begin_head = first(&nested_begin_call).unwrap();
+        let nested_begin_head = first(&nested_begin_call);
         assert!(
             nth(&result, 4).is_none(),
             "Expected begin wrapper to splice and keep nested begin call as a single form"
@@ -1566,7 +1540,7 @@ mod tests {
 
         let define_begin_var = nth(&nth(&result, 2).unwrap(), 1).unwrap();
         let following_begin_call = nth(&result, 3).unwrap();
-        let following_begin_head = first(&following_begin_call).unwrap();
+        let following_begin_head = first(&following_begin_call);
         assert!(
             nth(&result, 4).is_none(),
             "Expected following begin to remain a call form after begin is rebound"
@@ -1604,7 +1578,7 @@ mod tests {
         let define_begin_var = nth(&nth(&result, 2).unwrap(), 1).unwrap();
         let begin_reference = nth(&result, 3).unwrap();
         let begin_call = nth(&result, 4).unwrap();
-        let begin_call_head = first(&begin_call).unwrap();
+        let begin_call_head = first(&begin_call);
         assert!(
             nth(&result, 5).is_none(),
             "Expected body to contain define, begin reference, and begin call"
