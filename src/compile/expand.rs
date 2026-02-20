@@ -544,12 +544,13 @@ mod tests {
         let list = parse(&tokenize("(cons 0 1)").unwrap()).unwrap();
         let span = Span { lo: 0, hi: 0 };
         assert_eq!(
-            introduce(&list),
+            introduce(&list).without_spans(),
             sexpr!(
                 SExpr::Id(Id::new("cons", [Bindings::CORE_SCOPE]), span),
                 SExpr::Num(Num(0.0), span),
                 SExpr::Num(Num(1.0), span),
             )
+            .without_spans()
         );
     }
 
@@ -572,7 +573,7 @@ mod tests {
                 SExpr::Id(Id::new("y", [Bindings::CORE_SCOPE, 1, 2]), span),
             ),
         );
-        assert_eq!(result, expected);
+        assert_eq!(result.without_spans(), expected.without_spans());
     }
 
     #[test]
@@ -643,7 +644,7 @@ mod tests {
                 SExpr::Id(Id::new("x", [Bindings::CORE_SCOPE, 1, 2]), span),
             ),
         );
-        assert_eq!(result, expected);
+        assert_eq!(result.without_spans(), expected.without_spans());
     }
 
     #[test]
@@ -666,7 +667,7 @@ mod tests {
                 SExpr::Id(Id::new("z", [Bindings::CORE_SCOPE, 1, 2]), span),
             ),
         );
-        assert_eq!(result, expected);
+        assert_eq!(result.without_spans(), expected.without_spans());
     }
 
     #[test]
@@ -685,7 +686,7 @@ mod tests {
                 SExpr::Id(Id::new("x", [Bindings::CORE_SCOPE, 1, 2]), span),
             ),
         );
-        assert_eq!(result, expected);
+        assert_eq!(result.without_spans(), expected.without_spans());
     }
 
     #[test]
@@ -819,8 +820,10 @@ mod tests {
         .unwrap();
         let span = Span { lo: 0, hi: 0 };
         assert_eq!(
-            expand(&introduce(&sexpr), &mut bindings, &mut env).unwrap(),
-            sexpr!(SExpr::Bool(Bool(false), span))
+            expand(&introduce(&sexpr), &mut bindings, &mut env)
+                .unwrap()
+                .without_spans(),
+            sexpr!(SExpr::Bool(Bool(false), span)).without_spans()
         );
     }
 
@@ -857,7 +860,7 @@ mod tests {
         let sexpr = parse(&tokenize("(and)").unwrap()).unwrap();
         let result = expand(&introduce(&sexpr), &mut bindings, &mut env).unwrap();
         let expected = parse(&tokenize("#f").unwrap()).unwrap();
-        assert_eq!(result, expected);
+        assert_eq!(result.without_spans(), expected.without_spans());
     }
 
     #[test]
@@ -893,7 +896,7 @@ mod tests {
         let sexpr = introduce(&parse(&tokenize("(and list)").unwrap()).unwrap());
         let result = expand(&introduce(&sexpr), &mut bindings, &mut env).unwrap();
         let expected = introduce(&parse(&tokenize("list").unwrap()).unwrap());
-        assert_eq!(result, expected);
+        assert_eq!(result.without_spans(), expected.without_spans());
     }
 
     #[test]
@@ -935,7 +938,7 @@ mod tests {
             SExpr::Id(Id::new("list", [Bindings::CORE_SCOPE]), span),
             SExpr::Bool(Bool(false), span),
         );
-        assert_eq!(result, expected);
+        assert_eq!(result.without_spans(), expected.without_spans());
     }
 
     #[test]
@@ -992,7 +995,7 @@ mod tests {
             ),
             SExpr::Bool(Bool(false), span),
         );
-        assert_eq!(result, expected);
+        assert_eq!(result.without_spans(), expected.without_spans());
         assert_eq!(
             bindings
                 .resolve_sym(&(first(&result).try_into().unwrap()))
@@ -1040,7 +1043,7 @@ mod tests {
             (SExpr::Id(Id::new("x", [Bindings::CORE_SCOPE, 1, 2]), span)),
             SExpr::Id(Id::new("x", [Bindings::CORE_SCOPE, 2, 3]), span),
         );
-        assert_eq!(result, expected);
+        assert_eq!(result.without_spans(), expected.without_spans());
         assert_ne!(
             bindings
                 .resolve_sym(&first(&nth(&result, 1).unwrap()).try_into().unwrap())
@@ -1117,7 +1120,7 @@ mod tests {
             SExpr::Bool(Bool(true), span),
         );
 
-        assert_eq!(result, expected);
+        assert_eq!(result.without_spans(), expected.without_spans());
 
         let outer_temp_id = first(&nth(&first(&result), 1).unwrap());
         let inner_temp_id = first(&nth(&first(&nth(&first(&result), 2).unwrap()), 1).unwrap());
@@ -1189,7 +1192,7 @@ mod tests {
 
         let span = Span { lo: 0, hi: 0 };
         let expected = SExpr::Num(Num(1.0), span);
-        assert_eq!(result, expected);
+        assert_eq!(result.without_spans(), expected.without_spans());
     }
 
     #[test]
@@ -1255,7 +1258,7 @@ mod tests {
             ),
             SExpr::Bool(Bool(true), span),
         );
-        assert_eq!(result, expected);
+        assert_eq!(result.without_spans(), expected.without_spans());
 
         let outer_temp_id = first(&nth(&first(&result), 1).unwrap());
         let inner_temp_id = first(&nth(&first(&nth(&first(&result), 2).unwrap()), 1).unwrap());
@@ -1444,7 +1447,7 @@ mod tests {
                 )
             )
         );
-        assert_eq!(result, expected);
+        assert_eq!(result.without_spans(), expected.without_spans());
     }
 
     #[test]
@@ -1473,7 +1476,7 @@ mod tests {
             SExpr::Num(Num(1.0), span),
             SExpr::Num(Num(2.0), span),
         );
-        assert_eq!(result, expected);
+        assert_eq!(result.without_spans(), expected.without_spans());
     }
 
     #[test]
@@ -1520,7 +1523,10 @@ mod tests {
         let result = expand(&introduce(&expr), &mut bindings, &mut env).unwrap();
 
         let body = nth(&result, 2).unwrap();
-        assert_eq!(body, SExpr::Num(Num(2.0), body.get_span()));
+        assert_eq!(
+            body.without_spans(),
+            SExpr::Num(Num(2.0), body.get_span()).without_spans()
+        );
     }
 
     #[test]
@@ -1546,7 +1552,10 @@ mod tests {
             result
         );
         let result = result.unwrap();
-        assert_eq!(result, SExpr::Num(Num(1.0), result.get_span()));
+        assert_eq!(
+            result.without_spans(),
+            SExpr::Num(Num(1.0), result.get_span()).without_spans()
+        );
     }
 
     #[test]

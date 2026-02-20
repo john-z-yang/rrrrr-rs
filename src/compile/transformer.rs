@@ -184,7 +184,7 @@ impl SyntaxRule {
                     }
                     Some(())
                 }
-                _ => (pattern == sexpr).then_some(()),
+                _ => (pattern.without_spans() == sexpr.without_spans()).then_some(()),
             }
         }
 
@@ -483,8 +483,9 @@ mod tests {
                     &Bindings::new(),
                 )
                 .unwrap()
-                .unwrap(),
-            introduce(&parse(&tokenize("(if a (and b) #f)").unwrap()).unwrap())
+                .unwrap()
+                .without_spans(),
+            introduce(&parse(&tokenize("(if a (and b) #f)").unwrap()).unwrap()).without_spans()
         );
         assert_eq!(
             transformer
@@ -493,8 +494,9 @@ mod tests {
                     &Bindings::new(),
                 )
                 .unwrap()
-                .unwrap(),
-            introduce(&parse(&tokenize("(if a (and b c) #f)").unwrap()).unwrap())
+                .unwrap()
+                .without_spans(),
+            introduce(&parse(&tokenize("(if a (and b c) #f)").unwrap()).unwrap()).without_spans()
         );
         assert_eq!(
             transformer
@@ -503,8 +505,9 @@ mod tests {
                     &Bindings::new(),
                 )
                 .unwrap()
-                .unwrap(),
-            introduce(&parse(&tokenize("(if a (and b c d) #f)").unwrap()).unwrap())
+                .unwrap()
+                .without_spans(),
+            introduce(&parse(&tokenize("(if a (and b c d) #f)").unwrap()).unwrap()).without_spans()
         );
     }
 
@@ -557,8 +560,9 @@ mod tests {
                     &Bindings::new(),
                 )
                 .unwrap()
-                .unwrap(),
-            introduce(&parse(&tokenize("(if a (and b) #f)").unwrap()).unwrap())
+                .unwrap()
+                .without_spans(),
+            introduce(&parse(&tokenize("(if a (and b) #f)").unwrap()).unwrap()).without_spans()
         );
         assert_eq!(
             transformer
@@ -567,8 +571,9 @@ mod tests {
                     &Bindings::new(),
                 )
                 .unwrap()
-                .unwrap(),
-            introduce(&parse(&tokenize("(if a (and b c) #f)").unwrap()).unwrap())
+                .unwrap()
+                .without_spans(),
+            introduce(&parse(&tokenize("(if a (and b c) #f)").unwrap()).unwrap()).without_spans()
         );
         assert_eq!(
             transformer
@@ -577,8 +582,9 @@ mod tests {
                     &Bindings::new(),
                 )
                 .unwrap()
-                .unwrap(),
-            introduce(&parse(&tokenize("(if a (and b c d) #f)").unwrap()).unwrap())
+                .unwrap()
+                .without_spans(),
+            introduce(&parse(&tokenize("(if a (and b c d) #f)").unwrap()).unwrap()).without_spans()
         );
     }
 }

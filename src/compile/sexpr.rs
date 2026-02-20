@@ -6,7 +6,7 @@ use super::{
     span::Span,
 };
 
-#[derive(Clone, Debug)]
+#[derive(PartialEq, Clone, Debug)]
 pub(crate) enum SExpr {
     Id(Id, Span),
     Cons(Cons, Span),
@@ -16,6 +16,66 @@ pub(crate) enum SExpr {
     Char(Char, Span),
     Str(Str, Span),
     Vector(Vector, Span),
+}
+
+#[derive(Clone, Copy)]
+pub(crate) struct SExprWithoutSpans<'a>(&'a SExpr);
+
+impl PartialEq for SExprWithoutSpans<'_> {
+    fn eq(&self, other: &Self) -> bool {
+        fn eq_sexpr_without_spans(left: &SExpr, right: &SExpr) -> bool {
+            match (left, right) {
+                (SExpr::Id(id, _), SExpr::Id(other, _)) => id == other,
+                (SExpr::Cons(cons, _), SExpr::Cons(other, _)) => {
+                    eq_sexpr_without_spans(&cons.car, &other.car)
+                        && eq_sexpr_without_spans(&cons.cdr, &other.cdr)
+                }
+                (SExpr::Nil(_), SExpr::Nil(_)) => true,
+                (SExpr::Bool(bool, _), SExpr::Bool(other, _)) => bool == other,
+                (SExpr::Num(num, _), SExpr::Num(other, _)) => num == other,
+                (SExpr::Char(char, _), SExpr::Char(other, _)) => char == other,
+                (SExpr::Str(str, _), SExpr::Str(other, _)) => str == other,
+                (SExpr::Vector(vector, _), SExpr::Vector(other, _)) => {
+                    vector.0.len() == other.0.len()
+                        && vector
+                            .0
+                            .iter()
+                            .zip(other.0.iter())
+                            .all(|(left, right)| eq_sexpr_without_spans(left, right))
+                }
+                _ => false,
+            }
+        }
+
+        eq_sexpr_without_spans(self.0, other.0)
+    }
+}
+
+impl fmt::Debug for SExprWithoutSpans<'_> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self.0 {
+            SExpr::Id(id, _) => f.debug_tuple("Id").field(id).finish(),
+            SExpr::Cons(cons, _) => f
+                .debug_tuple("Cons")
+                .field(&SExprWithoutSpans(cons.car.as_ref()))
+                .field(&SExprWithoutSpans(cons.cdr.as_ref()))
+                .finish(),
+            SExpr::Nil(_) => f.write_str("Nil"),
+            SExpr::Bool(bool, _) => f.debug_tuple("Bool").field(bool).finish(),
+            SExpr::Num(num, _) => f.debug_tuple("Num").field(num).finish(),
+            SExpr::Char(char, _) => f.debug_tuple("Char").field(char).finish(),
+            SExpr::Str(str, _) => f.debug_tuple("Str").field(str).finish(),
+            SExpr::Vector(vector, _) => {
+                write!(f, "Vector(")?;
+                let mut list = f.debug_list();
+                for item in &vector.0 {
+                    list.entry(&SExprWithoutSpans(item));
+                }
+                list.finish()?;
+                write!(f, ")")
+            }
+        }
+    }
 }
 
 #[derive(PartialEq, Clone, Eq, Hash, Debug)]
@@ -214,59 +274,11 @@ impl TryFrom<SExpr> for Bool {
     }
 }
 
-impl PartialEq for SExpr {
-    fn eq(&self, other: &Self) -> bool {
-        match self {
-            SExpr::Id(id, _) => {
-                let SExpr::Id(other, _) = other else {
-                    return false;
-                };
-                id == other
-            }
-            SExpr::Cons(cons, _) => {
-                let SExpr::Cons(other, _) = other else {
-                    return false;
-                };
-                cons == other
-            }
-            SExpr::Nil(_) => {
-                matches!(other, Self::Nil(_))
-            }
-            SExpr::Bool(bool, _) => {
-                let SExpr::Bool(other, _) = other else {
-                    return false;
-                };
-                bool == other
-            }
-            SExpr::Num(num, _) => {
-                let SExpr::Num(other, _) = other else {
-                    return false;
-                };
-                num == other
-            }
-            SExpr::Char(char, _) => {
-                let SExpr::Char(other, _) = other else {
-                    return false;
-                };
-                char == other
-            }
-            SExpr::Str(str, _) => {
-                let SExpr::Str(other, _) = other else {
-                    return false;
-                };
-                str == other
-            }
-            SExpr::Vector(vector, _) => {
-                let SExpr::Vector(other, _) = other else {
-                    return false;
-                };
-                vector == other
-            }
-        }
-    }
-}
-
 impl SExpr {
+    pub(crate) fn without_spans(&self) -> SExprWithoutSpans<'_> {
+        SExprWithoutSpans(self)
+    }
+
     pub(crate) fn get_span(&self) -> Span {
         *match self {
             SExpr::Id(_, span) => span,
@@ -376,13 +388,14 @@ mod tests {
             SExpr::Id(Id::new("d", [0, 1]), span),
         );
         assert_eq!(
-            list.add_scope(0).add_scope(2),
+            list.add_scope(0).add_scope(2).without_spans(),
             sexpr!(
                 SExpr::Id(Id::new("a", [0, 1, 2]), span),
                 (SExpr::Id(Id::new("b", [0, 1, 2]), span)),
                 (SExpr::Id(Id::new("c", [0, 2]), span)),
                 SExpr::Id(Id::new("d", [0, 1, 2]), span),
             )
+            .without_spans()
         )
     }
 
@@ -396,13 +409,44 @@ mod tests {
             SExpr::Id(Id::new("d", [0, 1]), span),
         );
         assert_eq!(
-            list.flip_scope(0),
+            list.flip_scope(0).without_spans(),
             sexpr!(
                 SExpr::Id(Id::new("a", [1, 0]), span),
                 (SExpr::Id(Id::new("b", [1, 0]), span)),
                 (SExpr::Id(Id::new("c", []), span)),
                 SExpr::Id(Id::new("d", [1]), span),
             )
+            .without_spans()
         )
+    }
+
+    #[test]
+    fn test_eq_includes_spans() {
+        let left = SExpr::Num(Num(1.0), Span { lo: 0, hi: 1 });
+        let right = SExpr::Num(Num(1.0), Span { lo: 3, hi: 4 });
+
+        assert_ne!(left, right);
+        assert_eq!(left.without_spans(), right.without_spans());
+    }
+
+    #[test]
+    fn test_debug_without_spans_omits_span_fields() {
+        let sexpr = SExpr::cons(
+            SExpr::Num(Num(1.0), Span { lo: 1, hi: 2 }),
+            SExpr::Vector(
+                Vector(vec![SExpr::Id(Id::new("x", [1]), Span { lo: 3, hi: 4 })]),
+                Span { lo: 5, hi: 6 },
+            ),
+        );
+
+        let rendered = format!("{:?}", sexpr.without_spans());
+        assert!(
+            !rendered.contains("lo"),
+            "debug output leaked span: {rendered}"
+        );
+        assert!(
+            !rendered.contains("hi"),
+            "debug output leaked span: {rendered}"
+        );
     }
 }
