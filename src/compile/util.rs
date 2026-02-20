@@ -201,6 +201,7 @@ pub(crate) fn try_first(sexpr: &SExpr) -> Option<SExpr> {
     }
 }
 
+#[cfg(test)]
 pub(crate) fn first(sexpr: &SExpr) -> SExpr {
     let SExpr::Cons(cons, _) = sexpr else {
         unreachable!("Expecting parameter to be a cons")
@@ -232,6 +233,20 @@ pub(crate) fn try_dotted_tail(sexpr: &SExpr) -> Option<SExpr> {
         try_dotted_tail(&cons.cdr)
     } else {
         Some(sexpr.clone())
+    }
+}
+
+pub(crate) fn is_proper_list(sexpr: &SExpr) -> bool {
+    try_dotted_tail(sexpr).is_none()
+}
+
+pub(crate) fn append(head: &SExpr, tail: &SExpr) -> SExpr {
+    match head {
+        SExpr::Nil(_) => tail.clone(),
+        SExpr::Cons(cons, span) => {
+            SExpr::Cons(Cons::new(*cons.car.clone(), append(&cons.cdr, tail)), *span)
+        }
+        _ => unreachable!("append expects a proper list"),
     }
 }
 

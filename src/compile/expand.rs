@@ -11,7 +11,7 @@ use crate::{
     compile::{
         compilation_error::CompilationError,
         sexpr::Cons,
-        util::{first, len, rest, try_dotted_tail, try_for_each, try_map},
+        util::{append, is_proper_list, len, rest, try_dotted_tail, try_for_each, try_map},
     },
     if_let_sexpr, match_sexpr, template_sexpr,
 };
@@ -68,6 +68,24 @@ fn expand_id(sexpr: &SExpr, bindings: &mut Bindings) -> Result<SExpr> {
     Ok(sexpr.clone())
 }
 
+fn apply_transformer(
+    sexpr: &SExpr,
+    transformer: &Transformer,
+    binding: &Symbol,
+    bindings: &mut Bindings,
+) -> Result<SExpr> {
+    let scope_id = bindings.new_scope_id();
+    let scoped = sexpr.add_scope(scope_id);
+    let transformed =
+        transformer
+            .transform(&scoped, bindings)
+            .ok_or_else(|| CompilationError {
+                span: scoped.get_span(),
+                reason: format!("Unable to apply transformer: {}, no rules match", binding),
+            })??;
+    Ok(transformed.flip_scope(scope_id))
+}
+
 fn expand_id_application(
     sexpr: &SExpr,
     bindings: &mut Bindings,
@@ -91,19 +109,12 @@ fn expand_id_application(
         "begin" => expand_begin(sexpr, bindings, env, ctx),
         _ => {
             if let Some(transformer) = env.get(&binding) {
-                let scope_id = bindings.new_scope_id();
-                let sexpr = sexpr.add_scope(scope_id);
-                let transformed_sexpr =
-                    transformer
-                        .transform(&sexpr, bindings)
-                        .ok_or_else(|| CompilationError {
-                            span: sexpr.get_span(),
-                            reason: format!(
-                                "Unable to apply transformer: {}, no rules match",
-                                binding
-                            ),
-                        })??;
-                expand_sexpr(&transformed_sexpr.flip_scope(scope_id), bindings, env, ctx)
+                expand_sexpr(
+                    &apply_transformer(sexpr, transformer, &binding, bindings)?,
+                    bindings,
+                    env,
+                    ctx,
+                )
             } else {
                 expand_fn_application(sexpr, bindings, env)
             }
@@ -261,7 +272,7 @@ fn expand_lambda(sexpr: &SExpr, bindings: &mut Bindings, env: &mut Env) -> Resul
 
 fn expand_body(body: &SExpr, bindings: &mut Bindings, env: &mut Env) -> Result<SExpr> {
     let body = body.add_scope(bindings.new_scope_id());
-    let body = normalize_body(&body, bindings, NormalizationPhase::Define)?.0;
+    let body = normalize_body(&body, bindings, env, NormalizationPhase::Define)?.0;
 
     try_map(
         |sexpr| expand_sexpr(sexpr, bindings, env, Context::Body),
@@ -275,77 +286,89 @@ enum NormalizationPhase {
     Body,
 }
 
+enum BodyFormKind {
+    Define,
+    Begin,
+    Other,
+}
+
+fn partial_expand_body(
+    form: &SExpr,
+    bindings: &mut Bindings,
+    env: &Env,
+) -> Result<(SExpr, BodyFormKind)> {
+    let mut form = form.clone();
+    loop {
+        let Some(SExpr::Id(id, _)) = try_first(&form) else {
+            return Ok((form, BodyFormKind::Other));
+        };
+        let Some(binding) = bindings.resolve_sym(&id) else {
+            return Ok((form, BodyFormKind::Other));
+        };
+        match binding.0.as_str() {
+            "define" => return Ok((form, BodyFormKind::Define)),
+            "begin" => return Ok((form, BodyFormKind::Begin)),
+            _ => {
+                let Some(transformer) = env.get(&binding) else {
+                    return Ok((form, BodyFormKind::Other));
+                };
+                form = apply_transformer(&form, transformer, &binding, bindings)?;
+            }
+        }
+    }
+}
+
 fn normalize_body(
     body: &SExpr,
     bindings: &mut Bindings,
+    env: &Env,
     phase: NormalizationPhase,
 ) -> Result<(SExpr, NormalizationPhase)> {
     let SExpr::Cons(cons, span) = body else {
         return Ok((body.clone(), phase));
     };
 
-    if_let_sexpr! {((SExpr::Id(id, _), ..), remaining @ ..) = body =>
-        if bindings.resolve(id).is_some_and(|id| id.symbol.0 == "define") {
-            let define = first(body);
+    let (expanded_car, kind) = partial_expand_body(&cons.car, bindings, env)?;
+
+    match kind {
+        BodyFormKind::Define => {
             if phase != NormalizationPhase::Define {
                 return Err(CompilationError {
-                    span: define.get_span(),
-                    reason: "Not allow to use define outside of define phase".to_owned(),
+                    span: expanded_car.get_span(),
+                    reason: "Internal definitions must appear at the very beginning of the body"
+                        .to_owned(),
                 });
             }
-            collect_define(&define, bindings)?;
+            collect_define(&expanded_car, bindings)?;
             let (cdr, next_phase) =
-                normalize_body(&cons.cdr, bindings, NormalizationPhase::Define)?;
-            return Ok((
-                SExpr::Cons(Cons::new(*cons.car.clone(), cdr), *span),
-                next_phase,
-            ));
+                normalize_body(&cons.cdr, bindings, env, NormalizationPhase::Define)?;
+            Ok((SExpr::Cons(Cons::new(expanded_car, cdr), *span), next_phase))
         }
-        if bindings.resolve(id).is_some_and(|id| id.symbol.0 == "begin") {
-            let begin = &first(body);
-            if try_dotted_tail(begin).is_some() {
+        BodyFormKind::Begin => {
+            if !is_proper_list(&expanded_car) {
                 return Err(CompilationError {
-                    span: begin.get_span(),
+                    span: expanded_car.get_span(),
                     reason: "Invalid use of begin form: expected a proper list".to_owned(),
                 });
             }
-            if len(begin) == 1 {
+            if len(&expanded_car) == 1 {
                 return Err(CompilationError {
-                    span: begin.get_span(),
+                    span: expanded_car.get_span(),
                     reason: "begin form must have at least 1 expression".to_owned(),
                 });
             }
-            let (head, next_phase) = normalize_body(
-                &rest(begin),
-                bindings,
-                phase,
-            )?;
-            let (remaining, next_phase) = normalize_body(remaining, bindings, next_phase)?;
-            return Ok((append_body_list(&head, &remaining)?, next_phase));
+            let (head, next_phase) = normalize_body(&rest(&expanded_car), bindings, env, phase)?;
+            let (remaining, next_phase) = normalize_body(&cons.cdr, bindings, env, next_phase)?;
+            Ok((append(&head, &remaining), next_phase))
+        }
+        BodyFormKind::Other => {
+            let (cdr, _) = normalize_body(&cons.cdr, bindings, env, NormalizationPhase::Body)?;
+            Ok((
+                SExpr::Cons(Cons::new(expanded_car, cdr), *span),
+                NormalizationPhase::Body,
+            ))
         }
     }
-
-    let (cdr, _) = normalize_body(&cons.cdr, bindings, NormalizationPhase::Body)?;
-    Ok((
-        SExpr::Cons(Cons::new(*cons.car.clone(), cdr), *span),
-        NormalizationPhase::Body,
-    ))
-}
-
-fn append_body_list(head: &SExpr, tail: &SExpr) -> Result<SExpr> {
-    if let SExpr::Nil(_) = head {
-        return Ok(tail.clone());
-    }
-    let SExpr::Cons(cons, span) = head else {
-        return Err(CompilationError {
-            span: head.get_span(),
-            reason: "Invalid body normalization: expected a proper list".to_owned(),
-        });
-    };
-    Ok(SExpr::Cons(
-        Cons::new(*cons.car.clone(), append_body_list(&cons.cdr, tail)?),
-        *span,
-    ))
 }
 
 fn collect_define(sexpr: &SExpr, bindings: &mut Bindings) -> Result<()> {
@@ -437,6 +460,7 @@ mod tests {
             parse::parse,
             sexpr::{Bool, Id, Num},
             span::Span,
+            util::first,
         },
         sexpr,
     };
@@ -460,6 +484,33 @@ mod tests {
         } else {
             nth(&cons.cdr, idx - 1)
         }
+    }
+
+    fn expand_source_with_fresh_state(source: &str) -> (Bindings, Result<SExpr>) {
+        let mut bindings = Bindings::new();
+        let mut env = HashMap::<Symbol, Transformer>::new();
+        let expr = parse(&tokenize(source).unwrap()).unwrap();
+        let result = expand(&introduce(&expr), &mut bindings, &mut env);
+        (bindings, result)
+    }
+
+    fn assert_generated_define_is_referenced(source: &str, expand_message: &str) {
+        let (bindings, result) = expand_source_with_fresh_state(source);
+        assert!(result.is_ok(), "{expand_message}, got: {:?}", result);
+        let result = result.unwrap();
+        let defined_var = nth(&nth(&result, 2).unwrap(), 1).unwrap();
+        let body_ref = nth(&result, 3).unwrap();
+        let SExpr::Id(defined_var, _) = defined_var else {
+            panic!("Expected define variable to be an identifier");
+        };
+        let SExpr::Id(body_ref, _) = body_ref else {
+            panic!("Expected body reference to be an identifier");
+        };
+        assert_eq!(
+            bindings.resolve_sym(&defined_var).unwrap(),
+            bindings.resolve_sym(&body_ref).unwrap(),
+            "Expected body reference to resolve to generated define"
+        );
     }
 
     use super::*;
@@ -683,8 +734,8 @@ mod tests {
     fn test_expand_set_rhs_rejects_nested_define_in_expression_context() {
         let mut bindings = Bindings::new();
         let mut env = HashMap::<Symbol, Transformer>::new();
-        let expr = parse(&tokenize("(begin (define x 1) (set! x (define y 2)) x)").unwrap())
-            .unwrap();
+        let expr =
+            parse(&tokenize("(begin (define x 1) (set! x (define y 2)) x)").unwrap()).unwrap();
         assert!(
             matches!(
                 expand(&introduce(&expr), &mut bindings, &mut env),
@@ -1733,6 +1784,63 @@ mod tests {
                 })
             ),
             "Expected improper top-level begin to report whole form span"
+        );
+    }
+
+    #[test]
+    fn test_expand_lambda_macro_expanding_to_define() {
+        assert_generated_define_is_referenced(
+            r#"
+            (letrec-syntax
+              ((def (syntax-rules ()
+                      ((_ x v) (define x v)))))
+              (lambda () (def y 42) y))
+            "#,
+            "Expected macro expanding to define to work in lambda body",
+        );
+    }
+
+    #[test]
+    fn test_expand_lambda_macro_expanding_to_begin_with_define() {
+        assert_generated_define_is_referenced(
+            r#"
+            (letrec-syntax
+              ((def-begin (syntax-rules ()
+                            ((_ x v) (begin (define x v))))))
+              (lambda () (def-begin y 42) y))
+            "#,
+            "Expected macro expanding to begin-wrapped define to work",
+        );
+    }
+
+    #[test]
+    fn test_expand_lambda_nested_macro_expanding_to_define() {
+        assert_generated_define_is_referenced(
+            r#"
+            (letrec-syntax
+              ((def (syntax-rules ()
+                      ((_ x v) (define x v))))
+               (def2 (syntax-rules ()
+                       ((_ x v) (def x v)))))
+              (lambda () (def2 y 42) y))
+            "#,
+            "Expected chained macros expanding to define to work",
+        );
+    }
+
+    #[test]
+    fn test_expand_lambda_macro_expanding_to_expression_ends_define_phase() {
+        let (_, result) = expand_source_with_fresh_state(
+            r#"
+            (letrec-syntax
+              ((expr (syntax-rules ()
+                       ((_ x) x))))
+              (lambda () (expr 1) (define y 2) y))
+            "#,
+        );
+        assert!(
+            result.is_err(),
+            "Expected macro expanding to expression to end define phase, rejecting subsequent define"
         );
     }
 }
