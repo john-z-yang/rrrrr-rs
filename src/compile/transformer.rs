@@ -11,7 +11,6 @@ use crate::{
 use super::{
     bindings::Bindings,
     sexpr::{Cons, Id, SExpr, Symbol},
-    span::Span,
 };
 
 // TODO:
@@ -192,22 +191,11 @@ impl SyntaxRule {
         _match_pattern(literals, bindings, &self.pattern, sexpr, &mut matches).map(|_| matches)
     }
 
-    fn render_template(
-        &self,
-        matches: &HashMap<Id, SExpr>,
-        application_span: Span,
-    ) -> Result<SExpr> {
-        fn _render_template(
-            template: &SExpr,
-            matches: &HashMap<Id, SExpr>,
-            application_span: Span,
-        ) -> Result<SExpr> {
+    fn render_template(&self, matches: &HashMap<Id, SExpr>) -> Result<SExpr> {
+        fn _render_template(template: &SExpr, matches: &HashMap<Id, SExpr>) -> Result<SExpr> {
             match template {
-                SExpr::Id(pattern, _) => Ok(matches
-                    .get(pattern)
-                    .unwrap_or(&template.update_span(application_span))
-                    .clone()),
-                SExpr::Cons(pattern, _) => match pattern.car.as_ref() {
+                SExpr::Id(pattern, _) => Ok(matches.get(pattern).unwrap_or(template).clone()),
+                SExpr::Cons(pattern, span) => match pattern.car.as_ref() {
                     SExpr::Id(id, span) if id.symbol.0 == "..." => Ok(matches
                         .get(id)
                         .ok_or_else(|| CompilationError {
@@ -217,17 +205,17 @@ impl SyntaxRule {
                         .clone()),
                     _ => Ok(SExpr::Cons(
                         Cons::new(
-                            _render_template(&pattern.car, matches, application_span)?,
-                            _render_template(&pattern.cdr, matches, application_span)?,
+                            _render_template(&pattern.car, matches)?,
+                            _render_template(&pattern.cdr, matches)?,
                         ),
-                        application_span,
+                        *span,
                     )),
                 },
-                _ => Ok(template.update_span(application_span)),
+                _ => Ok(template.clone()),
             }
         }
 
-        _render_template(&self.template, matches, application_span)
+        _render_template(&self.template, matches)
     }
 
     pub(crate) fn apply(
@@ -237,7 +225,7 @@ impl SyntaxRule {
         resolver: &Bindings,
     ) -> Option<Result<SExpr>> {
         let bindings = self.match_pattern(application, literals, resolver)?;
-        Some(self.render_template(&bindings, application.get_span()))
+        Some(self.render_template(&bindings))
     }
 }
 
@@ -330,8 +318,6 @@ mod tests {
         (
           mac 3
         )";
-        let callsite_src_loc = Span { lo: 9, hi: 36 };
-
         let result = transformer
             .transform(
                 &introduce(&parse(&tokenize(src).unwrap()).unwrap()),
@@ -341,16 +327,16 @@ mod tests {
             .unwrap();
         let expected = &SExpr::Cons(
             Cons::new(
-                SExpr::Num(Num(1.0), callsite_src_loc),
+                SExpr::Num(Num(1.0), Span { lo: 70, hi: 71 }),
                 SExpr::Cons(
                     Cons::new(
-                        SExpr::Num(Num(2.0), callsite_src_loc),
+                        SExpr::Num(Num(2.0), Span { lo: 72, hi: 73 }),
                         SExpr::Num(Num(3.0), Span { lo: 25, hi: 26 }),
                     ),
-                    callsite_src_loc,
+                    Span { lo: 72, hi: 78 },
                 ),
             ),
-            callsite_src_loc,
+            Span { lo: 69, hi: 78 },
         );
 
         assert!(
@@ -384,7 +370,7 @@ mod tests {
             )
             .unwrap()
             .unwrap();
-        let expected = &SExpr::Bool(Bool(false), Span { lo: 0, hi: 5 });
+        let expected = &SExpr::Bool(Bool(false), Span { lo: 65, hi: 67 });
 
         assert!(
             result.is_idential(expected),
@@ -538,7 +524,7 @@ mod tests {
                 )
                 .unwrap()
                 .unwrap()
-                .is_idential(&SExpr::Bool(Bool(false), Span { lo: 0, hi: 5 }))
+                .is_idential(&SExpr::Bool(Bool(false), Span { lo: 65, hi: 67 }))
         );
         assert!(
             transformer

@@ -1334,11 +1334,11 @@ mod tests {
         )
         .unwrap();
         let result = expand(&introduce(let_syntax_expr), &mut bindings, &mut env).unwrap();
-        let expected = SExpr::Bool(Bool(false), Span { lo: 420, hi: 424 });
+        let expected = SExpr::Bool(Bool(false), Span { lo: 105, hi: 107 });
 
         assert!(
             result.is_idential(&expected),
-            "result: {}\nexpected: {}",
+            "result: {:?}\nexpected: {:?}",
             result,
             expected
         );
