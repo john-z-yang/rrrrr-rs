@@ -208,17 +208,18 @@ pub(crate) fn try_first(sexpr: &SExpr) -> Option<SExpr> {
 }
 
 pub(crate) fn first(sexpr: &SExpr) -> SExpr {
-    let SExpr::Cons(cons, _) = sexpr else {
-        unreachable!("Expecting parameter to be a cons")
-    };
-    *cons.car.clone()
+    try_first(sexpr).expect("Expecting parameter to be a cons")
+}
+
+pub(crate) fn try_rest(sexpr: &SExpr) -> Option<SExpr> {
+    match sexpr {
+        SExpr::Cons(cons, _) => Some(*cons.cdr.clone()),
+        _ => None,
+    }
 }
 
 pub(crate) fn rest(sexpr: &SExpr) -> SExpr {
-    let SExpr::Cons(cons, _) = sexpr else {
-        unreachable!("Expecting parameter to be a cons")
-    };
-    *cons.cdr.clone()
+    try_rest(sexpr).expect("Expecting parameter to be a cons")
 }
 
 pub(crate) fn len(sexpr: &SExpr) -> usize {
@@ -259,9 +260,10 @@ pub(crate) fn try_for_each<F, E>(mut op: F, sexpr: &SExpr) -> Result<(), E>
 where
     F: FnMut(&SExpr) -> Result<(), E>,
 {
-    if let SExpr::Cons(cons, _) = sexpr {
-        op(&cons.car)?;
-        try_for_each(op, &cons.cdr)?;
+    let mut cur = sexpr;
+    while let SExpr::Cons(Cons { car, cdr }, _) = cur {
+        op(car)?;
+        cur = cdr;
     }
     Ok(())
 }

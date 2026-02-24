@@ -1646,7 +1646,7 @@ mod tests {
                 Err(CompilationError {
                     span: Span { lo: 44, hi: 47 },
                     reason
-                }) if reason == "Unbound '...'"
+                }) if reason == "ID: ... is unbound"
             ),
             "Expected malformed ellipsis template usage to return a compilation error"
         );
