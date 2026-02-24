@@ -8,7 +8,6 @@ use crate::if_let_sexpr;
 
 use super::compilation_error::{CompilationError, Result};
 use super::sexpr::{Id, SExpr, Symbol};
-use super::span::Span;
 
 #[derive(Debug)]
 struct SyntaxRule {
@@ -237,7 +236,6 @@ impl SyntaxRule {
             template: &SExpr,
             level: usize,
             matches: &HashMap<Symbol, MatchedSExpr>,
-            span: Span,
         ) -> Result<Vec<SExpr>> {
             if level == 0 {
                 return Ok(vec![render(template, matches)?]);
@@ -254,14 +252,17 @@ impl SyntaxRule {
                 .collect();
 
             if packed.is_empty() {
-                return Ok(vec![]);
+                return Err(CompilationError {
+                    span: template.get_span(),
+                    reason: "At least one variable needs to be a repeated capture".to_owned(),
+                });
             }
 
             let len = packed[0].1.len();
             for &(sym, items) in &packed[1..] {
                 if items.len() != len {
                     return Err(CompilationError {
-                        span,
+                        span: template.get_span(),
                         reason: format!(
                             "Incompatible ellipsis match counts for '{}' ({}) and '{}' ({})",
                             packed[0].0,
@@ -278,7 +279,7 @@ impl SyntaxRule {
                 for &(sym, items) in &packed {
                     sub_matches.insert(sym.clone(), items[i].clone());
                 }
-                acc.extend(expand_repeated(template, level - 1, &sub_matches, span)?);
+                acc.extend(expand_repeated(template, level - 1, &sub_matches)?);
                 Ok(acc)
             })
         }
@@ -303,10 +304,10 @@ impl SyntaxRule {
 
         fn render_list(template: &SExpr, matches: &HashMap<Symbol, MatchedSExpr>) -> Result<SExpr> {
             match template {
-                SExpr::Cons(cons, span) => {
+                SExpr::Cons(cons, _) => {
                     let (level, rest) = collect_ellipses(&cons.cdr);
                     if level > 0 {
-                        let expanded = expand_repeated(&cons.car, level, matches, *span)?;
+                        let expanded = expand_repeated(&cons.car, level, matches)?;
                         let tail = render_list(rest, matches)?;
                         Ok(expanded
                             .into_iter()
