@@ -167,15 +167,7 @@ impl SyntaxRule {
             loop {
                 match pattern_iter {
                     SExpr::Cons(pattern, _) if collect_ellipses(&pattern.cdr).0 > 0 => {
-                        if matches!(target_iter, SExpr::Cons(..) | SExpr::Nil(_)) {
-                            _match_ellipsis(
-                                &pattern.car,
-                                target_iter,
-                                literals,
-                                bindings,
-                                matches,
-                            )?;
-                        }
+                        _match_ellipsis(&pattern.car, target_iter, literals, bindings, matches)?;
                         return _match(
                             &try_dotted_tail(pattern_iter).expect("pattern is a list"),
                             &try_dotted_tail(target_iter).unwrap_or(target_iter.clone()),
@@ -767,13 +759,11 @@ mod tests {
 
     #[test]
     fn test_render_dotted_tail_datum_after_ellipsis() {
+        assert_renders_to("(_ a ... . b)", "(a ... . b)", "(mac . 1)", "1");
+        assert_renders_to("(_ a ... . b)", "(a ... . b)", "(mac)", "()");
+        assert_renders_to("(_ a ... . b)", "(b a ...)", "(mac 1 2 3)", "(() 1 2 3)");
         assert_renders_to("(_ a ... . b)", "(b a ...)", "(mac 1 . 0)", "(0 1)");
         assert_renders_to("(_ a ... . b)", "(b a ...)", "(mac 1 2 3 . 0)", "(0 1 2 3)");
-    }
-
-    #[test]
-    fn test_render_dotted_tail_nil_after_ellipsis() {
-        assert_renders_to("(_ a ... . b)", "(b a ...)", "(mac 1 2 3)", "(() 1 2 3)");
     }
 
     #[test]
