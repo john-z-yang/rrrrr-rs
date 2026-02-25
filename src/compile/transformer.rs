@@ -3,7 +3,7 @@ use std::sync::Arc;
 
 use crate::compile::bindings::Bindings;
 
-use crate::compile::util::{try_dotted_tail, try_for_each};
+use crate::compile::util::{is_proper_list, len, try_dotted_tail, try_for_each};
 use crate::if_let_sexpr;
 
 use super::compilation_error::{CompilationError, Result};
@@ -56,7 +56,7 @@ impl SyntaxRule {
         fn validate_pattern(
             pattern: &SExpr,
             literals: &HashSet<Symbol>,
-            seen: &mut HashSet<Symbol>,
+            seen_symbols: &mut HashSet<Symbol>,
         ) -> Result<()> {
             match pattern {
                 SExpr::Id(Id { symbol, .. }, span) => {
@@ -66,7 +66,9 @@ impl SyntaxRule {
                             reason: "'...' is not allowed as a pattern".into(),
                         });
                     }
-                    if symbol.0 != "_" && !literals.contains(symbol) && !seen.insert(symbol.clone())
+                    if symbol.0 != "_"
+                        && !literals.contains(symbol)
+                        && !seen_symbols.insert(symbol.clone())
                     {
                         return Err(CompilationError {
                             span: *span,
@@ -75,7 +77,7 @@ impl SyntaxRule {
                     }
                     Ok(())
                 }
-                SExpr::Cons(_, _) => validate_list(pattern, literals, seen),
+                SExpr::Cons(_, _) => validate_list(pattern, literals, seen_symbols),
                 _ => Ok(()),
             }
         }
@@ -83,7 +85,7 @@ impl SyntaxRule {
         fn validate_list(
             pattern: &SExpr,
             literals: &HashSet<Symbol>,
-            seen: &mut HashSet<Symbol>,
+            seen_symbols: &mut HashSet<Symbol>,
         ) -> Result<()> {
             let mut cur = pattern;
             while let SExpr::Cons(cons, _) = cur {
@@ -95,7 +97,7 @@ impl SyntaxRule {
                             reason: "Multiple consecutive '...' in pattern".into(),
                         });
                     }
-                    validate_pattern(&cons.car, literals, seen)?;
+                    validate_pattern(&cons.car, literals, seen_symbols)?;
                     if matches!(rest, SExpr::Cons(..)) {
                         return Err(CompilationError {
                             span: rest.get_span(),
@@ -104,12 +106,12 @@ impl SyntaxRule {
                     }
                     return Ok(());
                 }
-                validate_pattern(&cons.car, literals, seen)?;
+                validate_pattern(&cons.car, literals, seen_symbols)?;
                 cur = &cons.cdr;
             }
             match cur {
                 SExpr::Nil(_) => Ok(()),
-                _ => validate_pattern(cur, literals, seen),
+                _ => validate_pattern(cur, literals, seen_symbols),
             }
         }
 
@@ -336,13 +338,31 @@ impl Transformer {
     pub(crate) fn new(spec: &SExpr) -> Result<Self> {
         if_let_sexpr! {(_, (literals_list @ ..), rules @ ..) = spec =>
             let mut literals = HashSet::<Symbol>::new();
+            if len(rules) == 0 {
+                return Err(CompilationError {
+                    span: rules.get_span(),
+                    reason: "Expected syntax transformer to have at least 1 rule".to_owned(),
+                });
+            }
+            if !is_proper_list(literals_list) {
+                return Err(CompilationError {
+                    span: literals_list.get_span(),
+                    reason: "Expected literals in syntax transformer to be proper list".to_owned(),
+                });
+            }
+            if !is_proper_list(rules) {
+                return Err(CompilationError {
+                    span: rules.get_span(),
+                    reason: "Expected rules in syntax transformer to be proper list".to_owned(),
+                });
+            }
             try_for_each(
                 |literal| {
                     let SExpr::Id(Id { symbol, scopes: _ }, _) = literal else {
                         return Err(CompilationError {
                             span: literal.get_span(),
                             reason: format!(
-                                "Expected symbols in syntax transformer literals, but got: {}",
+                                "Expected symbols in syntax transformer literals, got: {}",
                                 literal
                             ),
                         });
@@ -367,14 +387,23 @@ impl Transformer {
             try_for_each(
                 |rule_pair| {
                     if_let_sexpr! {(pattern, template) = rule_pair =>
-                        let SExpr::Cons(pattern_cons, _) = pattern else {
+                        let SExpr::Cons(pattern, _) = pattern else {
                             return Err(CompilationError {
                                 span: pattern.get_span(),
-                                reason: "syntax-rules pattern must be a list".to_owned(),
+                                reason: "Syntax transformer pattern must be a list".to_owned(),
                             });
                         };
+                        if !matches!(*pattern.car, SExpr::Id(..)) {
+                            return Err(CompilationError {
+                                span: pattern.car.get_span(),
+                                reason: format!(
+                                    "Syntax transformer pattern must start with an identifier, got {}",
+                                    pattern.car
+                                ),
+                            });
+                        }
                         syntax_rules.push(SyntaxRule::new(
-                            pattern_cons.cdr.as_ref().clone(),
+                            pattern.cdr.as_ref().clone(),
                             template.clone(),
                             Arc::clone(&literals),
                         )?);
@@ -1155,6 +1184,62 @@ mod tests {
             &parse(&tokenize("(syntax-rules)").unwrap()).unwrap(),
         ));
         assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_transformer_new_non_proper_list_of_rules() {
+        let result = Transformer::new(&introduce(
+            &parse(&tokenize("(syntax-rules (a b c) ((_ x) x) . 3)").unwrap()).unwrap(),
+        ));
+        assert!(result.is_err());
+        assert!(
+            result
+                .unwrap_err()
+                .reason
+                .contains("Expected rules in syntax transformer to be proper list")
+        );
+    }
+
+    #[test]
+    fn test_transformer_new_non_proper_list_of_literals() {
+        let result = Transformer::new(&introduce(
+            &parse(&tokenize("(syntax-rules (a b . c) ((_ x) x))").unwrap()).unwrap(),
+        ));
+        assert!(result.is_err());
+        assert!(
+            result
+                .unwrap_err()
+                .reason
+                .contains("Expected literals in syntax transformer to be proper list")
+        );
+    }
+
+    #[test]
+    fn test_transformer_new_pattern_without_symbol_start() {
+        let result = Transformer::new(&introduce(
+            &parse(&tokenize("(syntax-rules (a b c) ((1 x) x))").unwrap()).unwrap(),
+        ));
+        assert!(result.is_err());
+        assert!(
+            result
+                .unwrap_err()
+                .reason
+                .contains("Syntax transformer pattern must start with an identifier, got")
+        );
+    }
+
+    #[test]
+    fn test_transformer_new_no_rules() {
+        let result = Transformer::new(&introduce(
+            &parse(&tokenize("(syntax-rules (a b c) )").unwrap()).unwrap(),
+        ));
+        assert!(result.is_err());
+        assert!(
+            result
+                .unwrap_err()
+                .reason
+                .contains("Expected syntax transformer to have at least 1 rule")
+        );
     }
 
     #[test]
