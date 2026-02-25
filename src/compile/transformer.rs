@@ -56,67 +56,62 @@ impl SyntaxRule {
         fn validate_pattern(
             pattern: &SExpr,
             literals: &HashSet<Symbol>,
-            seen_symbols: &mut HashSet<Symbol>,
+            symbols_seen: &mut HashSet<Symbol>,
         ) -> Result<()> {
             match pattern {
                 SExpr::Id(Id { symbol, .. }, span) => {
                     if symbol.0 == "..." {
                         return Err(CompilationError {
                             span: *span,
-                            reason: "'...' is not allowed as a pattern".into(),
+                            reason: "'...' is not allowed in this position as a pattern".into(),
                         });
                     }
                     if symbol.0 != "_"
                         && !literals.contains(symbol)
-                        && !seen_symbols.insert(symbol.clone())
+                        && !symbols_seen.insert(symbol.clone())
                     {
                         return Err(CompilationError {
                             span: *span,
-                            reason: format!("duplicate pattern variable '{}'", symbol),
+                            reason: format!("Duplicate pattern variable '{}'", symbol),
                         });
                     }
                     Ok(())
                 }
-                SExpr::Cons(_, _) => validate_list(pattern, literals, seen_symbols),
+                SExpr::Cons(_, _) => {
+                    let mut cur = pattern;
+                    while let SExpr::Cons(cons, _) = cur {
+                        let (ellipsis_count, rest) = collect_ellipses(&cons.cdr);
+                        if ellipsis_count > 0 {
+                            if ellipsis_count > 1 {
+                                return Err(CompilationError {
+                                    span: cons.cdr.get_span(),
+                                    reason: "Multiple consecutive '...' in pattern".into(),
+                                });
+                            }
+                            validate_pattern(&cons.car, literals, symbols_seen)?;
+                            if matches!(rest, SExpr::Cons(..)) {
+                                return Err(CompilationError {
+                                    span: rest.get_span(),
+                                    reason: "Unexpected pattern element after '...'".into(),
+                                });
+                            }
+                            return Ok(());
+                        }
+                        validate_pattern(&cons.car, literals, symbols_seen)?;
+                        cur = &cons.cdr;
+                    }
+                    if let SExpr::Nil(_) = cur {
+                        Ok(())
+                    } else {
+                        validate_pattern(cur, literals, symbols_seen)
+                    }
+                }
                 _ => Ok(()),
             }
         }
 
-        fn validate_list(
-            pattern: &SExpr,
-            literals: &HashSet<Symbol>,
-            seen_symbols: &mut HashSet<Symbol>,
-        ) -> Result<()> {
-            let mut cur = pattern;
-            while let SExpr::Cons(cons, _) = cur {
-                let (ellipsis_count, rest) = collect_ellipses(&cons.cdr);
-                if ellipsis_count > 0 {
-                    if ellipsis_count > 1 {
-                        return Err(CompilationError {
-                            span: cons.cdr.get_span(),
-                            reason: "Multiple consecutive '...' in pattern".into(),
-                        });
-                    }
-                    validate_pattern(&cons.car, literals, seen_symbols)?;
-                    if matches!(rest, SExpr::Cons(..)) {
-                        return Err(CompilationError {
-                            span: rest.get_span(),
-                            reason: "Unexpected pattern element after '...'".into(),
-                        });
-                    }
-                    return Ok(());
-                }
-                validate_pattern(&cons.car, literals, seen_symbols)?;
-                cur = &cons.cdr;
-            }
-            match cur {
-                SExpr::Nil(_) => Ok(()),
-                _ => validate_pattern(cur, literals, seen_symbols),
-            }
-        }
-
-        let mut seen = HashSet::new();
-        validate_pattern(&pattern, &literals, &mut seen)?;
+        let mut symbols_seen = HashSet::new();
+        validate_pattern(&pattern, &literals, &mut symbols_seen)?;
         Ok(SyntaxRule {
             pattern,
             template,
@@ -136,22 +131,22 @@ impl SyntaxRule {
             bindings: &Bindings,
             matches: &mut HashMap<Symbol, MatchedSExpr>,
         ) -> Option<()> {
-            let mut collected: HashMap<Symbol, Vec<MatchedSExpr>> = HashMap::new();
+            let mut joined_sub_matches: HashMap<Symbol, Vec<MatchedSExpr>> = HashMap::new();
             let mut cur = target;
             while let SExpr::Cons(cons, _) = cur {
-                let mut sub = HashMap::new();
-                _match(repeat, &cons.car, literals, bindings, &mut sub)?;
-                for (k, v) in sub {
-                    collected.entry(k).or_default().push(v);
+                let mut sub_matches = HashMap::new();
+                _match(repeat, &cons.car, literals, bindings, &mut sub_matches)?;
+                for (k, v) in sub_matches {
+                    joined_sub_matches.entry(k).or_default().push(v);
                 }
                 cur = &cons.cdr;
             }
             let mut vars = HashSet::new();
             get_variables(repeat, literals, &mut vars);
             for var in vars {
-                collected.entry(var).or_default();
+                joined_sub_matches.entry(var).or_default();
             }
-            for (k, vs) in collected {
+            for (k, vs) in joined_sub_matches {
                 matches.insert(k, MatchedSExpr::Many(vs));
             }
             Some(())
@@ -164,29 +159,29 @@ impl SyntaxRule {
             bindings: &Bindings,
             matches: &mut HashMap<Symbol, MatchedSExpr>,
         ) -> Option<()> {
-            let mut pattern_iter = pattern;
-            let mut target_iter = target;
+            let mut cur_pattern = pattern;
+            let mut cur_target = target;
             loop {
-                match pattern_iter {
+                match cur_pattern {
                     SExpr::Cons(pattern, _) if collect_ellipses(&pattern.cdr).0 > 0 => {
-                        _match_ellipsis(&pattern.car, target_iter, literals, bindings, matches)?;
+                        _match_ellipsis(&pattern.car, cur_target, literals, bindings, matches)?;
                         return _match(
-                            &try_dotted_tail(pattern_iter).expect("pattern is a list"),
-                            &try_dotted_tail(target_iter).unwrap_or(target_iter.clone()),
+                            &try_dotted_tail(cur_pattern).expect("pattern is a list"),
+                            &try_dotted_tail(cur_target).unwrap_or(cur_target.clone()),
                             literals,
                             bindings,
                             matches,
                         );
                     }
                     SExpr::Cons(pattern, _) => {
-                        let SExpr::Cons(target, _) = target_iter else {
+                        let SExpr::Cons(target, _) = cur_target else {
                             return None;
                         };
                         _match(&pattern.car, &target.car, literals, bindings, matches)?;
-                        pattern_iter = &pattern.cdr;
-                        target_iter = &target.cdr;
+                        cur_pattern = &pattern.cdr;
+                        cur_target = &target.cdr;
                     }
-                    _ => return _match(pattern_iter, target_iter, literals, bindings, matches),
+                    _ => return _match(cur_pattern, cur_target, literals, bindings, matches),
                 }
             }
         }
@@ -856,13 +851,13 @@ mod tests {
     #[test]
     fn test_new_duplicate_pattern_variable() {
         let err = make_rule("(_ a a)").unwrap_err();
-        assert!(err.reason.contains("duplicate pattern variable 'a'"));
+        assert!(err.reason.contains("Duplicate pattern variable 'a'"));
     }
 
     #[test]
     fn test_new_duplicate_pattern_variable_nested() {
         let err = make_rule("(_ (a b) a)").unwrap_err();
-        assert!(err.reason.contains("duplicate pattern variable 'a'"));
+        assert!(err.reason.contains("Duplicate pattern variable 'a'"));
     }
 
     #[test]
@@ -892,13 +887,19 @@ mod tests {
     #[test]
     fn test_new_bare_ellipsis() {
         let err = make_rule("...").unwrap_err();
-        assert!(err.reason.contains("'...' is not allowed as a pattern"));
+        assert!(
+            err.reason
+                .contains("'...' is not allowed in this position as a pattern")
+        );
     }
 
     #[test]
     fn test_new_ellipsis_as_first_element() {
         let err = make_rule("(... a)").unwrap_err();
-        assert!(err.reason.contains("'...' is not allowed as a pattern"));
+        assert!(
+            err.reason
+                .contains("'...' is not allowed in this position as a pattern")
+        );
     }
 
     #[test]
@@ -1266,7 +1267,7 @@ mod tests {
             result
                 .unwrap_err()
                 .reason
-                .contains("duplicate pattern variable")
+                .contains("Duplicate pattern variable")
         );
     }
 
