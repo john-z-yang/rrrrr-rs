@@ -167,14 +167,22 @@ impl SyntaxRule {
             loop {
                 match pattern_iter {
                     SExpr::Cons(pattern, _) if collect_ellipses(&pattern.cdr).0 > 0 => {
-                        _match_ellipsis(&pattern.car, target_iter, literals, bindings, matches)?;
-                        return match (try_dotted_tail(pattern_iter), try_dotted_tail(target_iter)) {
-                            (Some(pattern_tail), Some(target_tail)) => {
-                                _match(&pattern_tail, &target_tail, literals, bindings, matches)
-                            }
-                            (None, None) => Some(()),
-                            _ => None,
-                        };
+                        if matches!(target_iter, SExpr::Cons(..) | SExpr::Nil(_)) {
+                            _match_ellipsis(
+                                &pattern.car,
+                                target_iter,
+                                literals,
+                                bindings,
+                                matches,
+                            )?;
+                        }
+                        return _match(
+                            &try_dotted_tail(pattern_iter).expect("pattern is a list"),
+                            &try_dotted_tail(target_iter).unwrap_or(target_iter.clone()),
+                            literals,
+                            bindings,
+                            matches,
+                        );
                     }
                     SExpr::Cons(pattern, _) => {
                         let SExpr::Cons(target, _) = target_iter else {
@@ -758,6 +766,17 @@ mod tests {
     }
 
     #[test]
+    fn test_render_dotted_tail_datum_after_ellipsis() {
+        assert_renders_to("(_ a ... . b)", "(b a ...)", "(mac 1 . 0)", "(0 1)");
+        assert_renders_to("(_ a ... . b)", "(b a ...)", "(mac 1 2 3 . 0)", "(0 1 2 3)");
+    }
+
+    #[test]
+    fn test_render_dotted_tail_nil_after_ellipsis() {
+        assert_renders_to("(_ a ... . b)", "(b a ...)", "(mac 1 2 3)", "(() 1 2 3)");
+    }
+
+    #[test]
     fn test_render_complex_repeat() {
         assert_renders_to(
             "(_ (a b) ...)",
@@ -830,6 +849,11 @@ mod tests {
     #[test]
     fn test_new_duplicate_wildcard_allowed() {
         assert!(make_rule("(_ _ _)").is_ok());
+    }
+
+    #[test]
+    fn test_new_dotted_tail_pattern_after_ellipses_allowed() {
+        assert!(make_rule("(_ a ... . b)").is_ok());
     }
 
     #[test]

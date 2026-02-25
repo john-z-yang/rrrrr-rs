@@ -135,7 +135,7 @@ fn expand_begin(
     env: &mut Env,
     ctx: Context,
 ) -> Result<SExpr> {
-    if try_dotted_tail(sexpr).is_some() {
+    if !is_proper_list(sexpr) {
         return Err(CompilationError {
             span: sexpr.get_span(),
             reason: "Invalid use of begin form: expected a proper list".to_owned(),
@@ -230,7 +230,7 @@ fn expand_lambda(sexpr: &SExpr, bindings: &mut Bindings, env: &mut Env) -> Resul
             )?;
 
             match try_dotted_tail(&args) {
-                None => {}
+                None | Some(SExpr::Nil(_)) => {}
                 Some(SExpr::Id(id, _)) => {
                     let binding = bindings.gen_sym(&id);
                     bindings.add_binding(&id, &binding);
@@ -392,7 +392,7 @@ fn collect_define(sexpr: &SExpr, bindings: &mut Bindings) -> Result<()> {
 
 fn expand_letrec_syntax(sexpr: &SExpr, bindings: &mut Bindings, env: &mut Env) -> Result<SExpr> {
     if_let_sexpr! {(_, (specs @ ..), body @ ..) = sexpr =>
-        if try_dotted_tail(body).is_some() {
+        if !is_proper_list(body) {
             return Err(CompilationError {
                 span: sexpr.get_span(),
                 reason: "Invalid letrec-syntax body: expected a proper list".to_owned(),

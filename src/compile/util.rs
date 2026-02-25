@@ -233,17 +233,21 @@ pub(crate) fn len(sexpr: &SExpr) -> usize {
 }
 
 pub(crate) fn try_dotted_tail(sexpr: &SExpr) -> Option<SExpr> {
-    if let SExpr::Nil(_) = sexpr {
-        None
-    } else if let SExpr::Cons(cons, _) = sexpr {
-        try_dotted_tail(&cons.cdr)
-    } else {
-        Some(sexpr.clone())
+    let SExpr::Cons(Cons { cdr: cur, .. }, _) = sexpr else {
+        return None;
+    };
+    let mut cur: &SExpr = cur.as_ref();
+    while let SExpr::Cons(Cons { cdr, .. }, _) = cur {
+        cur = cdr;
     }
+    Some(cur.clone())
 }
 
 pub(crate) fn is_proper_list(sexpr: &SExpr) -> bool {
-    try_dotted_tail(sexpr).is_none()
+    if let SExpr::Nil(_) = sexpr {
+        return true;
+    }
+    try_dotted_tail(sexpr).is_some_and(|tail| matches!(tail, SExpr::Nil(_)))
 }
 
 pub(crate) fn append(head: &SExpr, tail: &SExpr) -> SExpr {
