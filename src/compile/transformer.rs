@@ -10,6 +10,11 @@ use super::compilation_error::{CompilationError, Result};
 use super::sexpr::{Id, SExpr, Symbol};
 
 #[derive(Debug)]
+pub(crate) struct Transformer {
+    syntax_rules: Vec<SyntaxRule>,
+}
+
+#[derive(Debug)]
 struct SyntaxRule {
     pattern: SExpr,
     template: SExpr,
@@ -17,12 +22,16 @@ struct SyntaxRule {
 }
 
 #[derive(Debug, Clone)]
-enum MatchedSExpr {
+enum CapturedSExpr {
     One(SExpr),
-    Many(Vec<MatchedSExpr>),
+    Many(Vec<CapturedSExpr>),
 }
 
-fn get_variables(sexpr: &SExpr, literals: &HashSet<Symbol>, vars: &mut HashSet<Symbol>) {
+fn collect_capture_variables(
+    sexpr: &SExpr,
+    literals: &HashSet<Symbol>,
+    vars: &mut HashSet<Symbol>,
+) {
     match sexpr {
         SExpr::Id(Id { symbol, .. }, _)
             if symbol.0 != "..." && symbol.0 != "_" && !literals.contains(symbol) =>
@@ -30,18 +39,21 @@ fn get_variables(sexpr: &SExpr, literals: &HashSet<Symbol>, vars: &mut HashSet<S
             vars.insert(symbol.clone());
         }
         SExpr::Cons(cons, _) => {
-            get_variables(&cons.car, literals, vars);
-            get_variables(&cons.cdr, literals, vars);
+            collect_capture_variables(&cons.car, literals, vars);
+            collect_capture_variables(&cons.cdr, literals, vars);
         }
         _ => {}
     }
 }
 
-fn collect_ellipses(cdr: &SExpr) -> (usize, &SExpr) {
+fn consume_ellipsis(cdr: &SExpr) -> (usize, &SExpr) {
     let mut count = 0;
     let mut cur = cdr;
     while let SExpr::Cons(cons, _) = cur {
-        if matches!(&*cons.car, SExpr::Id(Id { symbol, .. }, _) if symbol.0 == "...") {
+        if matches!(
+            &*cons.car,
+            SExpr::Id(Id { symbol, .. }, _) if symbol.0 == "..."
+        ) {
             count += 1;
             cur = &cons.cdr;
         } else {
@@ -51,65 +63,260 @@ fn collect_ellipses(cdr: &SExpr) -> (usize, &SExpr) {
     (count, cur)
 }
 
-impl SyntaxRule {
-    fn new(pattern: SExpr, template: SExpr, literals: Arc<HashSet<Symbol>>) -> Result<Self> {
-        fn validate_pattern(
-            pattern: &SExpr,
-            literals: &HashSet<Symbol>,
-            symbols_seen: &mut HashSet<Symbol>,
-        ) -> Result<()> {
-            match pattern {
-                SExpr::Id(Id { symbol, .. }, span) => {
-                    if symbol.0 == "..." {
+fn validate_pattern(
+    pattern: &SExpr,
+    literals: &HashSet<Symbol>,
+    symbols_seen: &mut HashSet<Symbol>,
+) -> Result<()> {
+    match pattern {
+        SExpr::Id(Id { symbol, .. }, span) => {
+            if symbol.0 == "..." {
+                return Err(CompilationError {
+                    span: *span,
+                    reason: "'...' is not allowed in this position as a pattern".into(),
+                });
+            }
+            if symbol.0 != "_" && !literals.contains(symbol) && !symbols_seen.insert(symbol.clone())
+            {
+                return Err(CompilationError {
+                    span: *span,
+                    reason: format!("Duplicate pattern variable '{}'", symbol),
+                });
+            }
+            Ok(())
+        }
+        SExpr::Cons(_, _) => {
+            let mut cur = pattern;
+            while let SExpr::Cons(cons, _) = cur {
+                let (ellipsis_count, rest) = consume_ellipsis(&cons.cdr);
+                if ellipsis_count > 0 {
+                    if ellipsis_count > 1 {
                         return Err(CompilationError {
-                            span: *span,
-                            reason: "'...' is not allowed in this position as a pattern".into(),
+                            span: cons.cdr.get_span(),
+                            reason: "Multiple consecutive '...' in pattern".into(),
                         });
                     }
-                    if symbol.0 != "_"
-                        && !literals.contains(symbol)
-                        && !symbols_seen.insert(symbol.clone())
-                    {
+                    validate_pattern(&cons.car, literals, symbols_seen)?;
+                    if matches!(rest, SExpr::Cons(..)) {
                         return Err(CompilationError {
-                            span: *span,
-                            reason: format!("Duplicate pattern variable '{}'", symbol),
+                            span: rest.get_span(),
+                            reason: "Unexpected pattern element after '...'".into(),
                         });
                     }
-                    Ok(())
-                }
-                SExpr::Cons(_, _) => {
-                    let mut cur = pattern;
-                    while let SExpr::Cons(cons, _) = cur {
-                        let (ellipsis_count, rest) = collect_ellipses(&cons.cdr);
-                        if ellipsis_count > 0 {
-                            if ellipsis_count > 1 {
-                                return Err(CompilationError {
-                                    span: cons.cdr.get_span(),
-                                    reason: "Multiple consecutive '...' in pattern".into(),
-                                });
-                            }
-                            validate_pattern(&cons.car, literals, symbols_seen)?;
-                            if matches!(rest, SExpr::Cons(..)) {
-                                return Err(CompilationError {
-                                    span: rest.get_span(),
-                                    reason: "Unexpected pattern element after '...'".into(),
-                                });
-                            }
-                            return Ok(());
-                        }
-                        validate_pattern(&cons.car, literals, symbols_seen)?;
-                        cur = &cons.cdr;
+                    if !matches!(rest, SExpr::Nil(_)) {
+                        validate_pattern(rest, literals, symbols_seen)?;
                     }
-                    if let SExpr::Nil(_) = cur {
-                        Ok(())
-                    } else {
-                        validate_pattern(cur, literals, symbols_seen)
-                    }
+                    return Ok(());
                 }
-                _ => Ok(()),
+                validate_pattern(&cons.car, literals, symbols_seen)?;
+                cur = &cons.cdr;
+            }
+            if let SExpr::Nil(_) = cur {
+                Ok(())
+            } else {
+                validate_pattern(cur, literals, symbols_seen)
             }
         }
+        _ => Ok(()),
+    }
+}
 
+fn match_repetition(
+    repeated_pattern: &SExpr,
+    target: &SExpr,
+    literals: &HashSet<Symbol>,
+    bindings: &Bindings,
+    captures: &mut HashMap<Symbol, CapturedSExpr>,
+) -> Option<()> {
+    let mut repeated_captures: HashMap<Symbol, Vec<CapturedSExpr>> = HashMap::new();
+    let mut cur = target;
+    while let SExpr::Cons(cons, _) = cur {
+        let mut sub_captures = HashMap::new();
+        match_subpattern(
+            repeated_pattern,
+            &cons.car,
+            literals,
+            bindings,
+            &mut sub_captures,
+        )?;
+        for (k, v) in sub_captures {
+            repeated_captures.entry(k).or_default().push(v);
+        }
+        cur = &cons.cdr;
+    }
+    let mut vars = HashSet::new();
+    collect_capture_variables(repeated_pattern, literals, &mut vars);
+    for var in vars {
+        repeated_captures.entry(var).or_default();
+    }
+    for (k, vs) in repeated_captures {
+        captures.insert(k, CapturedSExpr::Many(vs));
+    }
+    Some(())
+}
+
+fn match_subpatterns(
+    patterns: &SExpr,
+    target: &SExpr,
+    literals: &HashSet<Symbol>,
+    bindings: &Bindings,
+    captures: &mut HashMap<Symbol, CapturedSExpr>,
+) -> Option<()> {
+    let mut cur_pattern = patterns;
+    let mut cur_target = target;
+    loop {
+        match cur_pattern {
+            SExpr::Cons(pattern, _) if consume_ellipsis(&pattern.cdr).0 > 0 => {
+                match_repetition(&pattern.car, cur_target, literals, bindings, captures)?;
+                return match_subpattern(
+                    &try_dotted_tail(cur_pattern).expect("pattern is a list"),
+                    &try_dotted_tail(cur_target).unwrap_or_else(|| cur_target.clone()),
+                    literals,
+                    bindings,
+                    captures,
+                );
+            }
+            SExpr::Cons(pattern, _) => {
+                let SExpr::Cons(target, _) = cur_target else {
+                    return None;
+                };
+                match_subpattern(&pattern.car, &target.car, literals, bindings, captures)?;
+                cur_pattern = &pattern.cdr;
+                cur_target = &target.cdr;
+            }
+            _ => return match_subpattern(cur_pattern, cur_target, literals, bindings, captures),
+        }
+    }
+}
+
+fn match_subpattern(
+    pattern: &SExpr,
+    target: &SExpr,
+    literals: &HashSet<Symbol>,
+    bindings: &Bindings,
+    captures: &mut HashMap<Symbol, CapturedSExpr>,
+) -> Option<()> {
+    match (pattern, target) {
+        (SExpr::Id(pat_id, _), _) if literals.contains(&pat_id.symbol) => {
+            let SExpr::Id(tgt_id, _) = target else {
+                return None;
+            };
+            match (bindings.resolve(pat_id), bindings.resolve(tgt_id)) {
+                (Some(resolved_pat), Some(resolved_tgt)) => {
+                    (resolved_pat == resolved_tgt).then_some(())
+                }
+                (None, None) => (pat_id.symbol == tgt_id.symbol).then_some(()),
+                _ => None,
+            }
+        }
+        (SExpr::Id(Id { symbol, .. }, _), _) if symbol.0 == "_" => Some(()),
+        (SExpr::Id(Id { symbol, .. }, _), _) => {
+            captures.insert(symbol.clone(), CapturedSExpr::One(target.clone()));
+            Some(())
+        }
+        (SExpr::Cons(_, _), _) => match_subpatterns(pattern, target, literals, bindings, captures),
+        _ if pattern.without_spans() == target.without_spans() => Some(()),
+        _ => None,
+    }
+}
+
+fn render_template_repetition(
+    template: &SExpr,
+    level: usize,
+    captures: &HashMap<Symbol, CapturedSExpr>,
+) -> Result<Vec<SExpr>> {
+    if level == 0 {
+        return Ok(vec![render_template(template, captures)?]);
+    }
+
+    let mut symbols = HashSet::new();
+    collect_capture_variables(template, &HashSet::new(), &mut symbols);
+    let packed: Vec<_> = symbols
+        .iter()
+        .filter_map(|sym| match captures.get(sym) {
+            Some(CapturedSExpr::Many(items)) => Some((sym, items)),
+            _ => None,
+        })
+        .collect();
+
+    if packed.is_empty() {
+        return Err(CompilationError {
+            span: template.get_span(),
+            reason: "At least one variable needs to be a repeated capture".to_owned(),
+        });
+    }
+
+    let len = packed[0].1.len();
+    for &(sym, items) in &packed[1..] {
+        if items.len() != len {
+            return Err(CompilationError {
+                span: template.get_span(),
+                reason: format!(
+                    "Incompatible ellipsis match counts for '{}' ({}) and '{}' ({})",
+                    packed[0].0,
+                    len,
+                    sym,
+                    items.len()
+                ),
+            });
+        }
+    }
+
+    (0..len).try_fold(Vec::new(), |mut acc, i| {
+        let mut sub_captures = captures.clone();
+        for &(sym, items) in &packed {
+            sub_captures.insert(sym.clone(), items[i].clone());
+        }
+        acc.extend(render_template_repetition(
+            template,
+            level - 1,
+            &sub_captures,
+        )?);
+        Ok(acc)
+    })
+}
+
+fn render_template(template: &SExpr, captures: &HashMap<Symbol, CapturedSExpr>) -> Result<SExpr> {
+    match template {
+        SExpr::Id(Id { symbol, .. }, span) => match captures.get(symbol) {
+            Some(CapturedSExpr::One(sexpr)) => Ok(sexpr.clone()),
+            Some(CapturedSExpr::Many(_)) => Err(CompilationError {
+                span: *span,
+                reason: format!(
+                    "'{}' is followed by ellipsis in pattern but not in template",
+                    symbol
+                ),
+            }),
+            None => Ok(template.clone()),
+        },
+        SExpr::Cons(_, _) => render_templates(template, captures),
+        _ => Ok(template.clone()),
+    }
+}
+
+fn render_templates(templates: &SExpr, captures: &HashMap<Symbol, CapturedSExpr>) -> Result<SExpr> {
+    match templates {
+        SExpr::Cons(cons, _) => {
+            let (level, rest) = consume_ellipsis(&cons.cdr);
+            if level > 0 {
+                let expanded = render_template_repetition(&cons.car, level, captures)?;
+                let tail = render_templates(rest, captures)?;
+                Ok(expanded
+                    .into_iter()
+                    .rfold(tail, |acc, item| SExpr::cons(item, acc)))
+            } else {
+                let car = render_template(&cons.car, captures)?;
+                let cdr = render_templates(&cons.cdr, captures)?;
+                Ok(SExpr::cons(car, cdr))
+            }
+        }
+        SExpr::Nil(_) => Ok(templates.clone()),
+        _ => render_template(templates, captures),
+    }
+}
+
+impl SyntaxRule {
+    fn new(pattern: SExpr, template: SExpr, literals: Arc<HashSet<Symbol>>) -> Result<Self> {
         let mut symbols_seen = HashSet::new();
         validate_pattern(&pattern, &literals, &mut symbols_seen)?;
         Ok(SyntaxRule {
@@ -123,210 +330,21 @@ impl SyntaxRule {
         &self,
         target: &SExpr,
         bindings: &Bindings,
-    ) -> Option<HashMap<Symbol, MatchedSExpr>> {
-        fn _match_ellipsis(
-            repeat: &SExpr,
-            target: &SExpr,
-            literals: &HashSet<Symbol>,
-            bindings: &Bindings,
-            matches: &mut HashMap<Symbol, MatchedSExpr>,
-        ) -> Option<()> {
-            let mut joined_sub_matches: HashMap<Symbol, Vec<MatchedSExpr>> = HashMap::new();
-            let mut cur = target;
-            while let SExpr::Cons(cons, _) = cur {
-                let mut sub_matches = HashMap::new();
-                _match(repeat, &cons.car, literals, bindings, &mut sub_matches)?;
-                for (k, v) in sub_matches {
-                    joined_sub_matches.entry(k).or_default().push(v);
-                }
-                cur = &cons.cdr;
-            }
-            let mut vars = HashSet::new();
-            get_variables(repeat, literals, &mut vars);
-            for var in vars {
-                joined_sub_matches.entry(var).or_default();
-            }
-            for (k, vs) in joined_sub_matches {
-                matches.insert(k, MatchedSExpr::Many(vs));
-            }
-            Some(())
-        }
-
-        fn _match_list(
-            pattern: &SExpr,
-            target: &SExpr,
-            literals: &HashSet<Symbol>,
-            bindings: &Bindings,
-            matches: &mut HashMap<Symbol, MatchedSExpr>,
-        ) -> Option<()> {
-            let mut cur_pattern = pattern;
-            let mut cur_target = target;
-            loop {
-                match cur_pattern {
-                    SExpr::Cons(pattern, _) if collect_ellipses(&pattern.cdr).0 > 0 => {
-                        _match_ellipsis(&pattern.car, cur_target, literals, bindings, matches)?;
-                        return _match(
-                            &try_dotted_tail(cur_pattern).expect("pattern is a list"),
-                            &try_dotted_tail(cur_target).unwrap_or(cur_target.clone()),
-                            literals,
-                            bindings,
-                            matches,
-                        );
-                    }
-                    SExpr::Cons(pattern, _) => {
-                        let SExpr::Cons(target, _) = cur_target else {
-                            return None;
-                        };
-                        _match(&pattern.car, &target.car, literals, bindings, matches)?;
-                        cur_pattern = &pattern.cdr;
-                        cur_target = &target.cdr;
-                    }
-                    _ => return _match(cur_pattern, cur_target, literals, bindings, matches),
-                }
-            }
-        }
-
-        fn _match(
-            pattern: &SExpr,
-            target: &SExpr,
-            literals: &HashSet<Symbol>,
-            bindings: &Bindings,
-            matches: &mut HashMap<Symbol, MatchedSExpr>,
-        ) -> Option<()> {
-            match (pattern, target) {
-                (SExpr::Id(pat_id, _), _) if literals.contains(&pat_id.symbol) => {
-                    let SExpr::Id(tgt_id, _) = target else {
-                        return None;
-                    };
-                    match (bindings.resolve(pat_id), bindings.resolve(tgt_id)) {
-                        (Some(resolved_pat), Some(resolved_tgt)) => {
-                            (resolved_pat == resolved_tgt).then_some(())
-                        }
-                        (None, None) => (pat_id.symbol == tgt_id.symbol).then_some(()),
-                        _ => None,
-                    }
-                }
-                (SExpr::Id(Id { symbol, .. }, _), _) if symbol.0 == "_" => Some(()),
-                (SExpr::Id(Id { symbol, .. }, _), _) => {
-                    matches.insert(symbol.clone(), MatchedSExpr::One(target.clone()));
-                    Some(())
-                }
-                (SExpr::Cons(_, _), _) => _match_list(pattern, target, literals, bindings, matches),
-                _ if pattern.without_spans() == target.without_spans() => Some(()),
-                _ => None,
-            }
-        }
-
-        let mut matches = HashMap::new();
-        _match(
+    ) -> Option<HashMap<Symbol, CapturedSExpr>> {
+        let mut captures = HashMap::new();
+        match_subpattern(
             &self.pattern,
             target,
             &self.literals,
             bindings,
-            &mut matches,
+            &mut captures,
         )?;
-        Some(matches)
+        Some(captures)
     }
 
-    fn render_template(&self, matches: &HashMap<Symbol, MatchedSExpr>) -> Result<SExpr> {
-        fn expand_repeated(
-            template: &SExpr,
-            level: usize,
-            matches: &HashMap<Symbol, MatchedSExpr>,
-        ) -> Result<Vec<SExpr>> {
-            if level == 0 {
-                return Ok(vec![render(template, matches)?]);
-            }
-
-            let mut symbols = HashSet::new();
-            get_variables(template, &HashSet::new(), &mut symbols);
-            let packed: Vec<_> = symbols
-                .iter()
-                .filter_map(|sym| match matches.get(sym) {
-                    Some(MatchedSExpr::Many(items)) => Some((sym, items)),
-                    _ => None,
-                })
-                .collect();
-
-            if packed.is_empty() {
-                return Err(CompilationError {
-                    span: template.get_span(),
-                    reason: "At least one variable needs to be a repeated capture".to_owned(),
-                });
-            }
-
-            let len = packed[0].1.len();
-            for &(sym, items) in &packed[1..] {
-                if items.len() != len {
-                    return Err(CompilationError {
-                        span: template.get_span(),
-                        reason: format!(
-                            "Incompatible ellipsis match counts for '{}' ({}) and '{}' ({})",
-                            packed[0].0,
-                            len,
-                            sym,
-                            items.len()
-                        ),
-                    });
-                }
-            }
-
-            (0..len).try_fold(Vec::new(), |mut acc, i| {
-                let mut sub_matches = matches.clone();
-                for &(sym, items) in &packed {
-                    sub_matches.insert(sym.clone(), items[i].clone());
-                }
-                acc.extend(expand_repeated(template, level - 1, &sub_matches)?);
-                Ok(acc)
-            })
-        }
-
-        fn render(template: &SExpr, matches: &HashMap<Symbol, MatchedSExpr>) -> Result<SExpr> {
-            match template {
-                SExpr::Id(Id { symbol, .. }, span) => match matches.get(symbol) {
-                    Some(MatchedSExpr::One(sexpr)) => Ok(sexpr.clone()),
-                    Some(MatchedSExpr::Many(_)) => Err(CompilationError {
-                        span: *span,
-                        reason: format!(
-                            "'{}' is followed by ellipsis in pattern but not in template",
-                            symbol
-                        ),
-                    }),
-                    None => Ok(template.clone()),
-                },
-                SExpr::Cons(_, _) => render_list(template, matches),
-                _ => Ok(template.clone()),
-            }
-        }
-
-        fn render_list(template: &SExpr, matches: &HashMap<Symbol, MatchedSExpr>) -> Result<SExpr> {
-            match template {
-                SExpr::Cons(cons, _) => {
-                    let (level, rest) = collect_ellipses(&cons.cdr);
-                    if level > 0 {
-                        let expanded = expand_repeated(&cons.car, level, matches)?;
-                        let tail = render_list(rest, matches)?;
-                        Ok(expanded
-                            .into_iter()
-                            .rfold(tail, |acc, item| SExpr::cons(item, acc)))
-                    } else {
-                        let car = render(&cons.car, matches)?;
-                        let cdr = render_list(&cons.cdr, matches)?;
-                        Ok(SExpr::cons(car, cdr))
-                    }
-                }
-                SExpr::Nil(_) => Ok(template.clone()),
-                _ => render(template, matches),
-            }
-        }
-
-        render(&self.template, matches)
+    fn render_template(&self, captures: &HashMap<Symbol, CapturedSExpr>) -> Result<SExpr> {
+        render_template(&self.template, captures)
     }
-}
-
-#[derive(Debug)]
-pub(crate) struct Transformer {
-    syntax_rules: Vec<SyntaxRule>,
 }
 
 impl Transformer {
@@ -388,7 +406,7 @@ impl Transformer {
                                 reason: "Syntax transformer pattern must be a list".to_owned(),
                             });
                         };
-                        if !matches!(*pattern.car, SExpr::Id(..)) {
+                        if !matches!(pattern.car.as_ref(), SExpr::Id(..)) {
                             return Err(CompilationError {
                                 span: pattern.car.get_span(),
                                 reason: format!(
@@ -412,7 +430,7 @@ impl Transformer {
                 rules,
             )?;
 
-            return Ok(Self { syntax_rules })
+            return Ok(Self { syntax_rules });
         }
         Err(CompilationError {
             span: spec.get_span(),
@@ -431,8 +449,8 @@ impl Transformer {
         self.syntax_rules
             .iter()
             .filter_map(|rule| {
-                let matches = rule.match_pattern(&app_cons.cdr, bindings)?;
-                Some(rule.render_template(&matches))
+                let captures = rule.match_pattern(&app_cons.cdr, bindings)?;
+                Some(rule.render_template(&captures))
             })
             .next()
     }
@@ -446,13 +464,13 @@ mod tests {
 
     use super::*;
 
-    impl MatchedSExpr {
-        fn eq_ignoring_spans(&self, other: &MatchedSExpr) -> bool {
+    impl CapturedSExpr {
+        fn eq_ignoring_spans(&self, other: &CapturedSExpr) -> bool {
             match (self, other) {
-                (MatchedSExpr::One(a), MatchedSExpr::One(b)) => {
+                (CapturedSExpr::One(a), CapturedSExpr::One(b)) => {
                     a.without_spans() == b.without_spans()
                 }
-                (MatchedSExpr::Many(a), MatchedSExpr::Many(b)) => {
+                (CapturedSExpr::Many(a), CapturedSExpr::Many(b)) => {
                     a.len() == b.len() && a.iter().zip(b).all(|(x, y)| x.eq_ignoring_spans(y))
                 }
                 _ => false,
@@ -464,15 +482,15 @@ mod tests {
         parse(&tokenize(src).unwrap()).unwrap()
     }
 
-    fn one(src: &str) -> MatchedSExpr {
-        MatchedSExpr::One(p(src))
+    fn one(src: &str) -> CapturedSExpr {
+        CapturedSExpr::One(p(src))
     }
 
-    fn many(vals: Vec<MatchedSExpr>) -> MatchedSExpr {
-        MatchedSExpr::Many(vals)
+    fn many(vals: Vec<CapturedSExpr>) -> CapturedSExpr {
+        CapturedSExpr::Many(vals)
     }
 
-    fn do_match(pattern: &str, target: &str) -> Option<HashMap<Symbol, MatchedSExpr>> {
+    fn do_match(pattern: &str, target: &str) -> Option<HashMap<Symbol, CapturedSExpr>> {
         do_match_with_literals(pattern, target, &[])
     }
 
@@ -480,7 +498,7 @@ mod tests {
         pattern: &str,
         target: &str,
         literals: &[&str],
-    ) -> Option<HashMap<Symbol, MatchedSExpr>> {
+    ) -> Option<HashMap<Symbol, CapturedSExpr>> {
         let rule = SyntaxRule::new(
             p(pattern),
             nil(),
@@ -491,12 +509,12 @@ mod tests {
     }
 
     fn assert_binding(
-        matches: &HashMap<Symbol, MatchedSExpr>,
+        captures: &HashMap<Symbol, CapturedSExpr>,
         name: &str,
-        expected: &MatchedSExpr,
+        expected: &CapturedSExpr,
     ) {
         let sym = Symbol::new(name);
-        let actual = matches
+        let actual = captures
             .get(&sym)
             .unwrap_or_else(|| panic!("missing binding for '{}'", name));
         assert!(
@@ -512,8 +530,8 @@ mod tests {
     #[test]
     fn test_match_literal_equal() {
         let result = do_match("1", "1");
-        let matches = result.expect("should match");
-        assert!(matches.is_empty());
+        let captures = result.expect("should match");
+        assert!(captures.is_empty());
     }
 
     // match(2, 1) is None
@@ -525,17 +543,17 @@ mod tests {
     // match("x", "a") == {"x": One("a")}
     #[test]
     fn test_match_pattern_variable() {
-        let matches = do_match("x", "a").expect("should match");
-        assert_eq!(matches.len(), 1);
-        assert_binding(&matches, "x", &one("a"));
+        let captures = do_match("x", "a").expect("should match");
+        assert_eq!(captures.len(), 1);
+        assert_binding(&captures, "x", &one("a"));
     }
 
     // match([1, "x", 1], [1, "a", 1]) == {"x": One("a")}
     #[test]
     fn test_match_list_with_literals() {
-        let matches = do_match("(1 x 1)", "(1 a 1)").expect("should match");
-        assert_eq!(matches.len(), 1);
-        assert_binding(&matches, "x", &one("a"));
+        let captures = do_match("(1 x 1)", "(1 a 1)").expect("should match");
+        assert_eq!(captures.len(), 1);
+        assert_binding(&captures, "x", &one("a"));
     }
 
     // match([1, "x", 2], [1, "a", 1]) is None
@@ -559,61 +577,61 @@ mod tests {
     // match(["a", "..."], ["x", "y"]) == {"a": Many([One("x"), One("y")])}
     #[test]
     fn test_match_simple_ellipsis() {
-        let matches = do_match("(a ...)", "(x y)").expect("should match");
-        assert_eq!(matches.len(), 1);
-        assert_binding(&matches, "a", &many(vec![one("x"), one("y")]));
+        let captures = do_match("(a ...)", "(x y)").expect("should match");
+        assert_eq!(captures.len(), 1);
+        assert_binding(&captures, "a", &many(vec![one("x"), one("y")]));
     }
 
     // match(["a", "..."], []) — zero repetitions, variable tracked as empty Many
     #[test]
     fn test_match_ellipsis_zero() {
-        let matches = do_match("(a ...)", "()").expect("should match");
-        assert_eq!(matches.len(), 1);
-        assert_binding(&matches, "a", &many(vec![]));
+        let captures = do_match("(a ...)", "()").expect("should match");
+        assert_eq!(captures.len(), 1);
+        assert_binding(&captures, "a", &many(vec![]));
     }
 
     // match(["_", "a", "..."], ["mac"]) — ellipsis with prefix, zero reps
     #[test]
     fn test_match_ellipsis_with_prefix() {
-        let matches = do_match("(_ a ...)", "(mac)").expect("should match");
-        assert_eq!(matches.len(), 1);
-        assert_binding(&matches, "a", &many(vec![]));
+        let captures = do_match("(_ a ...)", "(mac)").expect("should match");
+        assert_eq!(captures.len(), 1);
+        assert_binding(&captures, "a", &many(vec![]));
     }
 
     // Zero repetitions with multiple variables in repeat pattern
     #[test]
     fn test_match_ellipsis_zero_multi_var() {
-        let matches = do_match("((a b) ...)", "()").expect("should match");
-        assert_eq!(matches.len(), 2);
-        assert_binding(&matches, "a", &many(vec![]));
-        assert_binding(&matches, "b", &many(vec![]));
+        let captures = do_match("((a b) ...)", "()").expect("should match");
+        assert_eq!(captures.len(), 2);
+        assert_binding(&captures, "a", &many(vec![]));
+        assert_binding(&captures, "b", &many(vec![]));
     }
 
     // Zero repetitions with nested ellipsis
     #[test]
     fn test_match_nested_ellipsis_zero() {
-        let matches = do_match("((a ...) ...)", "()").expect("should match");
-        assert_eq!(matches.len(), 1);
-        assert_binding(&matches, "a", &many(vec![]));
+        let captures = do_match("((a ...) ...)", "()").expect("should match");
+        assert_eq!(captures.len(), 1);
+        assert_binding(&captures, "a", &many(vec![]));
     }
 
     // match(["_", "e1", "e2", "..."], ["and", "a", "b", "c"])
     #[test]
     fn test_match_ellipsis_with_prefix_and_elements() {
-        let matches = do_match("(_ e1 e2 ...)", "(and a b c)").expect("should match");
-        assert_eq!(matches.len(), 2);
-        assert_binding(&matches, "e1", &one("a"));
-        assert_binding(&matches, "e2", &many(vec![one("b"), one("c")]));
+        let captures = do_match("(_ e1 e2 ...)", "(and a b c)").expect("should match");
+        assert_eq!(captures.len(), 2);
+        assert_binding(&captures, "e1", &one("a"));
+        assert_binding(&captures, "e2", &many(vec![one("b"), one("c")]));
     }
 
     // match([["a", "..."], "..."], [["x", "y"], ["z"]])
     //   == {"a": Many([Many([One("x"), One("y")]), Many([One("z")])])}
     #[test]
     fn test_match_nested_ellipsis() {
-        let matches = do_match("((a ...) ...)", "((x y) (z))").expect("should match");
-        assert_eq!(matches.len(), 1);
+        let captures = do_match("((a ...) ...)", "((x y) (z))").expect("should match");
+        assert_eq!(captures.len(), 1);
         assert_binding(
-            &matches,
+            &captures,
             "a",
             &many(vec![many(vec![one("x"), one("y")]), many(vec![one("z")])]),
         );
@@ -622,11 +640,11 @@ mod tests {
     // match([[[1, "a"], "..."], "..."], [[[1, "x"], [1, "y"]], [[1, "z"]]])
     #[test]
     fn test_match_nested_ellipsis_with_literals() {
-        let matches =
+        let captures =
             do_match("(((1 a) ...) ...)", "(((1 x) (1 y)) ((1 z)))").expect("should match");
-        assert_eq!(matches.len(), 1);
+        assert_eq!(captures.len(), 1);
         assert_binding(
-            &matches,
+            &captures,
             "a",
             &many(vec![many(vec![one("x"), one("y")]), many(vec![one("z")])]),
         );
@@ -638,47 +656,47 @@ mod tests {
         assert!(do_match("(((1 a) ...) ...)", "(((2 x) (1 y)) ((1 z)))").is_none());
     }
 
-    // Wildcard matches anything
+    // Wildcard captures anything
     #[test]
     fn test_match_wildcard() {
-        let matches = do_match("_", "42").expect("should match");
-        assert!(matches.is_empty());
+        let captures = do_match("_", "42").expect("should match");
+        assert!(captures.is_empty());
 
-        let matches = do_match("_", "(a b c)").expect("should match");
-        assert!(matches.is_empty());
+        let captures = do_match("_", "(a b c)").expect("should match");
+        assert!(captures.is_empty());
     }
 
     // Pattern variable captures a list
     #[test]
     fn test_match_variable_captures_list() {
-        let matches = do_match("x", "(a b)").expect("should match");
-        assert_eq!(matches.len(), 1);
-        assert_binding(&matches, "x", &one("(a b)"));
+        let captures = do_match("x", "(a b)").expect("should match");
+        assert_eq!(captures.len(), 1);
+        assert_binding(&captures, "x", &one("(a b)"));
     }
 
     // Ellipsis with complex repeat pattern
     #[test]
     fn test_match_ellipsis_complex_repeat() {
-        let matches = do_match("((a b) ...)", "((1 2) (3 4))").expect("should match");
-        assert_eq!(matches.len(), 2);
-        assert_binding(&matches, "a", &many(vec![one("1"), one("3")]));
-        assert_binding(&matches, "b", &many(vec![one("2"), one("4")]));
+        let captures = do_match("((a b) ...)", "((1 2) (3 4))").expect("should match");
+        assert_eq!(captures.len(), 2);
+        assert_binding(&captures, "a", &many(vec![one("1"), one("3")]));
+        assert_binding(&captures, "b", &many(vec![one("2"), one("4")]));
     }
 
     // The `and` macro pattern from existing tests
     #[test]
     fn test_match_and_macro_pattern() {
         // (_ e1 e2 ...) against (and a b)
-        let matches = do_match("(_ e1 e2 ...)", "(and a b)").expect("should match");
-        assert_eq!(matches.len(), 2);
-        assert_binding(&matches, "e1", &one("a"));
-        assert_binding(&matches, "e2", &many(vec![one("b")]));
+        let captures = do_match("(_ e1 e2 ...)", "(and a b)").expect("should match");
+        assert_eq!(captures.len(), 2);
+        assert_binding(&captures, "e1", &one("a"));
+        assert_binding(&captures, "e2", &many(vec![one("b")]));
 
         // (_ e1 e2 ...) against (and a b c d)
-        let matches = do_match("(_ e1 e2 ...)", "(and a b c d)").expect("should match");
-        assert_eq!(matches.len(), 2);
-        assert_binding(&matches, "e1", &one("a"));
-        assert_binding(&matches, "e2", &many(vec![one("b"), one("c"), one("d")]));
+        let captures = do_match("(_ e1 e2 ...)", "(and a b c d)").expect("should match");
+        assert_eq!(captures.len(), 2);
+        assert_binding(&captures, "e1", &one("a"));
+        assert_binding(&captures, "e2", &many(vec![one("b"), one("c"), one("d")]));
     }
 
     // Non-list target against list pattern
@@ -698,16 +716,16 @@ mod tests {
     fn assert_renders_to(pattern: &str, template: &str, target: &str, expected: &str) {
         let rule = SyntaxRule::new(p(pattern), p(template), Arc::new(HashSet::new()))
             .expect("invalid pattern in test");
-        let matches = rule
+        let captures = rule
             .match_pattern(&p(target), &Bindings::new())
             .expect("pattern should match target");
         let result = rule
-            .render_template(&matches)
+            .render_template(&captures)
             .expect("render should succeed");
         assert_eq!(
             result.without_spans(),
             p(expected).without_spans(),
-            "render({template}, {matches:?}) = {result}, expected {expected}"
+            "render({template}, {captures:?}) = {result}, expected {expected}"
         );
     }
 
@@ -871,6 +889,21 @@ mod tests {
     }
 
     #[test]
+    fn test_new_ellipsis_as_dotted_tail_after_ellipsis_rejected() {
+        let err = make_rule("(_ a ... . ...)").unwrap_err();
+        assert!(
+            err.reason
+                .contains("'...' is not allowed in this position as a pattern"),
+        );
+    }
+
+    #[test]
+    fn test_new_duplicate_var_in_dotted_tail_after_ellipsis_rejected() {
+        let err = make_rule("(_ a ... . a)").unwrap_err();
+        assert!(err.reason.contains("Duplicate pattern variable 'a'"));
+    }
+
+    #[test]
     fn test_new_duplicate_literal_allowed() {
         assert!(make_rule_with_literals("(_ foo foo)", &["foo"]).is_ok());
     }
@@ -932,13 +965,13 @@ mod tests {
 
     // --- literal identifier tests ---
 
-    // Unbound literal in pattern matches same unbound literal in target
+    // Unbound literal in pattern captures same unbound literal in target
     #[test]
     fn test_match_literal_identifier_same_name() {
-        let matches =
+        let captures =
             do_match_with_literals("(_ foo e)", "(mac foo 42)", &["foo"]).expect("should match");
-        assert_eq!(matches.len(), 1);
-        assert_binding(&matches, "e", &one("42"));
+        assert_eq!(captures.len(), 1);
+        assert_binding(&captures, "e", &one("42"));
     }
 
     // Unbound literal in pattern does not match different unbound identifier
@@ -962,21 +995,21 @@ mod tests {
     // Non-literal identifier is still captured as a pattern variable
     #[test]
     fn test_match_non_literal_still_captures() {
-        let matches =
+        let captures =
             do_match_with_literals("(_ foo e)", "(mac bar 42)", &["other"]).expect("should match");
-        assert_eq!(matches.len(), 2);
-        assert_binding(&matches, "foo", &one("bar"));
-        assert_binding(&matches, "e", &one("42"));
+        assert_eq!(captures.len(), 2);
+        assert_binding(&captures, "foo", &one("bar"));
+        assert_binding(&captures, "e", &one("42"));
     }
 
     // Literal with ellipsis — only matching identifiers are consumed
     #[test]
     fn test_match_literal_in_ellipsis_subpattern() {
-        let matches =
+        let captures =
             do_match_with_literals("((_ foo e) ...)", "((mac foo 1) (mac foo 2))", &["foo"])
                 .expect("should match");
-        assert_eq!(matches.len(), 1);
-        assert_binding(&matches, "e", &many(vec![one("1"), one("2")]));
+        assert_eq!(captures.len(), 1);
+        assert_binding(&captures, "e", &many(vec![one("1"), one("2")]));
     }
 
     // Literal with ellipsis — mismatch in one repetition fails the whole match
