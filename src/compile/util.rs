@@ -208,7 +208,7 @@ pub(crate) fn try_first(sexpr: &SExpr) -> Option<SExpr> {
 }
 
 pub(crate) fn first(sexpr: &SExpr) -> SExpr {
-    try_first(sexpr).expect("Expecting parameter to be a cons")
+    try_first(sexpr).expect("first expected parameter to be a cons")
 }
 
 pub(crate) fn try_rest(sexpr: &SExpr) -> Option<SExpr> {
@@ -219,7 +219,7 @@ pub(crate) fn try_rest(sexpr: &SExpr) -> Option<SExpr> {
 }
 
 pub(crate) fn rest(sexpr: &SExpr) -> SExpr {
-    try_rest(sexpr).expect("Expecting parameter to be a cons")
+    try_rest(sexpr).expect("rest expected parameter to be a cons")
 }
 
 pub(crate) fn len(sexpr: &SExpr) -> usize {
@@ -256,7 +256,7 @@ pub(crate) fn append(head: &SExpr, tail: &SExpr) -> SExpr {
         SExpr::Cons(cons, span) => {
             SExpr::Cons(Cons::new(*cons.car.clone(), append(&cons.cdr, tail)), *span)
         }
-        _ => unreachable!("append expects a proper list"),
+        _ => unreachable!("append expected a proper list"),
     }
 }
 

@@ -59,7 +59,7 @@ fn expand_sexpr(
 
 fn expand_id(sexpr: &SExpr, bindings: &mut Bindings) -> Result<SExpr> {
     let SExpr::Id(id, span) = sexpr else {
-        unreachable!("expand_id is expecting an ID");
+        unreachable!("expand_id expected an ID");
     };
     bindings.resolve_sym(id).ok_or(CompilationError {
         span: *span,
@@ -100,7 +100,7 @@ fn expand_id_application(
             })?;
             (id, binding)
         }
-        _ => unreachable!("first element of ID application must be an ID"),
+        _ => unreachable!("expand_id_application expected first element to be an ID"),
     };
 
     match binding.0.as_str() {
@@ -338,8 +338,7 @@ fn normalize_body(
             if phase != NormalizationPhase::Define {
                 return Err(CompilationError {
                     span: expanded_car.get_span(),
-                    reason: "'define' must appear at the beginning of a body"
-                        .to_owned(),
+                    reason: "'define' must appear at the beginning of a body".to_owned(),
                 });
             }
             collect_define(&expanded_car, bindings)?;

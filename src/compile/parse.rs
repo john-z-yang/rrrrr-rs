@@ -27,7 +27,7 @@ pub(crate) fn parse(tokens: &[Token]) -> Result<SExpr> {
             match self.look_ahead() {
                 Some(Token::EoF(_)) => Ok(res),
                 Some(token) => Err(self.emit_err("Expected end of input", token)),
-                None => unreachable!("parse is expecting token stream to end with the EoF token"),
+                None => unreachable!("parse expected token stream to end with the EoF token"),
             }
         }
 
@@ -49,7 +49,7 @@ pub(crate) fn parse(tokens: &[Token]) -> Result<SExpr> {
                     | Token::CommaAt(_),
                 ) => self.parse_compound(),
                 Some(token) => Err(self.emit_err("Expected a datum", token)),
-                _ => unreachable!("parse_datum is expecting at least 1 token to look ahead"),
+                _ => unreachable!("parse_datum expected at least 1 token to look ahead"),
             }
         }
 
@@ -65,7 +65,7 @@ pub(crate) fn parse(tokens: &[Token]) -> Result<SExpr> {
                             | Token::Str(..)
                     )
                 ),
-                "parse_atom is expecting a token that represents an atomic value",
+                "parse_atom expected a token that represents an atomic value",
             );
 
             match self.consume() {
@@ -74,7 +74,7 @@ pub(crate) fn parse(tokens: &[Token]) -> Result<SExpr> {
                 Token::Num(num, span) => SExpr::Num(num.clone(), *span),
                 Token::Char(char, span) => SExpr::Char(char.clone(), *span),
                 Token::Str(string, span) => SExpr::Str(string.clone(), *span),
-                _ => unreachable!("parse_atom is only expecting tokens for atomic values"),
+                _ => unreachable!("parse_atom expected only tokens for atomic values"),
             }
         }
 
@@ -95,7 +95,7 @@ pub(crate) fn parse(tokens: &[Token]) -> Result<SExpr> {
 
             assert!(
                 matches!(self.look_ahead(), Some(Token::LParen(_))),
-                "parse_list is expecting a '(' token",
+                "parse_list expected a '(' token",
             );
 
             let start = self.consume().get_span();
@@ -117,7 +117,7 @@ pub(crate) fn parse(tokens: &[Token]) -> Result<SExpr> {
                     elements.push(self.parse_dot_notation()?);
                     assert!(
                         matches!(self.look_ahead(), Some(Token::RParen(_))),
-                        "parse_list is expecting a ')' token after parse_dot_notation returns",
+                        "parse_list expected a ')' token after parse_dot_notation returns",
                     );
                     Ok(Self::make_improper_list(
                         &elements,
@@ -131,7 +131,7 @@ pub(crate) fn parse(tokens: &[Token]) -> Result<SExpr> {
                 }
                 Some(token) => Err(self.emit_err("Expected ')' to close '('", token)),
                 None => {
-                    unreachable!("parse_datum is expecting token stream to end with the EoF token")
+                    unreachable!("parse_datum expected token stream to end with the EoF token")
                 }
             }
         }
@@ -139,7 +139,7 @@ pub(crate) fn parse(tokens: &[Token]) -> Result<SExpr> {
         fn parse_dot_notation(&mut self) -> Result<SExpr> {
             assert!(
                 matches!(self.look_ahead(), Some(Token::Dot(_))),
-                "parse_dot_notation is expecting the '.' token"
+                "parse_dot_notation expected the '.' token"
             );
             self.consume();
             let tail = self.parse_datum()?;
@@ -147,7 +147,7 @@ pub(crate) fn parse(tokens: &[Token]) -> Result<SExpr> {
                 Some(Token::RParen(_)) => Ok(tail),
                 Some(token) => Err(self.emit_err("Expected ')' after dotted datum", token)),
                 None => {
-                    unreachable!("parse_list is expecting at least 1 token to look ahead")
+                    unreachable!("parse_list expected at least 1 token to look ahead")
                 }
             }
         }
@@ -172,7 +172,7 @@ pub(crate) fn parse(tokens: &[Token]) -> Result<SExpr> {
                             | Token::CommaAt(_)
                     )
                 ),
-                "parse_prefix is expecting either '(' or an abbreviation prefix",
+                "parse_prefix expected either '(' or an abbreviation prefix",
             );
 
             match self.consume() {
@@ -180,16 +180,14 @@ pub(crate) fn parse(tokens: &[Token]) -> Result<SExpr> {
                 Token::QuasiQuote(span) => SExpr::Id(Id::new("quasiquote", []), *span),
                 Token::Comma(span) => SExpr::Id(Id::new("unquote", []), *span),
                 Token::CommaAt(span) => SExpr::Id(Id::new("unquote-splicing", []), *span),
-                _ => unreachable!(
-                    "parse_abbreviation is only expecting tokens for abbreviated prefix"
-                ),
+                _ => unreachable!("parse_abbreviation expected only tokens for abbreviated prefix"),
             }
         }
 
         fn parse_vector(&mut self) -> Result<SExpr> {
             assert!(
                 matches!(self.look_ahead(), Some(Token::HashLParen(_))),
-                "parse_vector is expecting the '#(' token"
+                "parse_vector expected the '#(' token"
             );
             let start = self.consume().get_span();
             let mut elements: Vec<SExpr> = vec![];
@@ -205,7 +203,7 @@ pub(crate) fn parse(tokens: &[Token]) -> Result<SExpr> {
                     Ok(SExpr::Vector(Vector(elements), start.combine(end)))
                 }
                 Some(token) => Err(self.emit_err("Expected ')' to close '#('", token)),
-                None => unreachable!("parse_datum is expecting at least 1 token to look ahead"),
+                None => unreachable!("parse_datum expected at least 1 token to look ahead"),
             }
         }
 
@@ -784,7 +782,7 @@ mod tests {
     }
 
     #[test]
-    #[should_panic(expected = "parse is expecting token stream to end with the EoF token")]
+    #[should_panic(expected = "parse expected token stream to end with the EoF token")]
     fn test_parse_missing_eof_panics_as_internal_error() {
         let tokens = vec![
             Token::LParen(Span { lo: 0, hi: 1 }),
@@ -794,7 +792,7 @@ mod tests {
     }
 
     #[test]
-    #[should_panic(expected = "parse_datum is expecting token stream to end with the EoF token")]
+    #[should_panic(expected = "parse_datum expected token stream to end with the EoF token")]
     fn test_parse_unclosed_list_without_eof_panics_as_internal_error() {
         let tokens = vec![Token::LParen(Span { lo: 0, hi: 1 })];
         let _ = parse(&tokens);

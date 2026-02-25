@@ -242,7 +242,8 @@ fn render_template_repetition(
     if packed.is_empty() {
         return Err(CompilationError {
             span: template.get_span(),
-            reason: "Expected at least one repeated capture variable in ellipsis template".to_owned(),
+            reason: "Expected at least one repeated capture variable in ellipsis template"
+                .to_owned(),
         });
     }
 
@@ -300,18 +301,21 @@ fn render_templates(templates: &SExpr, captures: &HashMap<Symbol, CapturedSExpr>
             let (level, rest) = consume_ellipsis(&cons.cdr);
             if level > 0 {
                 let expanded = render_template_repetition(&cons.car, level, captures)?;
-                let tail = render_templates(rest, captures)?;
+                let tail = render_template(rest, captures)?;
                 Ok(expanded
                     .into_iter()
                     .rfold(tail, |acc, item| SExpr::cons(item, acc)))
             } else {
                 let car = render_template(&cons.car, captures)?;
-                let cdr = render_templates(&cons.cdr, captures)?;
+                let cdr = render_template(&cons.cdr, captures)?;
                 Ok(SExpr::cons(car, cdr))
             }
         }
         SExpr::Nil(_) => Ok(templates.clone()),
-        _ => render_template(templates, captures),
+        _ => unreachable!(
+            "render_templates expected a list as template, but got {}",
+            templates
+        ),
     }
 }
 
@@ -891,10 +895,7 @@ mod tests {
     #[test]
     fn test_new_ellipsis_as_dotted_tail_after_ellipsis_rejected() {
         let err = make_rule("(_ a ... . ...)").unwrap_err();
-        assert!(
-            err.reason
-                .contains("'...' is not allowed in this position"),
-        );
+        assert!(err.reason.contains("'...' is not allowed in this position"),);
     }
 
     #[test]
@@ -920,19 +921,13 @@ mod tests {
     #[test]
     fn test_new_bare_ellipsis() {
         let err = make_rule("...").unwrap_err();
-        assert!(
-            err.reason
-                .contains("'...' is not allowed in this position")
-        );
+        assert!(err.reason.contains("'...' is not allowed in this position"));
     }
 
     #[test]
     fn test_new_ellipsis_as_first_element() {
         let err = make_rule("(... a)").unwrap_err();
-        assert!(
-            err.reason
-                .contains("'...' is not allowed in this position")
-        );
+        assert!(err.reason.contains("'...' is not allowed in this position"));
     }
 
     #[test]
