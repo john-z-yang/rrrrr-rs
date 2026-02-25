@@ -42,7 +42,7 @@ fn expand_sexpr(
     if let SExpr::Nil(span) = sexpr {
         return Err(CompilationError {
             span: *span,
-            reason: "Unexpected nil".to_owned(),
+            reason: "Unexpected empty list in expression position".to_owned(),
         });
     };
     if let SExpr::Id(..) = sexpr {
@@ -63,7 +63,7 @@ fn expand_id(sexpr: &SExpr, bindings: &mut Bindings) -> Result<SExpr> {
     };
     bindings.resolve_sym(id).ok_or(CompilationError {
         span: *span,
-        reason: format!("ID: {} is unbound", id),
+        reason: format!("Unbound identifier: '{}'", id),
     })?;
     Ok(sexpr.clone())
 }
@@ -71,7 +71,7 @@ fn expand_id(sexpr: &SExpr, bindings: &mut Bindings) -> Result<SExpr> {
 fn apply_transformer(
     sexpr: &SExpr,
     transformer: &Transformer,
-    binding: &Symbol,
+    name: &Id,
     bindings: &mut Bindings,
 ) -> Result<SExpr> {
     let scope_id = bindings.new_scope_id();
@@ -81,7 +81,7 @@ fn apply_transformer(
             .transform(&scoped, bindings)
             .ok_or_else(|| CompilationError {
                 span: scoped.get_span(),
-                reason: format!("Unable to apply transformer: {}, no rules match", binding),
+                reason: format!("No matching rule for macro '{}'", name),
             })??;
     Ok(transformed.flip_scope(scope_id))
 }
@@ -92,11 +92,14 @@ fn expand_id_application(
     env: &mut Env,
     ctx: Context,
 ) -> Result<SExpr> {
-    let binding = match try_first(sexpr) {
-        Some(SExpr::Id(id, span)) => bindings.resolve_sym(&id).ok_or_else(|| CompilationError {
-            span,
-            reason: format!("ID: {} is unbound", id),
-        })?,
+    let (id, binding) = match try_first(sexpr) {
+        Some(SExpr::Id(id, span)) => {
+            let binding = bindings.resolve_sym(&id).ok_or_else(|| CompilationError {
+                span,
+                reason: format!("Unbound identifier: '{}'", id),
+            })?;
+            (id, binding)
+        }
         _ => unreachable!("first element of ID application must be an ID"),
     };
 
@@ -110,7 +113,7 @@ fn expand_id_application(
         _ => {
             if let Some(transformer) = env.get(&binding) {
                 expand_sexpr(
-                    &apply_transformer(sexpr, transformer, &binding, bindings)?,
+                    &apply_transformer(sexpr, transformer, &id, bindings)?,
                     bindings,
                     env,
                     ctx,
@@ -138,13 +141,13 @@ fn expand_begin(
     if !is_proper_list(sexpr) {
         return Err(CompilationError {
             span: sexpr.get_span(),
-            reason: "Invalid use of begin form: expected a proper list".to_owned(),
+            reason: "Invalid 'begin' form: expected a proper list".to_owned(),
         });
     }
     if len(sexpr) == 1 {
         return Err(CompilationError {
             span: sexpr.get_span(),
-            reason: "Invalid use of begin form: must have at least 1 expression".to_owned(),
+            reason: "Invalid 'begin' form: expected at least one expression".to_owned(),
         });
     }
     try_map(
@@ -159,13 +162,13 @@ fn expand_set(sexpr: &SExpr, bindings: &mut Bindings, env: &mut Env) -> Result<S
         let Some(resolved) = resolved else {
             return Err(CompilationError {
                 span: *span,
-                reason: format!("ID: {} is unbound", id),
+                reason: format!("Unbound identifier: '{}'", id),
             })
         };
         if Bindings::CORE_BINDINGS.contains(&resolved.0.as_str()) {
             return Err(CompilationError {
                 span: sexpr.get_span(),
-                reason: format!("Cannot mutate core binding: {}", id),
+                reason: format!("Cannot mutate core binding '{}'", id),
             })
         }
         let exp = expand_sexpr(exp, bindings, env, Context::Expression)?;
@@ -173,7 +176,7 @@ fn expand_set(sexpr: &SExpr, bindings: &mut Bindings, env: &mut Env) -> Result<S
     }
     Err(CompilationError {
         span: sexpr.get_span(),
-        reason: "Invalid use of set! form".to_owned(),
+        reason: "Invalid 'set!' form".to_owned(),
     })
 }
 
@@ -187,7 +190,7 @@ fn expand_define(
         if ctx == Context::Expression {
             return Err(CompilationError {
                 span: sexpr.get_span(),
-                reason: "Cannot use define in an expression context".to_owned(),
+                reason: "'define' is not allowed in an expression context".to_owned(),
             });
         }
         if ctx == Context::TopLevel {
@@ -199,7 +202,7 @@ fn expand_define(
     }
     Err(CompilationError {
         span: sexpr.get_span(),
-        reason: "Invalid use of define form".to_owned(),
+        reason: "Invalid 'define' form".to_owned(),
     })
 }
 
@@ -217,7 +220,7 @@ fn expand_lambda(sexpr: &SExpr, bindings: &mut Bindings, env: &mut Env) -> Resul
                         return Err(CompilationError {
                             span: arg.get_span(),
                             reason: format!(
-                                "Expected identifiers in function parameters, but got: {}",
+                                "Expected an identifier in function parameters, but got: {}",
                                 arg
                             ),
                         });
@@ -239,7 +242,7 @@ fn expand_lambda(sexpr: &SExpr, bindings: &mut Bindings, env: &mut Env) -> Resul
                     return Err(CompilationError {
                         span: tail.get_span(),
                         reason: format!(
-                            "Expected identifiers in function parameters, but got: {}",
+                            "Expected an identifier as rest parameter, but got: {}",
                             tail
                         ),
                     });
@@ -264,7 +267,7 @@ fn expand_lambda(sexpr: &SExpr, bindings: &mut Bindings, env: &mut Env) -> Resul
         _ => {
             Err(CompilationError {
                 span: sexpr.get_span(),
-                reason: "Invalid use of lambda form".to_owned(),
+                reason: "Invalid 'lambda' form".to_owned(),
             })
         }
     }
@@ -312,7 +315,7 @@ fn partial_expand_body(
                 let Some(transformer) = env.get(&binding) else {
                     return Ok((form, BodyFormKind::Other));
                 };
-                form = apply_transformer(&form, transformer, &binding, bindings)?;
+                form = apply_transformer(&form, transformer, &id, bindings)?;
             }
         }
     }
@@ -335,7 +338,7 @@ fn normalize_body(
             if phase != NormalizationPhase::Define {
                 return Err(CompilationError {
                     span: expanded_car.get_span(),
-                    reason: "Internal definitions must appear at the very beginning of the body"
+                    reason: "'define' must appear at the beginning of a body"
                         .to_owned(),
                 });
             }
@@ -348,13 +351,13 @@ fn normalize_body(
             if !is_proper_list(&expanded_car) {
                 return Err(CompilationError {
                     span: expanded_car.get_span(),
-                    reason: "Invalid use of begin form: expected a proper list".to_owned(),
+                    reason: "Invalid 'begin' form: expected a proper list".to_owned(),
                 });
             }
             if len(&expanded_car) == 1 {
                 return Err(CompilationError {
                     span: expanded_car.get_span(),
-                    reason: "begin form must have at least 1 expression".to_owned(),
+                    reason: "Invalid 'begin' form: expected at least one expression".to_owned(),
                 });
             }
             let (head, next_phase) = normalize_body(&rest(&expanded_car), bindings, env, phase)?;
@@ -377,7 +380,7 @@ fn collect_define(sexpr: &SExpr, bindings: &mut Bindings) -> Result<()> {
         if let Some(resolved) = resolved && resolved == id.scopes {
             return Err(CompilationError {
                 span: *span,
-                reason: format!("ID: {} is already bound within the same scope", var),
+                reason: format!("Duplicate definition: '{}' is already bound in this scope", var),
             })
         }
         let binding = bindings.gen_sym(id);
@@ -386,7 +389,7 @@ fn collect_define(sexpr: &SExpr, bindings: &mut Bindings) -> Result<()> {
     }
     Err(CompilationError {
         span: sexpr.get_span(),
-        reason: "Invalid use of define form".to_owned(),
+        reason: "Invalid 'define' form".to_owned(),
     })
 }
 
@@ -395,13 +398,13 @@ fn expand_letrec_syntax(sexpr: &SExpr, bindings: &mut Bindings, env: &mut Env) -
         if !is_proper_list(body) {
             return Err(CompilationError {
                 span: sexpr.get_span(),
-                reason: "Invalid letrec-syntax body: expected a proper list".to_owned(),
+                reason: "Invalid 'letrec-syntax' body: expected a proper list".to_owned(),
             });
         }
         if len(body) == 0 {
             return Err(CompilationError {
                 span: sexpr.get_span(),
-                reason: "Invalid letrec-syntax body: must have at least 1 expression".to_owned(),
+                reason: "Invalid 'letrec-syntax' body: expected at least one expression".to_owned(),
             });
         }
         let scope_id = bindings.new_scope_id();
@@ -415,7 +418,7 @@ fn expand_letrec_syntax(sexpr: &SExpr, bindings: &mut Bindings, env: &mut Env) -
                     return Err(CompilationError {
                         span: keyword.get_span(),
                         reason: format!(
-                            "Expected identifiers in syntax keyword, but got: {}",
+                            "Expected an identifier as syntax keyword, but got: {}",
                             keyword
                         ),
                     });
@@ -430,7 +433,7 @@ fn expand_letrec_syntax(sexpr: &SExpr, bindings: &mut Bindings, env: &mut Env) -
                 ) {
                     return Err(CompilationError {
                         span: transformer_spec.get_span(),
-                        reason: "Expected syntax-rules transformer spec".to_owned(),
+                        reason: "Expected a 'syntax-rules' transformer".to_owned(),
                     });
                 }
                 let transformer = Transformer::new(&transformer_spec)?;
@@ -471,7 +474,7 @@ fn expand_letrec_syntax(sexpr: &SExpr, bindings: &mut Bindings, env: &mut Env) -
     }
     Err(CompilationError {
         span: sexpr.get_span(),
-        reason: "Invalid use of letrec-syntax form".to_owned(),
+        reason: "Invalid 'letrec-syntax' form".to_owned(),
     })
 }
 
@@ -749,7 +752,7 @@ mod tests {
         assert!(
             matches!(
                 expand(&introduce(&expr), &mut bindings, &mut env),
-                Err(CompilationError { reason, .. }) if reason == "Cannot use define in an expression context"
+                Err(CompilationError { reason, .. }) if reason == "'define' is not allowed in an expression context"
             ),
             "Expected define RHS to be expanded in expression context"
         );
@@ -764,7 +767,7 @@ mod tests {
         assert!(
             matches!(
                 expand(&introduce(&expr), &mut bindings, &mut env),
-                Err(CompilationError { reason, .. }) if reason == "Cannot use define in an expression context"
+                Err(CompilationError { reason, .. }) if reason == "'define' is not allowed in an expression context"
             ),
             "Expected set! RHS to be expanded in expression context"
         );
@@ -1646,7 +1649,7 @@ mod tests {
                 Err(CompilationError {
                     span: Span { lo: 44, hi: 47 },
                     reason
-                }) if reason == "ID: ... is unbound"
+                }) if reason == "Unbound identifier: '...'"
             ),
             "Expected malformed ellipsis template usage to return a compilation error"
         );

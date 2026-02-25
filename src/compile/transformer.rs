@@ -73,7 +73,7 @@ fn validate_pattern(
             if symbol.0 == "..." {
                 return Err(CompilationError {
                     span: *span,
-                    reason: "'...' is not allowed in this position as a pattern".into(),
+                    reason: "'...' is not allowed in this position".into(),
                 });
             }
             if symbol.0 != "_" && !literals.contains(symbol) && !symbols_seen.insert(symbol.clone())
@@ -242,7 +242,7 @@ fn render_template_repetition(
     if packed.is_empty() {
         return Err(CompilationError {
             span: template.get_span(),
-            reason: "At least one variable needs to be a repeated capture".to_owned(),
+            reason: "Expected at least one repeated capture variable in ellipsis template".to_owned(),
         });
     }
 
@@ -354,19 +354,19 @@ impl Transformer {
             if len(rules) == 0 {
                 return Err(CompilationError {
                     span: rules.get_span(),
-                    reason: "Expected syntax transformer to have at least 1 rule".to_owned(),
+                    reason: "Expected 'syntax-rules' to have at least one rule".to_owned(),
                 });
             }
             if !is_proper_list(literals_list) {
                 return Err(CompilationError {
                     span: literals_list.get_span(),
-                    reason: "Expected literals in syntax transformer to be proper list".to_owned(),
+                    reason: "Expected 'syntax-rules' literals to be a proper list".to_owned(),
                 });
             }
             if !is_proper_list(rules) {
                 return Err(CompilationError {
                     span: rules.get_span(),
-                    reason: "Expected rules in syntax transformer to be proper list".to_owned(),
+                    reason: "Expected 'syntax-rules' rules to be a proper list".to_owned(),
                 });
             }
             try_for_each(
@@ -375,7 +375,7 @@ impl Transformer {
                         return Err(CompilationError {
                             span: literal.get_span(),
                             reason: format!(
-                                "Expected symbols in syntax transformer literals, got: {}",
+                                "Expected an identifier in 'syntax-rules' literals, but got: {}",
                                 literal
                             ),
                         });
@@ -384,7 +384,7 @@ impl Transformer {
                         return Err(CompilationError {
                             span: literal.get_span(),
                             reason: format!(
-                                "{} is not allowed in syntax transformer literals",
+                                "'{}' is not allowed in 'syntax-rules' literals",
                                 literal
                             ),
                         });
@@ -403,14 +403,14 @@ impl Transformer {
                         let SExpr::Cons(pattern, _) = pattern else {
                             return Err(CompilationError {
                                 span: pattern.get_span(),
-                                reason: "Syntax transformer pattern must be a list".to_owned(),
+                                reason: "'syntax-rules' pattern must be a list".to_owned(),
                             });
                         };
                         if !matches!(pattern.car.as_ref(), SExpr::Id(..)) {
                             return Err(CompilationError {
                                 span: pattern.car.get_span(),
                                 reason: format!(
-                                    "Syntax transformer pattern must start with an identifier, got {}",
+                                    "'syntax-rules' pattern must start with an identifier, but got: {}",
                                     pattern.car
                                 ),
                             });
@@ -424,7 +424,7 @@ impl Transformer {
                     }
                     Err(CompilationError {
                         span: rule_pair.get_span(),
-                        reason: "Unrecognized syntax for syntax transformer rule pair".to_owned(),
+                        reason: "Invalid 'syntax-rules' rule: expected (pattern template)".to_owned(),
                     })
                 },
                 rules,
@@ -434,7 +434,7 @@ impl Transformer {
         }
         Err(CompilationError {
             span: spec.get_span(),
-            reason: "Unrecognized syntax for syntax transformer".to_owned(),
+            reason: "Invalid 'syntax-rules' form".to_owned(),
         })
     }
 
@@ -893,7 +893,7 @@ mod tests {
         let err = make_rule("(_ a ... . ...)").unwrap_err();
         assert!(
             err.reason
-                .contains("'...' is not allowed in this position as a pattern"),
+                .contains("'...' is not allowed in this position"),
         );
     }
 
@@ -922,7 +922,7 @@ mod tests {
         let err = make_rule("...").unwrap_err();
         assert!(
             err.reason
-                .contains("'...' is not allowed in this position as a pattern")
+                .contains("'...' is not allowed in this position")
         );
     }
 
@@ -931,7 +931,7 @@ mod tests {
         let err = make_rule("(... a)").unwrap_err();
         assert!(
             err.reason
-                .contains("'...' is not allowed in this position as a pattern")
+                .contains("'...' is not allowed in this position")
         );
     }
 
@@ -1230,7 +1230,7 @@ mod tests {
             result
                 .unwrap_err()
                 .reason
-                .contains("Expected rules in syntax transformer to be proper list")
+                .contains("Expected 'syntax-rules' rules to be a proper list")
         );
     }
 
@@ -1244,7 +1244,7 @@ mod tests {
             result
                 .unwrap_err()
                 .reason
-                .contains("Expected literals in syntax transformer to be proper list")
+                .contains("Expected 'syntax-rules' literals to be a proper list")
         );
     }
 
@@ -1258,7 +1258,7 @@ mod tests {
             result
                 .unwrap_err()
                 .reason
-                .contains("Syntax transformer pattern must start with an identifier, got")
+                .contains("'syntax-rules' pattern must start with an identifier, but got")
         );
     }
 
@@ -1272,7 +1272,7 @@ mod tests {
             result
                 .unwrap_err()
                 .reason
-                .contains("Expected syntax transformer to have at least 1 rule")
+                .contains("Expected 'syntax-rules' to have at least one rule")
         );
     }
 
@@ -1286,7 +1286,7 @@ mod tests {
             result
                 .unwrap_err()
                 .reason
-                .contains("Expected symbols in syntax transformer literals")
+                .contains("Expected an identifier in 'syntax-rules' literals")
         );
     }
 
@@ -1314,7 +1314,7 @@ mod tests {
             result
                 .unwrap_err()
                 .reason
-                .contains("is not allowed in syntax transformer literals")
+                .contains("is not allowed in 'syntax-rules' literals")
         );
     }
 
@@ -1328,7 +1328,7 @@ mod tests {
             result
                 .unwrap_err()
                 .reason
-                .contains("is not allowed in syntax transformer literals")
+                .contains("is not allowed in 'syntax-rules' literals")
         );
     }
 
@@ -1343,7 +1343,7 @@ mod tests {
             result
                 .unwrap_err()
                 .reason
-                .contains("is not allowed in syntax transformer literals")
+                .contains("is not allowed in 'syntax-rules' literals")
         );
     }
 
@@ -1358,7 +1358,7 @@ mod tests {
             result
                 .unwrap_err()
                 .reason
-                .contains("is not allowed in syntax transformer literals")
+                .contains("is not allowed in 'syntax-rules' literals")
         );
     }
 

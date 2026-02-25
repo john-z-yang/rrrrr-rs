@@ -26,7 +26,7 @@ pub(crate) fn parse(tokens: &[Token]) -> Result<SExpr> {
             let res = self.parse_datum()?;
             match self.look_ahead() {
                 Some(Token::EoF(_)) => Ok(res),
-                Some(token) => Err(self.emit_err("Expecting EoF", token)),
+                Some(token) => Err(self.emit_err("Expected end of input", token)),
                 None => unreachable!("parse is expecting token stream to end with the EoF token"),
             }
         }
@@ -48,7 +48,7 @@ pub(crate) fn parse(tokens: &[Token]) -> Result<SExpr> {
                     | Token::Comma(_)
                     | Token::CommaAt(_),
                 ) => self.parse_compound(),
-                Some(token) => Err(self.emit_err("Expecting a datum", token)),
+                Some(token) => Err(self.emit_err("Expected a datum", token)),
                 _ => unreachable!("parse_datum is expecting at least 1 token to look ahead"),
             }
         }
@@ -112,7 +112,7 @@ pub(crate) fn parse(tokens: &[Token]) -> Result<SExpr> {
             match self.look_ahead() {
                 Some(dot @ Token::Dot(_)) => {
                     if elements.is_empty() {
-                        return Err(self.emit_err("Expected datum after '('", dot));
+                        return Err(self.emit_err("Expected a datum after '('", dot));
                     }
                     elements.push(self.parse_dot_notation()?);
                     assert!(

@@ -19,14 +19,21 @@ impl fmt::Display for CompilationError {
 impl CompilationError {
     pub(crate) fn pprint_with_source(&self, source: &str) {
         println!("Error: {}", self.reason);
-        println!(" --> {}:", self.span);
-        println!("    |");
         let mut offset = 0;
-        for (line_no, line) in source.lines().enumerate() {
-            if offset + line.len() <= self.span.lo {
-                offset += line.len() + 1;
-                continue;
+        let mut lines = source.lines().enumerate().peekable();
+        while let Some(&(_, line)) = lines.peek() {
+            if offset + line.len() > self.span.lo {
+                break;
             }
+            offset += line.len() + 1;
+            lines.next();
+        }
+        if let Some(&(line_no, _)) = lines.peek() {
+            let col = self.span.lo - offset + 1;
+            println!(" --> {}:{}:", line_no + 1, col);
+            println!("    |");
+        }
+        for (line_no, line) in lines {
             let mut highlight = String::with_capacity(line.len());
             for c in line.chars() {
                 highlight.push(if offset >= self.span.lo && offset < self.span.hi {

@@ -52,7 +52,7 @@ pub(crate) fn tokenize(source: &str) -> Result<Vec<Token>> {
                 } else if self.consume_if(".") {
                     Token::Id(Symbol::new("..."), self.get_span())
                 } else {
-                    return Err(self.emit_err("Expecting '.' after '..'"));
+                    return Err(self.emit_err("Expected '.' after '..'"));
                 }),
                 ',' => Some(if self.consume_if("@") {
                     Token::CommaAt(self.get_span())
@@ -73,14 +73,14 @@ pub(crate) fn tokenize(source: &str) -> Result<Vec<Token>> {
                     Token::Char(Char(self.consume()), self.get_span())
                 } else {
                     return Err(
-                        self.emit_err("Expecting 't', 'f', '(' or character literal after '#'")
+                        self.emit_err("Expected '#t', '#f', '#(', or a character literal after '#'")
                     );
                 }),
                 '-' => Some(self.parse_minus()?),
                 '0'..='9' => Some(self.parse_num()?),
                 '"' => Some(self.parse_string()?),
                 c if Self::is_id_initial(c) => Some(self.parse_id()?),
-                c => return Err(self.emit_err(&format!("Unexpeted character: '{}'", c))),
+                c => return Err(self.emit_err(&format!("Unexpected character: '{}'", c))),
             })
         }
 
@@ -106,7 +106,7 @@ pub(crate) fn tokenize(source: &str) -> Result<Vec<Token>> {
 
             Ok(Token::Num(
                 Num(self.cur.parse().map_err(|_| {
-                    self.emit_err(&format!("Invalid number representation: {}", self.cur))
+                    self.emit_err(&format!("Invalid number: '{}'", self.cur))
                 })?),
                 self.get_span(),
             ))
@@ -128,7 +128,7 @@ pub(crate) fn tokenize(source: &str) -> Result<Vec<Token>> {
                 self.consume();
             }
             if self.look_ahead().is_none() {
-                return Err(self.emit_err("Unterminated string"));
+                return Err(self.emit_err("Unterminated string literal"));
             };
             self.consume();
             Ok(Token::Str(
