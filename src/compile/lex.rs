@@ -144,9 +144,8 @@ pub(crate) fn tokenize(source: &str) -> Result<Vec<Token>> {
             F: Fn(char) -> bool,
         {
             while let Some(c) = self.look_ahead() {
-                match c {
-                    _ if f(c) => break,
-                    _ => (),
+                if f(c) {
+                    break;
                 }
                 self.consume();
             }
