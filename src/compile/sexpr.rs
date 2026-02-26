@@ -358,18 +358,6 @@ impl SExpr {
         };
         self.adjust_scope(&op)
     }
-
-    #[cfg(test)]
-    pub(crate) fn is_idential(&self, other: &Self) -> bool {
-        if self.get_span() != other.get_span() {
-            return false;
-        }
-        if let (Self::Cons(self_cons, _), Self::Cons(other_cons, _)) = (self, other) {
-            self_cons.car.is_idential(&other_cons.car) && self_cons.cdr.is_idential(&other_cons.cdr)
-        } else {
-            self == other
-        }
-    }
 }
 
 #[cfg(test)]

@@ -391,7 +391,7 @@ mod tests {
     fn test_template_sexpr_nil() {
         let original = parse(&tokenize("()").unwrap()).unwrap();
         let templated = template_sexpr!(() => original).unwrap();
-        assert!(templated.is_idential(&parse(&tokenize("()").unwrap()).unwrap()));
+        assert!(templated == parse(&tokenize("()").unwrap()).unwrap());
     }
 
     #[test]
@@ -402,7 +402,7 @@ mod tests {
                 SExpr::Num(Num(1.0), Span {lo: 1, hi: 2 })
             ) => &original)
         .unwrap();
-        assert!(templated.is_idential(&parse(&tokenize("(1)").unwrap()).unwrap()));
+        assert!(templated == parse(&tokenize("(1)").unwrap()).unwrap());
     }
 
     #[test]
@@ -414,7 +414,7 @@ mod tests {
                 SExpr::Num(Num(2.0), Span { lo: 3, hi: 4 })
             ) => &original)
         .unwrap();
-        assert!(templated.is_idential(&parse(&tokenize("(1 2)").unwrap()).unwrap()));
+        assert!(templated == parse(&tokenize("(1 2)").unwrap()).unwrap());
     }
 
     #[test]
@@ -426,7 +426,7 @@ mod tests {
                 SExpr::Num(Num(2.0), Span { lo: 5, hi: 6 })
             ) => &original)
         .unwrap();
-        assert!(templated.is_idential(&parse(&tokenize("((1) 2)").unwrap()).unwrap()));
+        assert!(templated == parse(&tokenize("((1) 2)").unwrap()).unwrap());
     }
 
     #[test]
@@ -439,7 +439,7 @@ mod tests {
                 SExpr::Num(Num(3.0), Span { lo: 7, hi: 8 })
             ) => &original)
         .unwrap();
-        assert!(templated.is_idential(&parse(&tokenize("(1 (2) 3)").unwrap()).unwrap()));
+        assert!(templated == parse(&tokenize("(1 (2) 3)").unwrap()).unwrap());
     }
 
     #[test]
@@ -451,6 +451,6 @@ mod tests {
                 (SExpr::Num(Num(2.0), Span { lo: 4, hi: 5 }))
             ) => &original)
         .unwrap();
-        assert!(templated.is_idential(&parse(&tokenize("(1 (2))").unwrap()).unwrap()));
+        assert!(templated == parse(&tokenize("(1 (2))").unwrap()).unwrap());
     }
 }

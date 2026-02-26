@@ -608,7 +608,7 @@ mod tests {
         )
         .unwrap();
 
-        assert!(result.is_idential(&expected));
+        assert!(result == expected);
     }
 
     #[test]
@@ -1339,7 +1339,7 @@ mod tests {
         let expected = SExpr::Bool(Bool(false), Span { lo: 105, hi: 107 });
 
         assert!(
-            result.is_idential(&expected),
+            result == expected,
             "result: {:?}\nexpected: {:?}",
             result,
             expected
@@ -1373,7 +1373,7 @@ mod tests {
         let expected = SExpr::Num(Num(1.0), Span { lo: 424, hi: 425 });
 
         assert!(
-            result.is_idential(&expected),
+            result == expected,
             "result: {:?}\nexpected: {:?}",
             result,
             expected

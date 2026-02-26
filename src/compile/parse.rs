@@ -267,7 +267,7 @@ mod tests {
         let src = "(    )";
         let list = SExpr::Nil(Span { lo: 0, hi: 6 });
 
-        assert!(parse(&tokenize(src).unwrap()).unwrap().is_idential(&list));
+        assert!(parse(&tokenize(src).unwrap()).unwrap() == list);
     }
 
     #[test]
@@ -282,7 +282,7 @@ mod tests {
             Span { lo: 0, hi: 5 },
         );
 
-        assert!(parse(&tokenize(src).unwrap()).unwrap().is_idential(&list));
+        assert!(parse(&tokenize(src).unwrap()).unwrap() == list);
     }
 
     #[test]
@@ -303,7 +303,7 @@ mod tests {
             Span { lo: 0, hi: 3 },
         );
 
-        assert!(parse(&tokenize(src).unwrap()).unwrap().is_idential(&list));
+        assert!(parse(&tokenize(src).unwrap()).unwrap() == list);
     }
 
     #[test]
@@ -327,7 +327,7 @@ mod tests {
             Span { lo: 0, hi: 4 },
         );
 
-        assert!(parse(&tokenize(src).unwrap()).unwrap().is_idential(&list));
+        assert!(parse(&tokenize(src).unwrap()).unwrap() == list);
     }
 
     #[test]
@@ -368,7 +368,7 @@ mod tests {
             Span { lo: 0, hi: 6 },
         );
 
-        assert!(parse(&tokenize(src).unwrap()).unwrap().is_idential(&list));
+        assert!(parse(&tokenize(src).unwrap()).unwrap() == list);
     }
 
     #[test]
@@ -406,7 +406,7 @@ mod tests {
             Span { lo: 0, hi: 5 },
         );
 
-        assert!(parse(&tokenize(src).unwrap()).unwrap().is_idential(&list));
+        assert!(parse(&tokenize(src).unwrap()).unwrap() == list);
     }
 
     #[test]
@@ -444,7 +444,7 @@ mod tests {
             Span { lo: 0, hi: 5 },
         );
 
-        assert!(parse(&tokenize(src).unwrap()).unwrap().is_idential(&list));
+        assert!(parse(&tokenize(src).unwrap()).unwrap() == list);
     }
 
     #[test]
@@ -458,7 +458,7 @@ mod tests {
             Span { lo: 0, hi: 7 },
         );
 
-        assert!(parse(&tokenize(src).unwrap()).unwrap().is_idential(&list));
+        assert!(parse(&tokenize(src).unwrap()).unwrap() == list);
     }
 
     #[test]
@@ -491,7 +491,7 @@ mod tests {
             },
             Span { lo: 1, hi: 24 },
         );
-        assert!(parse(&tokenize(src).unwrap()).unwrap().is_idential(&list));
+        assert!(parse(&tokenize(src).unwrap()).unwrap() == list);
     }
 
     #[test]
@@ -514,7 +514,7 @@ mod tests {
 
         let list = SExpr::Vector(Vector(vec![inner_list]), Span { lo: 1, hi: 26 });
 
-        assert!(parse(&tokenize(src).unwrap()).unwrap().is_idential(&list));
+        assert!(parse(&tokenize(src).unwrap()).unwrap() == list);
     }
 
     #[test]
@@ -561,7 +561,7 @@ mod tests {
             Span { lo: 1, hi: 46 },
         );
 
-        assert!(parse(&tokenize(src).unwrap()).unwrap().is_idential(&list));
+        assert!(parse(&tokenize(src).unwrap()).unwrap() == list);
     }
 
     #[test]
@@ -581,7 +581,7 @@ mod tests {
             Span { lo: 1, hi: 36 },
         );
 
-        assert!(parse(&tokenize(src).unwrap()).unwrap().is_idential(&pair));
+        assert!(parse(&tokenize(src).unwrap()).unwrap() == pair);
     }
 
     #[test]
@@ -610,7 +610,7 @@ mod tests {
             Span { lo: 1, hi: 46 },
         );
 
-        assert!(parse(&tokenize(src).unwrap()).unwrap().is_idential(&list));
+        assert!(parse(&tokenize(src).unwrap()).unwrap() == list);
     }
 
     #[test]
@@ -640,11 +640,7 @@ mod tests {
             Span { lo: 9, hi: 37 },
         );
 
-        assert!(
-            parse(&tokenize(src).unwrap())
-                .unwrap()
-                .is_idential(&outer_pair)
-        );
+        assert!(parse(&tokenize(src).unwrap()).unwrap() == outer_pair);
     }
 
     #[test]
