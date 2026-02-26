@@ -115,6 +115,25 @@ impl Id {
             scopes: BTreeSet::from(scopes),
         }
     }
+
+    pub(crate) fn adjust_scope<F>(&self, op: &F) -> Self
+    where
+        F: Fn(&Scopes) -> Scopes,
+    {
+        Id {
+            symbol: self.symbol.clone(),
+            scopes: op(&self.scopes),
+        }
+    }
+
+    pub(crate) fn add_scope(&self, scope: ScopeId) -> Self {
+        let op = |scopes: &Scopes| {
+            let mut scopes = scopes.clone();
+            scopes.insert(scope);
+            scopes
+        };
+        self.adjust_scope(&op)
+    }
 }
 
 impl Cons {
@@ -316,19 +335,7 @@ impl SExpr {
         F: Fn(&Scopes) -> Scopes,
     {
         match self {
-            Self::Id(
-                Id {
-                    symbol,
-                    scopes: scope,
-                },
-                span,
-            ) => Self::Id(
-                Id {
-                    symbol: symbol.clone(),
-                    scopes: op(scope),
-                },
-                *span,
-            ),
+            Self::Id(id, span) => Self::Id(id.adjust_scope(op), *span),
             Self::Cons(cons, span) => Self::Cons(
                 Cons::new(cons.car.adjust_scope(op), cons.cdr.adjust_scope(op)),
                 *span,

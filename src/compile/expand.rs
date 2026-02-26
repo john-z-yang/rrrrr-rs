@@ -419,7 +419,7 @@ fn expand_syntax_binding(
     env: &mut Env,
     form: SyntaxBindingForm,
 ) -> Result<SExpr> {
-    if_let_sexpr! {(_, (specs @ ..), body @ ..) = sexpr =>
+    if_let_sexpr! {(_, (binding_pairs @ ..), body @ ..) = sexpr =>
         if !is_proper_list(body) {
             return Err(CompilationError {
                 span: sexpr.get_span(),
@@ -435,23 +435,14 @@ fn expand_syntax_binding(
         let scope_id = bindings.new_scope_id();
         let mut transformer_bindings = vec![];
 
-        if let Err(e) = try_for_each(specs, |spec| {
-            if_let_sexpr! {(keyword, transformer_spec) = spec =>
-                let keyword = keyword.add_scope(scope_id);
+        if let Err(e) = try_for_each(binding_pairs, |binding_pair| {
+            if_let_sexpr! {(SExpr::Id(id, _), transformer_spec) = binding_pair =>
+                let id = id.add_scope(scope_id);
                 let transformer_spec = match form {
                     SyntaxBindingForm::LetSyntax => transformer_spec,
                     SyntaxBindingForm::LetrecSyntax => &transformer_spec.add_scope(scope_id)
                 };
 
-                let SExpr::Id(id, _) = keyword else {
-                    return Err(CompilationError {
-                        span: keyword.get_span(),
-                        reason: format!(
-                            "Expected an identifier as syntax keyword, but got: {}",
-                            keyword
-                        ),
-                    });
-                };
                 let binding = bindings.gen_sym(&id);
                 bindings.add_binding(&id, &binding);
 
@@ -467,8 +458,12 @@ fn expand_syntax_binding(
                 let transformer = Transformer::new(transformer_spec)?;
                 env.insert(binding.clone(), transformer);
                 transformer_bindings.push(binding);
+                return Ok(());
             }
-            Ok(())
+            Err(CompilationError {
+                span: binding_pair.get_span(),
+                reason: format!("Invalid '{form}' binding pair: expected (identifier 'syntax-rules' transformer)"),
+            })
         }) {
             transformer_bindings.iter().for_each(|transformer_binding| {
                 env.remove_entry(transformer_binding);
