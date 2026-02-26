@@ -15,6 +15,7 @@ impl Bindings {
     pub(crate) const CORE_SCOPE: ScopeId = 0;
 
     pub(crate) const CORE_BINDINGS: &[&str] = &[
+        "let-syntax",
         "letrec-syntax",
         "syntax-rules",
         "quote",

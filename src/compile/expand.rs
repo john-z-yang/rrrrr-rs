@@ -105,6 +105,7 @@ fn expand_id_application(
 
     match binding.0.as_str() {
         "quote" | "quote-syntax" => Ok(sexpr.clone()),
+        "let-syntax" => expand_let_syntax(sexpr, bindings, env),
         "letrec-syntax" => expand_letrec_syntax(sexpr, bindings, env),
         "lambda" => expand_lambda(sexpr, bindings, env),
         "define" => expand_define(sexpr, bindings, env, ctx),
@@ -386,18 +387,40 @@ fn collect_define(sexpr: &SExpr, bindings: &mut Bindings) -> Result<()> {
     })
 }
 
+enum SyntaxBindingForm {
+    NonRecursive,
+    Recursive,
+}
+
+fn expand_let_syntax(sexpr: &SExpr, bindings: &mut Bindings, env: &mut Env) -> Result<SExpr> {
+    expand_syntax_binding(sexpr, bindings, env, SyntaxBindingForm::NonRecursive)
+}
+
 fn expand_letrec_syntax(sexpr: &SExpr, bindings: &mut Bindings, env: &mut Env) -> Result<SExpr> {
+    expand_syntax_binding(sexpr, bindings, env, SyntaxBindingForm::Recursive)
+}
+
+fn expand_syntax_binding(
+    sexpr: &SExpr,
+    bindings: &mut Bindings,
+    env: &mut Env,
+    form: SyntaxBindingForm,
+) -> Result<SExpr> {
+    let form_name = match form {
+        SyntaxBindingForm::NonRecursive => "let-syntax",
+        SyntaxBindingForm::Recursive => "letrec-syntax",
+    };
     if_let_sexpr! {(_, (specs @ ..), body @ ..) = sexpr =>
         if !is_proper_list(body) {
             return Err(CompilationError {
                 span: sexpr.get_span(),
-                reason: "Invalid 'letrec-syntax' body: expected a proper list".to_owned(),
+                reason: format!("Invalid '{form_name}' body: expected a proper list"),
             });
         }
         if len(body) == 0 {
             return Err(CompilationError {
                 span: sexpr.get_span(),
-                reason: "Invalid 'letrec-syntax' body: expected at least one expression".to_owned(),
+                reason: format!("Invalid '{form_name}' body: expected at least one expression"),
             });
         }
         let scope_id = bindings.new_scope_id();
@@ -406,6 +429,10 @@ fn expand_letrec_syntax(sexpr: &SExpr, bindings: &mut Bindings, env: &mut Env) -
         if let Err(e) = try_for_each(specs, |spec| {
             if_let_sexpr! {(keyword, transformer_spec) = spec =>
                 let keyword = keyword.add_scope(scope_id);
+                let transformer_spec = match form {
+                    SyntaxBindingForm::NonRecursive => transformer_spec,
+                    SyntaxBindingForm::Recursive => &transformer_spec.add_scope(scope_id),
+                };
 
                 let SExpr::Id(id, _) = keyword else {
                     return Err(CompilationError {
@@ -419,9 +446,8 @@ fn expand_letrec_syntax(sexpr: &SExpr, bindings: &mut Bindings, env: &mut Env) -
                 let binding = bindings.gen_sym(&id);
                 bindings.add_binding(&id, &binding);
 
-                let transformer_spec = transformer_spec.add_scope(scope_id);
                 if !matches!(
-                    try_first(&transformer_spec),
+                    try_first(transformer_spec),
                     Some(SExpr::Id(id, _)) if bindings.resolve_sym(&id) == Some(Symbol::new("syntax-rules"))
                 ) {
                     return Err(CompilationError {
@@ -429,7 +455,7 @@ fn expand_letrec_syntax(sexpr: &SExpr, bindings: &mut Bindings, env: &mut Env) -
                         reason: "Expected a 'syntax-rules' transformer".to_owned(),
                     });
                 }
-                let transformer = Transformer::new(&transformer_spec)?;
+                let transformer = Transformer::new(transformer_spec)?;
                 env.insert(binding.clone(), transformer);
                 transformer_bindings.push(binding);
             }
@@ -460,7 +486,7 @@ fn expand_letrec_syntax(sexpr: &SExpr, bindings: &mut Bindings, env: &mut Env) -
     }
     Err(CompilationError {
         span: sexpr.get_span(),
-        reason: "Invalid 'letrec-syntax' form".to_owned(),
+        reason: format!("Invalid '{form_name}' form"),
     })
 }
 
@@ -1620,6 +1646,164 @@ mod tests {
                 }) if reason == "Unbound identifier: '...'"
             ),
             "Expected malformed ellipsis template usage to return a compilation error"
+        );
+    }
+
+    #[test]
+    fn test_let_syntax_basic_expansion() {
+        let (_, result) = expand_source_with_fresh_state(
+            r#"
+            (let-syntax
+              ((one (syntax-rules ()
+                      ((_) 1))))
+              (one))
+            "#,
+        );
+        assert!(
+            result.is_ok(),
+            "Expected let-syntax to expand, got: {:?}",
+            result
+        );
+        let result = result.unwrap();
+        assert_eq!(
+            result.without_spans(),
+            SExpr::Num(Num(1.0), result.get_span()).without_spans()
+        );
+    }
+
+    #[test]
+    fn test_let_syntax_allows_multiple_transformer_bindings() {
+        let (_, result) = expand_source_with_fresh_state(
+            r#"
+            (let-syntax
+              ((one (syntax-rules () ((_) 1)))
+               (two (syntax-rules () ((_) 2))))
+              (two))
+            "#,
+        );
+        assert!(
+            result.is_ok(),
+            "Expected multi-binding let-syntax to expand, got: {:?}",
+            result
+        );
+        let result = result.unwrap();
+        assert_eq!(
+            result.without_spans(),
+            SExpr::Num(Num(2.0), result.get_span()).without_spans()
+        );
+    }
+
+    #[test]
+    fn test_let_syntax_bindings_are_not_recursive() {
+        // In let-syntax, `two`'s transformer references `one`, but `one` is not
+        // visible to sibling specs. When `(two)` expands to `(one)`, `one` is
+        // unbound, producing an error.
+        let (_, result) = expand_source_with_fresh_state(
+            r#"
+            (let-syntax
+              ((one (syntax-rules () ((_) 1)))
+               (two (syntax-rules () ((_) (one)))))
+              (two))
+            "#,
+        );
+        assert!(
+            result.is_err(),
+            "Expected let-syntax bindings to not be recursive: (one) inside two's expansion should be unbound"
+        );
+    }
+
+    #[test]
+    fn test_letrec_syntax_bindings_are_recursive() {
+        let (_, result) = expand_source_with_fresh_state(
+            r#"
+            (letrec-syntax
+              ((one (syntax-rules () ((_) 1)))
+               (two (syntax-rules () ((_) (one)))))
+              (two))
+            "#,
+        );
+        assert!(
+            result.is_ok(),
+            "Expected letrec-syntax to expand, got: {:?}",
+            result
+        );
+        let result = result.unwrap();
+        // In letrec-syntax, (one) IS visible to two's transformer
+        assert_eq!(
+            result.without_spans(),
+            SExpr::Num(Num(1.0), result.get_span()).without_spans(),
+            "Expected letrec-syntax bindings to be recursive: (one) inside two's template should expand to 1"
+        );
+    }
+
+    #[test]
+    fn test_let_syntax_cleans_env_after_success() {
+        let mut bindings = Bindings::new();
+        let mut env = HashMap::<Symbol, Transformer>::new();
+        let expr = parse(
+            &tokenize(
+                r#"
+                (let-syntax
+                  ((one (syntax-rules ()
+                           ((_) 1))))
+                  (one))
+                "#,
+            )
+            .unwrap(),
+        )
+        .unwrap();
+        let result = expand(&introduce(&expr), &mut bindings, &mut env);
+        assert!(result.is_ok(), "Expected let-syntax expression to expand");
+        assert!(
+            env.is_empty(),
+            "Expected let-syntax to remove temporary transformer bindings from env"
+        );
+    }
+
+    #[test]
+    fn test_let_syntax_cleans_env_on_transformer_spec_error() {
+        let mut bindings = Bindings::new();
+        let mut env = HashMap::<Symbol, Transformer>::new();
+        let expr = parse(
+            &tokenize(
+                r#"
+                (let-syntax
+                  ((one (syntax-rules ()
+                           ((_) 1)))
+                   (bad 42))
+                  (one))
+                "#,
+            )
+            .unwrap(),
+        )
+        .unwrap();
+        let result = expand(&introduce(&expr), &mut bindings, &mut env);
+        assert!(
+            result.is_err(),
+            "Expected invalid let-syntax transformer spec to fail"
+        );
+        assert!(
+            env.is_empty(),
+            "Expected let-syntax error path to remove inserted transformer bindings from env"
+        );
+    }
+
+    #[test]
+    fn test_let_syntax_body_expansion() {
+        let (_, result) = expand_source_with_fresh_state(
+            r#"
+            (list
+              (let-syntax
+                ((one (syntax-rules ()
+                        ((_ x) x))))
+                (define x 1)
+                x))
+            "#,
+        );
+        assert!(
+            result.is_ok(),
+            "Expected let-syntax body defines to expand in body context, got: {:?}",
+            result
         );
     }
 
