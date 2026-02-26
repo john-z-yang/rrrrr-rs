@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::{collections::HashMap, fmt};
 
 use super::{
     bindings::Bindings,
@@ -388,16 +388,29 @@ fn collect_define(sexpr: &SExpr, bindings: &mut Bindings) -> Result<()> {
 }
 
 enum SyntaxBindingForm {
-    NonRecursive,
-    Recursive,
+    LetSyntax,
+    LetrecSyntax,
+}
+
+impl fmt::Display for SyntaxBindingForm {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(
+            f,
+            "{}",
+            match self {
+                SyntaxBindingForm::LetSyntax => "let-syntax",
+                SyntaxBindingForm::LetrecSyntax => "letrec-syntax",
+            }
+        )
+    }
 }
 
 fn expand_let_syntax(sexpr: &SExpr, bindings: &mut Bindings, env: &mut Env) -> Result<SExpr> {
-    expand_syntax_binding(sexpr, bindings, env, SyntaxBindingForm::NonRecursive)
+    expand_syntax_binding(sexpr, bindings, env, SyntaxBindingForm::LetSyntax)
 }
 
 fn expand_letrec_syntax(sexpr: &SExpr, bindings: &mut Bindings, env: &mut Env) -> Result<SExpr> {
-    expand_syntax_binding(sexpr, bindings, env, SyntaxBindingForm::Recursive)
+    expand_syntax_binding(sexpr, bindings, env, SyntaxBindingForm::LetrecSyntax)
 }
 
 fn expand_syntax_binding(
@@ -406,21 +419,17 @@ fn expand_syntax_binding(
     env: &mut Env,
     form: SyntaxBindingForm,
 ) -> Result<SExpr> {
-    let form_name = match form {
-        SyntaxBindingForm::NonRecursive => "let-syntax",
-        SyntaxBindingForm::Recursive => "letrec-syntax",
-    };
     if_let_sexpr! {(_, (specs @ ..), body @ ..) = sexpr =>
         if !is_proper_list(body) {
             return Err(CompilationError {
                 span: sexpr.get_span(),
-                reason: format!("Invalid '{form_name}' body: expected a proper list"),
+                reason: format!("Invalid '{form}' body: expected a proper list"),
             });
         }
         if len(body) == 0 {
             return Err(CompilationError {
                 span: sexpr.get_span(),
-                reason: format!("Invalid '{form_name}' body: expected at least one expression"),
+                reason: format!("Invalid '{form}' body: expected at least one expression"),
             });
         }
         let scope_id = bindings.new_scope_id();
@@ -430,8 +439,8 @@ fn expand_syntax_binding(
             if_let_sexpr! {(keyword, transformer_spec) = spec =>
                 let keyword = keyword.add_scope(scope_id);
                 let transformer_spec = match form {
-                    SyntaxBindingForm::NonRecursive => transformer_spec,
-                    SyntaxBindingForm::Recursive => &transformer_spec.add_scope(scope_id),
+                    SyntaxBindingForm::LetSyntax => transformer_spec,
+                    SyntaxBindingForm::LetrecSyntax => &transformer_spec.add_scope(scope_id)
                 };
 
                 let SExpr::Id(id, _) = keyword else {
@@ -486,7 +495,7 @@ fn expand_syntax_binding(
     }
     Err(CompilationError {
         span: sexpr.get_span(),
-        reason: format!("Invalid '{form_name}' form"),
+        reason: format!("Invalid '{form}' form"),
     })
 }
 
