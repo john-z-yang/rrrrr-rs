@@ -72,9 +72,8 @@ pub(crate) fn tokenize(source: &str) -> Result<Vec<Token>> {
                 } else if self.consume_if("\\") && self.look_ahead().is_some() {
                     Token::Char(Char(self.consume()), self.get_span())
                 } else {
-                    return Err(
-                        self.emit_err("Expected '#t', '#f', '#(', or a character literal after '#'")
-                    );
+                    return Err(self
+                        .emit_err("Expected '#t', '#f', '#(', or a character literal after '#'"));
                 }),
                 '-' => Some(self.parse_minus()?),
                 '0'..='9' => Some(self.parse_num()?),
@@ -105,9 +104,10 @@ pub(crate) fn tokenize(source: &str) -> Result<Vec<Token>> {
             }
 
             Ok(Token::Num(
-                Num(self.cur.parse().map_err(|_| {
-                    self.emit_err(&format!("Invalid number: '{}'", self.cur))
-                })?),
+                Num(self
+                    .cur
+                    .parse()
+                    .map_err(|_| self.emit_err(&format!("Invalid number: '{}'", self.cur)))?),
                 self.get_span(),
             ))
         }
