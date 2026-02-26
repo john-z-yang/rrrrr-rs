@@ -73,7 +73,7 @@ fn validate_pattern(
             if symbol.0 == "..." {
                 return Err(CompilationError {
                     span: *span,
-                    reason: "'...' is not allowed in this position".into(),
+                    reason: "'...' is not allowed in this position".to_owned(),
                 });
             }
             if symbol.0 != "_" && !literals.contains(symbol) && !symbols_seen.insert(symbol.clone())
@@ -93,14 +93,14 @@ fn validate_pattern(
                     if ellipsis_count > 1 {
                         return Err(CompilationError {
                             span: cons.cdr.get_span(),
-                            reason: "Multiple consecutive '...' in pattern".into(),
+                            reason: "Multiple consecutive '...' in pattern".to_owned(),
                         });
                     }
                     validate_pattern(&cons.car, literals, symbols_seen)?;
                     if matches!(rest, SExpr::Cons(..)) {
                         return Err(CompilationError {
                             span: rest.get_span(),
-                            reason: "Unexpected pattern element after '...'".into(),
+                            reason: "Unexpected pattern element after '...'".to_owned(),
                         });
                     }
                     if !matches!(rest, SExpr::Nil(_)) {
