@@ -447,21 +447,14 @@ fn expand_letrec_syntax(sexpr: &SExpr, bindings: &mut Bindings, env: &mut Env) -
             return Err(e);
         }
 
-        let body = body.add_scope(scope_id);
-        let body = expand_body(&body, bindings, env).map(|body| {
+        let body = expand_body(&body.add_scope(scope_id), bindings, env).map(|body| {
             if len(&body) == 1 {
-                expand_sexpr(&first(&body), bindings, env, Context::Body)
+                first(&body)
             } else {
-                try_map(
-                    |sexpr| expand_sexpr(sexpr, bindings, env, Context::Body),
-                    &body,
+                SExpr::cons(
+                    SExpr::Id(Id::new("begin", [Bindings::CORE_SCOPE]), body.get_span()),
+                    body,
                 )
-                .map(|cdr| {
-                    SExpr::cons(
-                        SExpr::Id(Id::new("begin", [Bindings::CORE_SCOPE]), body.get_span()),
-                        cdr,
-                    )
-                })
             }
         });
 
@@ -469,7 +462,7 @@ fn expand_letrec_syntax(sexpr: &SExpr, bindings: &mut Bindings, env: &mut Env) -
             env.remove_entry(transformer_binding);
         });
 
-        return body?;
+        return body;
     }
     Err(CompilationError {
         span: sexpr.get_span(),
@@ -1225,32 +1218,17 @@ mod tests {
         let expected = sexpr!(
             (
                 SExpr::Id(Id::new("lambda", [Bindings::CORE_SCOPE, 1, 2]), span),
-                (SExpr::Id(Id::new("temp", [Bindings::CORE_SCOPE, 1, 2, 3, 9]), span)),
+                (SExpr::Id(Id::new("temp", [Bindings::CORE_SCOPE, 1, 2, 3]), span)),
                 (
                     (
-                        SExpr::Id(Id::new("lambda", [Bindings::CORE_SCOPE, 1, 5, 9, 10]), span),
-                        (SExpr::Id(
-                            Id::new("temp", [Bindings::CORE_SCOPE, 1, 5, 6, 9, 10, 11]),
-                            span
-                        )),
+                        SExpr::Id(Id::new("lambda", [Bindings::CORE_SCOPE, 1, 5]), span),
+                        (SExpr::Id(Id::new("temp", [Bindings::CORE_SCOPE, 1, 5, 6]), span)),
                         (
+                            SExpr::Id(Id::new("if", [Bindings::CORE_SCOPE, 1, 5, 6, 7]), span),
+                            SExpr::Id(Id::new("temp", [Bindings::CORE_SCOPE, 1, 5, 6, 7]), span),
+                            SExpr::Id(Id::new("temp", [Bindings::CORE_SCOPE, 1, 5, 6, 7]), span),
                             SExpr::Id(
-                                Id::new("if", [Bindings::CORE_SCOPE, 0, 1, 5, 6, 7, 9, 10, 11, 12]),
-                                span
-                            ),
-                            SExpr::Id(
-                                Id::new("temp", [Bindings::CORE_SCOPE, 1, 5, 6, 7, 9, 10, 11, 12]),
-                                span
-                            ),
-                            SExpr::Id(
-                                Id::new("temp", [Bindings::CORE_SCOPE, 1, 5, 6, 7, 9, 10, 11, 12]),
-                                span
-                            ),
-                            SExpr::Id(
-                                Id::new(
-                                    "temp",
-                                    [Bindings::CORE_SCOPE, 1, 2, 3, 4, 6, 7, 9, 10, 11, 12]
-                                ),
+                                Id::new("temp", [Bindings::CORE_SCOPE, 1, 2, 3, 4, 6, 7]),
                                 span
                             )
                         )
@@ -1433,7 +1411,7 @@ mod tests {
                 (
                     SExpr::Id(Id::new("lambda", [Bindings::CORE_SCOPE, 1, 2]), span),
                     (),
-                    SExpr::Id(Id::new("y", [Bindings::CORE_SCOPE, 1, 2, 3, 4, 7, 8]), span),
+                    SExpr::Id(Id::new("y", [Bindings::CORE_SCOPE, 1, 2, 3, 4]), span),
                 )
             ),
             (
@@ -1442,10 +1420,7 @@ mod tests {
                 (
                     SExpr::Id(Id::new("lambda", [Bindings::CORE_SCOPE, 1, 2]), span),
                     (),
-                    SExpr::Id(
-                        Id::new("x", [Bindings::CORE_SCOPE, 1, 2, 5, 6, 9, 10]),
-                        span
-                    ),
+                    SExpr::Id(Id::new("x", [Bindings::CORE_SCOPE, 1, 2, 5, 6]), span),
                 )
             )
         );
