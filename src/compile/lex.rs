@@ -84,7 +84,7 @@ pub(crate) fn tokenize(source: &str) -> Result<Vec<Token>> {
         }
 
         fn parse_minus(&mut self) -> Result<Token> {
-            let Some(_) = self.look_ahead() else {
+            if self.look_ahead().is_none() {
                 return Ok(Token::Id(Symbol::new(&self.cur), self.get_span()));
             };
             self.consume_until(&|c| !Self::is_id_subsequent(c) && !c.is_ascii_digit());
