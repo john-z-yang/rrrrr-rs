@@ -218,7 +218,7 @@ pub(crate) fn parse(tokens: &[Token]) -> Result<SExpr> {
         fn make_improper_list(slice: &[SExpr], start: Span, end: Span) -> SExpr {
             assert!(
                 slice.len() >= 2,
-                "improper list has to have more than 2 element"
+                "improper list has to have more than 2 elements"
             );
             let mut iter = slice.iter().rev();
             let cdr = iter.next().unwrap().clone();
