@@ -373,66 +373,60 @@ impl Transformer {
                     reason: "Expected 'syntax-rules' rules to be a proper list".to_owned(),
                 });
             }
-            try_for_each(
-                |literal| {
-                    let SExpr::Id(Id { symbol, scopes: _ }, _) = literal else {
-                        return Err(CompilationError {
-                            span: literal.get_span(),
-                            reason: format!(
-                                "Expected an identifier in 'syntax-rules' literals, but got: {}",
-                                literal
-                            ),
-                        });
-                    };
-                    if symbol.0 == "..." || symbol.0 == "_" {
-                        return Err(CompilationError {
-                            span: literal.get_span(),
-                            reason: format!(
-                                "'{}' is not allowed in 'syntax-rules' literals",
-                                literal
-                            ),
-                        });
-                    }
-                    literals.insert(symbol.clone());
-                    Ok(())
-                },
-                literals_list,
-            )?;
+            try_for_each(literals_list, |literal| {
+                let SExpr::Id(Id { symbol, scopes: _ }, _) = literal else {
+                    return Err(CompilationError {
+                        span: literal.get_span(),
+                        reason: format!(
+                            "Expected an identifier in 'syntax-rules' literals, but got: {}",
+                            literal
+                        ),
+                    });
+                };
+                if symbol.0 == "..." || symbol.0 == "_" {
+                    return Err(CompilationError {
+                        span: literal.get_span(),
+                        reason: format!(
+                            "'{}' is not allowed in 'syntax-rules' literals",
+                            literal
+                        ),
+                    });
+                }
+                literals.insert(symbol.clone());
+                Ok(())
+            })?;
 
             let literals = Arc::new(literals);
             let mut syntax_rules = Vec::<SyntaxRule>::new();
-            try_for_each(
-                |rule_pair| {
-                    if_let_sexpr! {(pattern, template) = rule_pair =>
-                        let SExpr::Cons(pattern, _) = pattern else {
-                            return Err(CompilationError {
-                                span: pattern.get_span(),
-                                reason: "'syntax-rules' pattern must be a list".to_owned(),
-                            });
-                        };
-                        if !matches!(pattern.car.as_ref(), SExpr::Id(..)) {
-                            return Err(CompilationError {
-                                span: pattern.car.get_span(),
-                                reason: format!(
-                                    "'syntax-rules' pattern must start with an identifier, but got: {}",
-                                    pattern.car
-                                ),
-                            });
-                        }
-                        syntax_rules.push(SyntaxRule::new(
-                            pattern.cdr.as_ref().clone(),
-                            template.clone(),
-                            Arc::clone(&literals),
-                        )?);
-                        return Ok(());
+            try_for_each(rules, |rule_pair| {
+                if_let_sexpr! {(pattern, template) = rule_pair =>
+                    let SExpr::Cons(pattern, _) = pattern else {
+                        return Err(CompilationError {
+                            span: pattern.get_span(),
+                            reason: "'syntax-rules' pattern must be a list".to_owned(),
+                        });
+                    };
+                    if !matches!(pattern.car.as_ref(), SExpr::Id(..)) {
+                        return Err(CompilationError {
+                            span: pattern.car.get_span(),
+                            reason: format!(
+                                "'syntax-rules' pattern must start with an identifier, but got: {}",
+                                pattern.car
+                            ),
+                        });
                     }
-                    Err(CompilationError {
-                        span: rule_pair.get_span(),
-                        reason: "Invalid 'syntax-rules' rule: expected (pattern template)".to_owned(),
-                    })
-                },
-                rules,
-            )?;
+                    syntax_rules.push(SyntaxRule::new(
+                        pattern.cdr.as_ref().clone(),
+                        template.clone(),
+                        Arc::clone(&literals),
+                    )?);
+                    return Ok(());
+                }
+                Err(CompilationError {
+                    span: rule_pair.get_span(),
+                    reason: "Invalid 'syntax-rules' rule: expected (pattern template)".to_owned(),
+                })
+            })?;
 
             return Ok(Self { syntax_rules });
         }

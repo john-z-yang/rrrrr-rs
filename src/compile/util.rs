@@ -260,7 +260,7 @@ pub(crate) fn append(head: &SExpr, tail: &SExpr) -> SExpr {
     }
 }
 
-pub(crate) fn try_for_each<F, E>(mut op: F, sexpr: &SExpr) -> Result<(), E>
+pub(crate) fn try_for_each<F, E>(sexpr: &SExpr, mut op: F) -> Result<(), E>
 where
     F: FnMut(&SExpr) -> Result<(), E>,
 {
@@ -272,13 +272,13 @@ where
     Ok(())
 }
 
-pub(crate) fn try_map<F, E>(mut op: F, sexpr: &SExpr) -> Result<SExpr, E>
+pub(crate) fn try_map<F, E>(sexpr: &SExpr, mut op: F) -> Result<SExpr, E>
 where
     F: FnMut(&SExpr) -> Result<SExpr, E>,
 {
     if let SExpr::Cons(cons, span) = sexpr {
         return Ok(SExpr::Cons(
-            Cons::new(op(&cons.car)?, try_map(op, &cons.cdr)?),
+            Cons::new(op(&cons.car)?, try_map(&cons.cdr, op)?),
             *span,
         ));
     }

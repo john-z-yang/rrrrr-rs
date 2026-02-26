@@ -126,10 +126,9 @@ fn expand_id_application(
 }
 
 fn expand_fn_application(sexpr: &SExpr, bindings: &mut Bindings, env: &mut Env) -> Result<SExpr> {
-    try_map(
-        |sub_sexpr| expand_sexpr(sub_sexpr, bindings, env, Context::Expression),
-        sexpr,
-    )
+    try_map(sexpr, |sub_sexpr| {
+        expand_sexpr(sub_sexpr, bindings, env, Context::Expression)
+    })
 }
 
 fn expand_begin(
@@ -150,10 +149,9 @@ fn expand_begin(
             reason: "Invalid 'begin' form: expected at least one expression".to_owned(),
         });
     }
-    try_map(
-        |sub_sexpr| expand_sexpr(sub_sexpr, bindings, env, ctx),
-        sexpr,
-    )
+    try_map(sexpr, |sub_sexpr| {
+        expand_sexpr(sub_sexpr, bindings, env, ctx)
+    })
 }
 
 fn expand_set(sexpr: &SExpr, bindings: &mut Bindings, env: &mut Env) -> Result<SExpr> {
@@ -214,23 +212,20 @@ fn expand_lambda(sexpr: &SExpr, bindings: &mut Bindings, env: &mut Env) -> Resul
             let scope_id = bindings.new_scope_id();
             let args = args.add_scope(scope_id);
 
-            try_for_each(
-                |arg| {
-                    let SExpr::Id(id, _) = arg else {
-                        return Err(CompilationError {
-                            span: arg.get_span(),
-                            reason: format!(
-                                "Expected an identifier in function parameters, but got: {}",
-                                arg
-                            ),
-                        });
-                    };
-                    let binding = bindings.gen_sym(id);
-                    bindings.add_binding(id, &binding);
-                    Ok(())
-                },
-                &args,
-            )?;
+            try_for_each(&args, |arg| {
+                let SExpr::Id(id, _) = arg else {
+                    return Err(CompilationError {
+                        span: arg.get_span(),
+                        reason: format!(
+                            "Expected an identifier in function parameters, but got: {}",
+                            arg
+                        ),
+                    });
+                };
+                let binding = bindings.gen_sym(id);
+                bindings.add_binding(id, &binding);
+                Ok(())
+            })?;
 
             match try_dotted_tail(&args) {
                 None | Some(SExpr::Nil(_)) => {}
@@ -277,10 +272,9 @@ fn expand_body(body: &SExpr, bindings: &mut Bindings, env: &mut Env) -> Result<S
     let body = body.add_scope(bindings.new_scope_id());
     let body = normalize_body(&body, bindings, env, NormalizationPhase::Define)?.0;
 
-    try_map(
-        |sexpr| expand_sexpr(sexpr, bindings, env, Context::Body),
-        &body,
-    )
+    try_map(&body, |sexpr| {
+        expand_sexpr(sexpr, bindings, env, Context::Body)
+    })
 }
 
 #[derive(Debug, PartialEq, Eq, Clone, Copy)]
@@ -409,7 +403,7 @@ fn expand_letrec_syntax(sexpr: &SExpr, bindings: &mut Bindings, env: &mut Env) -
         let scope_id = bindings.new_scope_id();
         let mut transformer_bindings = vec![];
 
-        if let Err(e) = try_for_each(|spec| {
+        if let Err(e) = try_for_each(specs, |spec| {
             if_let_sexpr! {(keyword, transformer_spec) = spec =>
                 let keyword = keyword.add_scope(scope_id);
 
@@ -440,7 +434,7 @@ fn expand_letrec_syntax(sexpr: &SExpr, bindings: &mut Bindings, env: &mut Env) -
                 transformer_bindings.push(binding);
             }
             Ok(())
-        }, specs) {
+        }) {
             transformer_bindings.iter().for_each(|transformer_binding| {
                 env.remove_entry(transformer_binding);
             });
