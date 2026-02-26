@@ -23,6 +23,7 @@ impl Bindings {
         "if",
         "lambda",
         "define",
+        "define-syntax",
         "set!",
         "begin",
         "list",

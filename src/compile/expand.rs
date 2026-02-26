@@ -109,6 +109,7 @@ fn expand_id_application(
         "letrec-syntax" => expand_letrec_syntax(sexpr, bindings, env),
         "lambda" => expand_lambda(sexpr, bindings, env),
         "define" => expand_define(sexpr, bindings, env, ctx),
+        "define-syntax" => expand_define_syntax(sexpr, bindings, env, ctx),
         "set!" => expand_set(sexpr, bindings, env),
         "begin" => expand_begin(sexpr, bindings, env, ctx),
         _ => {
@@ -202,6 +203,42 @@ fn expand_define(
     Err(CompilationError {
         span: sexpr.get_span(),
         reason: "Invalid 'define' form".to_owned(),
+    })
+}
+
+fn expand_define_syntax(
+    sexpr: &SExpr,
+    bindings: &mut Bindings,
+    env: &mut Env,
+    ctx: Context,
+) -> Result<SExpr> {
+    if_let_sexpr! {(_, SExpr::Id(id, _), transformer_spec) = sexpr =>
+        if ctx != Context::TopLevel {
+            return Err(CompilationError {
+                span: sexpr.get_span(),
+                reason: "'define-syntax' is only allowed in the top level context".to_owned(),
+            });
+        }
+        if !matches!(
+            try_first(transformer_spec),
+            Some(SExpr::Id(id, _)) if bindings.resolve_sym(&id) == Some(Symbol::new("syntax-rules"))
+        ) {
+            return Err(CompilationError {
+                span: transformer_spec.get_span(),
+                reason: "Expected a 'syntax-rules' transformer".to_owned(),
+            });
+        }
+
+        let transformer = Transformer::new(transformer_spec)?;
+        let binding = bindings.gen_sym(id);
+        bindings.add_binding(id, &binding);
+        env.insert(binding.clone(), transformer);
+
+        return Ok(sexpr.clone());
+    }
+    Err(CompilationError {
+        span: sexpr.get_span(),
+        reason: "Invalid 'define-syntax' form".to_owned(),
     })
 }
 
@@ -2172,5 +2209,216 @@ mod tests {
             result.is_err(),
             "Expected macro expanding to expression to end define phase, rejecting subsequent define"
         );
+    }
+
+    #[test]
+    fn test_expand_define_syntax_basic() {
+        let mut bindings = Bindings::new();
+        let mut env = HashMap::<Symbol, Transformer>::new();
+        let def = parse(
+            &tokenize(
+                r#"
+                (define-syntax one
+                  (syntax-rules ()
+                    ((_) 1)))
+                "#,
+            )
+            .unwrap(),
+        )
+        .unwrap();
+        let result = expand(&introduce(&def), &mut bindings, &mut env);
+        assert!(
+            result.is_ok(),
+            "Expected define-syntax to expand, got: {:?}",
+            result
+        );
+
+        let usage = parse(&tokenize("(one)").unwrap()).unwrap();
+        let result = expand(&introduce(&usage), &mut bindings, &mut env).unwrap();
+        assert_eq!(
+            result.without_spans(),
+            SExpr::Num(Num(1.0), result.get_span()).without_spans()
+        );
+    }
+
+    #[test]
+    fn test_expand_define_syntax_with_pattern_variable() {
+        let mut bindings = Bindings::new();
+        let mut env = HashMap::<Symbol, Transformer>::new();
+        let def = parse(
+            &tokenize(
+                r#"
+                (define-syntax double
+                  (syntax-rules ()
+                    ((_ x) (list x x))))
+                "#,
+            )
+            .unwrap(),
+        )
+        .unwrap();
+        expand(&introduce(&def), &mut bindings, &mut env).unwrap();
+
+        let usage = parse(&tokenize("(double 5)").unwrap()).unwrap();
+        let result = expand(&introduce(&usage), &mut bindings, &mut env).unwrap();
+
+        // list gets an extra scope from macro expansion
+        let list_id = first(&result);
+        assert!(matches!(&list_id, SExpr::Id(id, _) if bindings.resolve_sym(&id) == Some(Symbol::new("list"))));
+        assert_eq!(
+            nth(&result, 1).unwrap().without_spans(),
+            SExpr::Num(Num(5.0), Span { lo: 0, hi: 0 }).without_spans()
+        );
+        assert_eq!(
+            nth(&result, 2).unwrap().without_spans(),
+            SExpr::Num(Num(5.0), Span { lo: 0, hi: 0 }).without_spans()
+        );
+    }
+
+    #[test]
+    fn test_expand_define_syntax_rejected_in_expression_context() {
+        let mut bindings = Bindings::new();
+        let mut env = HashMap::<Symbol, Transformer>::new();
+        let expr = parse(
+            &tokenize(
+                r#"
+                (list (define-syntax one
+                        (syntax-rules ()
+                          ((_) 1))))
+                "#,
+            )
+            .unwrap(),
+        )
+        .unwrap();
+        assert!(matches!(
+            expand(&introduce(&expr), &mut bindings, &mut env),
+            Err(CompilationError { reason, .. })
+                if reason == "'define-syntax' is only allowed in the top level context"
+        ));
+    }
+
+    #[test]
+    fn test_expand_define_syntax_rejected_in_body_context() {
+        let mut bindings = Bindings::new();
+        let mut env = HashMap::<Symbol, Transformer>::new();
+        let expr = parse(
+            &tokenize(
+                r#"
+                (lambda ()
+                  (define-syntax one
+                    (syntax-rules ()
+                      ((_) 1)))
+                  (one))
+                "#,
+            )
+            .unwrap(),
+        )
+        .unwrap();
+        assert!(matches!(
+            expand(&introduce(&expr), &mut bindings, &mut env),
+            Err(CompilationError { reason, .. })
+                if reason == "'define-syntax' is only allowed in the top level context"
+        ));
+    }
+
+    #[test]
+    fn test_expand_define_syntax_invalid_form() {
+        let mut bindings = Bindings::new();
+        let mut env = HashMap::<Symbol, Transformer>::new();
+        let expr = parse(&tokenize("(define-syntax)").unwrap()).unwrap();
+        assert!(matches!(
+            expand(&introduce(&expr), &mut bindings, &mut env),
+            Err(CompilationError { reason, .. })
+                if reason == "Invalid 'define-syntax' form"
+        ));
+    }
+
+    #[test]
+    fn test_expand_define_syntax_rejects_non_syntax_rules_transformer() {
+        let mut bindings = Bindings::new();
+        let mut env = HashMap::<Symbol, Transformer>::new();
+        let expr = parse(
+            &tokenize(
+                r#"
+                (define-syntax one (lambda (x) x))
+                "#,
+            )
+            .unwrap(),
+        )
+        .unwrap();
+        assert!(matches!(
+            expand(&introduce(&expr), &mut bindings, &mut env),
+            Err(CompilationError { reason, .. })
+                if reason == "Expected a 'syntax-rules' transformer"
+        ));
+    }
+
+    #[test]
+    fn test_expand_define_syntax_multiple_definitions() {
+        let mut bindings = Bindings::new();
+        let mut env = HashMap::<Symbol, Transformer>::new();
+
+        let def1 = parse(
+            &tokenize(
+                r#"
+                (define-syntax one
+                  (syntax-rules ()
+                    ((_) 1)))
+                "#,
+            )
+            .unwrap(),
+        )
+        .unwrap();
+        expand(&introduce(&def1), &mut bindings, &mut env).unwrap();
+
+        let def2 = parse(
+            &tokenize(
+                r#"
+                (define-syntax two
+                  (syntax-rules ()
+                    ((_) 2)))
+                "#,
+            )
+            .unwrap(),
+        )
+        .unwrap();
+        expand(&introduce(&def2), &mut bindings, &mut env).unwrap();
+
+        let usage = parse(&tokenize("(list (one) (two))").unwrap()).unwrap();
+        let result = expand(&introduce(&usage), &mut bindings, &mut env).unwrap();
+        let span = Span { lo: 0, hi: 0 };
+        let expected = sexpr!(
+            SExpr::Id(Id::new("list", [Bindings::CORE_SCOPE]), span),
+            SExpr::Num(Num(1.0), span),
+            SExpr::Num(Num(2.0), span),
+        );
+        assert_eq!(result.without_spans(), expected.without_spans());
+    }
+
+    #[test]
+    fn test_expand_define_syntax_with_ellipsis() {
+        let mut bindings = Bindings::new();
+        let mut env = HashMap::<Symbol, Transformer>::new();
+        let def = parse(
+            &tokenize(
+                r#"
+                (define-syntax my-list
+                  (syntax-rules ()
+                    ((_ x ...) (list x ...))))
+                "#,
+            )
+            .unwrap(),
+        )
+        .unwrap();
+        expand(&introduce(&def), &mut bindings, &mut env).unwrap();
+
+        let usage = parse(&tokenize("(my-list 1 2 3)").unwrap()).unwrap();
+        let result = expand(&introduce(&usage), &mut bindings, &mut env).unwrap();
+        let span = Span { lo: 0, hi: 0 };
+
+        let list_id = first(&result);
+        assert!(matches!(&list_id, SExpr::Id(id, _) if bindings.resolve_sym(&id) == Some(Symbol::new("list"))));
+        assert_eq!(nth(&result, 1).unwrap().without_spans(), SExpr::Num(Num(1.0), span).without_spans());
+        assert_eq!(nth(&result, 2).unwrap().without_spans(), SExpr::Num(Num(2.0), span).without_spans());
+        assert_eq!(nth(&result, 3).unwrap().without_spans(), SExpr::Num(Num(3.0), span).without_spans());
     }
 }
