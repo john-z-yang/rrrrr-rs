@@ -11,12 +11,6 @@ macro_rules! sexpr {
     (..$expr:expr) => {
         $expr
     };
-    (..#$symbol:literal) => {
-        $crate::compile::sexpr::SExpr::Id(Id::new($symbol), Span {
-            lo: 0,
-            hi: 1,
-        })
-    };
     (($($inner:tt)*) $(, $($rest:tt)*)?) => {
         $crate::compile::sexpr::SExpr::cons(
             sexpr!($($inner)*),
