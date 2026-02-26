@@ -2263,7 +2263,9 @@ mod tests {
 
         // list gets an extra scope from macro expansion
         let list_id = first(&result);
-        assert!(matches!(&list_id, SExpr::Id(id, _) if bindings.resolve_sym(&id) == Some(Symbol::new("list"))));
+        assert!(
+            matches!(&list_id, SExpr::Id(id, _) if bindings.resolve_sym(id) == Some(Symbol::new("list")))
+        );
         assert_eq!(
             nth(&result, 1).unwrap().without_spans(),
             SExpr::Num(Num(5.0), Span { lo: 0, hi: 0 }).without_spans()
@@ -2416,9 +2418,20 @@ mod tests {
         let span = Span { lo: 0, hi: 0 };
 
         let list_id = first(&result);
-        assert!(matches!(&list_id, SExpr::Id(id, _) if bindings.resolve_sym(&id) == Some(Symbol::new("list"))));
-        assert_eq!(nth(&result, 1).unwrap().without_spans(), SExpr::Num(Num(1.0), span).without_spans());
-        assert_eq!(nth(&result, 2).unwrap().without_spans(), SExpr::Num(Num(2.0), span).without_spans());
-        assert_eq!(nth(&result, 3).unwrap().without_spans(), SExpr::Num(Num(3.0), span).without_spans());
+        assert!(
+            matches!(&list_id, SExpr::Id(id, _) if bindings.resolve_sym(id) == Some(Symbol::new("list")))
+        );
+        assert_eq!(
+            nth(&result, 1).unwrap().without_spans(),
+            SExpr::Num(Num(1.0), span).without_spans()
+        );
+        assert_eq!(
+            nth(&result, 2).unwrap().without_spans(),
+            SExpr::Num(Num(2.0), span).without_spans()
+        );
+        assert_eq!(
+            nth(&result, 3).unwrap().without_spans(),
+            SExpr::Num(Num(3.0), span).without_spans()
+        );
     }
 }
