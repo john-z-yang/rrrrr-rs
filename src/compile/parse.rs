@@ -263,7 +263,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn parse_nil() {
+    fn test_parse_nil() {
         let src = "(    )";
         let list = SExpr::Nil(Span { lo: 0, hi: 6 });
 
