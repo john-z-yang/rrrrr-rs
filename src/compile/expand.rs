@@ -193,17 +193,22 @@ fn expand_set(
 ) -> Result<SExpr> {
     if_let_sexpr! {(set, var @ SExpr::Id(id, span), exp) = sexpr =>
         let resolved = bindings.resolve_sym(id);
-        let Some(resolved) = resolved else {
-            return Err(CompilationError {
-                span: *span,
-                reason: format!("Unbound identifier: '{}'", id),
-            })
-        };
-        if Bindings::CORE_BINDINGS.contains(&resolved.0.as_str()) {
-            return Err(CompilationError {
-                span: sexpr.get_span(),
-                reason: format!("Cannot mutate core binding '{}'", id),
-            })
+        match (&resolved, exec_ctx) {
+            (None, ExecContext::Delayed) => {}
+            (None, ExecContext::Immediate) => {
+                return Err(CompilationError {
+                    span: *span,
+                    reason: format!("Unbound identifier: '{}'", id),
+                })
+            }
+            (Some(resolved), _)  => {
+                if Bindings::CORE_BINDINGS.contains(&resolved.0.as_str()) {
+                    return Err(CompilationError {
+                        span: sexpr.get_span(),
+                        reason: format!("Cannot mutate core binding '{}'", id),
+                    })
+                }
+            }
         }
         let exp = expand_sexpr(exp, bindings, env, Context::Expression(exec_ctx))?;
         return Ok(template_sexpr!((set.clone(), var.clone(), exp) => sexpr).unwrap());
@@ -917,6 +922,19 @@ mod tests {
                 Err(CompilationError { reason, .. }) if reason == "'define' is not allowed in an expression context"
             ),
             "Expected set! RHS to be expanded in expression context"
+        );
+    }
+
+    #[test]
+    fn test_expand_lambda_allows_set_on_unbound_id_in_body() {
+        let mut bindings = Bindings::new();
+        let mut env = HashMap::<Symbol, Transformer>::new();
+        let expr = parse(&tokenize("(lambda () (set! x 1))").unwrap()).unwrap();
+        let result = expand(&introduce(&expr), &mut bindings, &mut env);
+        assert!(
+            result.is_ok(),
+            "Expected set! on unbound identifier in lambda body to be allowed, got: {:?}",
+            result
         );
     }
 
