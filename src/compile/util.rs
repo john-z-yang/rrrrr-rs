@@ -100,8 +100,8 @@ macro_rules! if_let_sexpr {
 macro_rules! match_sexpr {
     // Entry point: bind target, start processing arms
     ($targ:expr; $($arms:tt)*) => {{
-        let __targ = $targ;
-        match_sexpr!(@arms __targ, $($arms)*)
+        let targ = $targ;
+        match_sexpr!(@arms targ, $($arms)*)
     }};
 
     // Default arm (base case)
@@ -111,10 +111,12 @@ macro_rules! match_sexpr {
 
     // Regular arm followed by more arms
     (@arms $targ:ident, ($($pat:tt)*) => $handler:block, $($rest:tt)*) => {{
-        let mut __result = None;
-        if_let_sexpr! { ($($pat)*) = $targ => { __result = Some($handler); } }
-        match __result {
-            Some(__val) => __val,
+        let mut result = None;
+        if_let_sexpr! { ($($pat)*) = $targ =>
+            result = Some($handler);
+        }
+        match result {
+            Some(val) => val,
             None => match_sexpr!(@arms $targ, $($rest)*)
         }
     }};
