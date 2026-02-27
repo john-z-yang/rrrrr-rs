@@ -66,10 +66,20 @@ impl Bindings {
         self.symbols
             .get_key_value(&id.symbol)
             .and_then(|(_, candidates)| {
-                candidates
+                let candidates: Vec<_> = candidates
                     .iter()
-                    .filter(|(candidate_scopes, _)| candidate_scopes.is_subset(&id.scopes))
-                    .max_by(|(lhs, _), (rhs, _)| lhs.len().cmp(&rhs.len()))
+                    .filter(|(scopes, _)| scopes.is_subset(&id.scopes))
+                    .collect();
+                let max_subscope_len = candidates.iter().map(|(s, _)| s.len()).max()?;
+                let mut max_subscope_candidates: Vec<_> = candidates
+                    .iter()
+                    .filter(|(candidate_scopes, _)| candidate_scopes.len() == max_subscope_len)
+                    .cloned()
+                    .collect();
+                if max_subscope_candidates.len() > 1 {
+                    unreachable!("resolve detected ambiguous binding for '{id}'")
+                }
+                max_subscope_candidates.pop()
             })
             .map(|(scopes, symbol)| Id {
                 symbol: symbol.clone(),
