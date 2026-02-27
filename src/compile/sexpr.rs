@@ -18,6 +18,121 @@ pub(crate) enum SExpr {
     Vector(Vector, Span),
 }
 
+impl SExpr {
+    pub(crate) fn without_spans(&self) -> SExprWithoutSpans<'_> {
+        SExprWithoutSpans(self)
+    }
+
+    pub(crate) fn get_span(&self) -> Span {
+        *match self {
+            SExpr::Id(_, span) => span,
+            SExpr::Cons(_, span) => span,
+            SExpr::Nil(span) => span,
+            SExpr::Bool(_, span) => span,
+            SExpr::Num(_, span) => span,
+            SExpr::Char(_, span) => span,
+            SExpr::Str(_, span) => span,
+            SExpr::Vector(_, span) => span,
+        }
+    }
+
+    pub(crate) fn update_span(&self, span: Span) -> Self {
+        match self {
+            SExpr::Id(id, _) => SExpr::Id(id.clone(), span),
+            SExpr::Cons(cons, _) => SExpr::Cons(cons.clone(), span),
+            SExpr::Nil(_) => SExpr::Nil(span),
+            SExpr::Bool(bool, _) => SExpr::Bool(bool.clone(), span),
+            SExpr::Num(num, _) => SExpr::Num(num.clone(), span),
+            SExpr::Char(char, _) => SExpr::Char(char.clone(), span),
+            SExpr::Str(str, _) => SExpr::Str(str.clone(), span),
+            SExpr::Vector(vector, _) => SExpr::Vector(vector.clone(), span),
+        }
+    }
+
+    pub(crate) fn cons(car: SExpr, cdr: SExpr) -> Self {
+        let start = car.get_span();
+        let end = cdr.get_span();
+        Self::Cons(Cons::new(car, cdr), start.combine(end))
+    }
+
+    fn adjust_scope<F>(&self, op: &F) -> Self
+    where
+        F: Fn(&Scopes) -> Scopes,
+    {
+        match self {
+            Self::Id(id, span) => Self::Id(id.adjust_scope(op), *span),
+            Self::Cons(cons, span) => Self::Cons(
+                Cons::new(cons.car.adjust_scope(op), cons.cdr.adjust_scope(op)),
+                *span,
+            ),
+            Self::Vector(vector, span) => Self::Vector(
+                Vector(
+                    vector
+                        .0
+                        .iter()
+                        .map(|sexpr| sexpr.adjust_scope(op))
+                        .collect(),
+                ),
+                *span,
+            ),
+            _ => self.clone(),
+        }
+    }
+
+    pub(crate) fn add_scope(&self, scope: ScopeId) -> Self {
+        let op = |scopes: &Scopes| {
+            let mut scopes = scopes.clone();
+            scopes.insert(scope);
+            scopes
+        };
+        self.adjust_scope(&op)
+    }
+
+    pub(crate) fn flip_scope(&self, scope: ScopeId) -> Self {
+        let op = |scopes: &Scopes| {
+            let mut scopes = scopes.clone();
+            if scopes.contains(&scope) {
+                scopes.remove(&scope);
+            } else {
+                scopes.insert(scope);
+            }
+            scopes
+        };
+        self.adjust_scope(&op)
+    }
+}
+
+impl fmt::Display for SExpr {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            SExpr::Id(id, _) => {
+                write!(f, "{}", id)
+            }
+            SExpr::Cons(cons, _) => {
+                write!(f, "{}", cons)
+            }
+            SExpr::Nil(_) => {
+                write!(f, "()")
+            }
+            SExpr::Bool(bool, _) => {
+                write!(f, "{}", bool)
+            }
+            SExpr::Num(num, _) => {
+                write!(f, "{}", num)
+            }
+            SExpr::Char(char, _) => {
+                write!(f, "{}", char)
+            }
+            SExpr::Str(str, _) => {
+                write!(f, "{}", str)
+            }
+            SExpr::Vector(vector, _) => {
+                write!(f, "{}", vector)
+            }
+        }
+    }
+}
+
 #[derive(Clone, Copy)]
 pub(crate) struct SExprWithoutSpans<'a>(&'a SExpr);
 
@@ -84,30 +199,6 @@ pub(crate) struct Id {
     pub(crate) scopes: Scopes,
 }
 
-#[derive(PartialEq, Clone, Debug)]
-pub(crate) struct Cons {
-    pub(crate) car: Box<SExpr>,
-    pub(crate) cdr: Box<SExpr>,
-}
-
-#[derive(Debug, PartialEq, Eq, Clone, Hash)]
-pub(crate) struct Symbol(pub(crate) String);
-
-#[derive(Debug, PartialEq, Clone)]
-pub(crate) struct Bool(pub(crate) bool);
-
-#[derive(Debug, PartialEq, Clone)]
-pub(crate) struct Num(pub(crate) f64);
-
-#[derive(Debug, PartialEq, Clone)]
-pub(crate) struct Char(pub(crate) char);
-
-#[derive(Debug, PartialEq, Clone)]
-pub(crate) struct Str(pub(crate) String);
-
-#[derive(Debug, PartialEq, Clone)]
-pub(crate) struct Vector(pub(crate) Vec<SExpr>);
-
 impl Id {
     pub(crate) fn new<const N: usize>(symbol: &str, scopes: [ScopeId; N]) -> Self {
         Id {
@@ -136,6 +227,44 @@ impl Id {
     }
 }
 
+impl fmt::Display for Id {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "{}", self.symbol)
+    }
+}
+
+impl TryFrom<SExpr> for Id {
+    type Error = ();
+    fn try_from(value: SExpr) -> Result<Self, Self::Error> {
+        if let SExpr::Id(id, _) = value {
+            Ok(id)
+        } else {
+            Err(())
+        }
+    }
+}
+
+#[derive(Debug, PartialEq, Eq, Clone, Hash)]
+pub(crate) struct Symbol(pub(crate) String);
+
+impl Symbol {
+    pub(crate) fn new(symbol: &str) -> Self {
+        Symbol(symbol.to_string())
+    }
+}
+
+impl fmt::Display for Symbol {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "{}", self.0)
+    }
+}
+
+#[derive(PartialEq, Clone, Debug)]
+pub(crate) struct Cons {
+    pub(crate) car: Box<SExpr>,
+    pub(crate) cdr: Box<SExpr>,
+}
+
 impl Cons {
     pub(crate) fn new(car: SExpr, cdr: SExpr) -> Self {
         Cons {
@@ -161,113 +290,10 @@ impl Cons {
     }
 }
 
-impl Symbol {
-    pub(crate) fn new(symbol: &str) -> Self {
-        Symbol(symbol.to_string())
-    }
-}
-
-impl fmt::Display for SExpr {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        match self {
-            SExpr::Id(id, _) => {
-                write!(f, "{}", id)
-            }
-            SExpr::Cons(cons, _) => {
-                write!(f, "{}", cons)
-            }
-            SExpr::Nil(_) => {
-                write!(f, "()")
-            }
-            SExpr::Bool(bool, _) => {
-                write!(f, "{}", bool)
-            }
-            SExpr::Num(num, _) => {
-                write!(f, "{}", num)
-            }
-            SExpr::Char(char, _) => {
-                write!(f, "{}", char)
-            }
-            SExpr::Str(str, _) => {
-                write!(f, "{}", str)
-            }
-            SExpr::Vector(vector, _) => {
-                write!(f, "{}", vector)
-            }
-        }
-    }
-}
-
-impl fmt::Display for Id {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "{}", self.symbol)
-    }
-}
-
 impl fmt::Display for Cons {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "(")?;
         self.fmt_disp(f)
-    }
-}
-
-impl fmt::Display for Symbol {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "{}", self.0)
-    }
-}
-
-impl fmt::Display for Bool {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "{}", if self.0 { "#t" } else { "#f" })
-    }
-}
-
-impl fmt::Display for Num {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "{}", self.0)
-    }
-}
-
-impl fmt::Display for Char {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        if self.0 == ' ' {
-            write!(f, "#\\space")
-        } else if self.0 == '\n' {
-            write!(f, "#\\newline")
-        } else {
-            write!(f, "#\\{}", self.0)
-        }
-    }
-}
-
-impl fmt::Display for Str {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "{:?}", self.0)
-    }
-}
-
-impl fmt::Display for Vector {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "#(")?;
-        for e in self.0.iter().take(1) {
-            write!(f, "{}", e)?;
-        }
-        for e in self.0.iter().skip(1) {
-            write!(f, " {}", e)?;
-        }
-        write!(f, ")")
-    }
-}
-
-impl TryFrom<SExpr> for Id {
-    type Error = ();
-    fn try_from(value: SExpr) -> Result<Self, Self::Error> {
-        if let SExpr::Id(id, _) = value {
-            Ok(id)
-        } else {
-            Err(())
-        }
     }
 }
 
@@ -282,6 +308,15 @@ impl TryFrom<SExpr> for Cons {
     }
 }
 
+#[derive(Debug, PartialEq, Clone)]
+pub(crate) struct Bool(pub(crate) bool);
+
+impl fmt::Display for Bool {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "{}", if self.0 { "#t" } else { "#f" })
+    }
+}
+
 impl TryFrom<SExpr> for Bool {
     type Error = ();
     fn try_from(value: SExpr) -> Result<Self, Self::Error> {
@@ -293,77 +328,52 @@ impl TryFrom<SExpr> for Bool {
     }
 }
 
-impl SExpr {
-    pub(crate) fn without_spans(&self) -> SExprWithoutSpans<'_> {
-        SExprWithoutSpans(self)
-    }
+#[derive(Debug, PartialEq, Clone)]
+pub(crate) struct Num(pub(crate) f64);
 
-    pub(crate) fn get_span(&self) -> Span {
-        *match self {
-            SExpr::Id(_, span) => span,
-            SExpr::Cons(_, span) => span,
-            SExpr::Nil(span) => span,
-            SExpr::Bool(_, span) => span,
-            SExpr::Num(_, span) => span,
-            SExpr::Char(_, span) => span,
-            SExpr::Str(_, span) => span,
-            SExpr::Vector(_, span) => span,
+impl fmt::Display for Num {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "{}", self.0)
+    }
+}
+
+#[derive(Debug, PartialEq, Clone)]
+pub(crate) struct Char(pub(crate) char);
+
+impl fmt::Display for Char {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        if self.0 == ' ' {
+            write!(f, "#\\space")
+        } else if self.0 == '\n' {
+            write!(f, "#\\newline")
+        } else {
+            write!(f, "#\\{}", self.0)
         }
     }
+}
 
-    pub(crate) fn update_span(&self, span: Span) -> Self {
-        match self {
-            SExpr::Id(id, _) => SExpr::Id(id.clone(), span),
-            SExpr::Cons(cons, _) => SExpr::Cons(cons.clone(), span),
-            SExpr::Nil(_) => SExpr::Nil(span),
-            SExpr::Bool(bool, _) => SExpr::Bool(bool.clone(), span),
-            SExpr::Num(num, _) => SExpr::Num(num.clone(), span),
-            SExpr::Char(char, _) => SExpr::Char(char.clone(), span),
-            SExpr::Str(str, _) => SExpr::Str(str.clone(), span),
-            SExpr::Vector(vector, _) => SExpr::Vector(vector.clone(), span),
+#[derive(Debug, PartialEq, Clone)]
+pub(crate) struct Str(pub(crate) String);
+
+impl fmt::Display for Str {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "{:?}", self.0)
+    }
+}
+
+#[derive(Debug, PartialEq, Clone)]
+pub(crate) struct Vector(pub(crate) Vec<SExpr>);
+
+impl fmt::Display for Vector {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "#(")?;
+        for e in self.0.iter().take(1) {
+            write!(f, "{}", e)?;
         }
-    }
-
-    pub(crate) fn cons(car: SExpr, cdr: SExpr) -> Self {
-        let start = car.get_span();
-        let end = cdr.get_span();
-        Self::Cons(Cons::new(car, cdr), start.combine(end))
-    }
-
-    fn adjust_scope<F>(&self, op: &F) -> Self
-    where
-        F: Fn(&Scopes) -> Scopes,
-    {
-        match self {
-            Self::Id(id, span) => Self::Id(id.adjust_scope(op), *span),
-            Self::Cons(cons, span) => Self::Cons(
-                Cons::new(cons.car.adjust_scope(op), cons.cdr.adjust_scope(op)),
-                *span,
-            ),
-            _ => self.clone(),
+        for e in self.0.iter().skip(1) {
+            write!(f, " {}", e)?;
         }
-    }
-
-    pub(crate) fn add_scope(&self, scope: ScopeId) -> Self {
-        let op = |scopes: &Scopes| {
-            let mut scopes = scopes.clone();
-            scopes.insert(scope);
-            scopes
-        };
-        self.adjust_scope(&op)
-    }
-
-    pub(crate) fn flip_scope(&self, scope: ScopeId) -> Self {
-        let op = |scopes: &Scopes| {
-            let mut scopes = scopes.clone();
-            if scopes.contains(&scope) {
-                scopes.remove(&scope);
-            } else {
-                scopes.insert(scope);
-            }
-            scopes
-        };
-        self.adjust_scope(&op)
+        write!(f, ")")
     }
 }
 
@@ -410,6 +420,71 @@ mod tests {
                 (SExpr::Id(Id::new("b", [1, 0]), span)),
                 (SExpr::Id(Id::new("c", []), span)),
                 SExpr::Id(Id::new("d", [1]), span),
+            )
+            .without_spans()
+        )
+    }
+
+    #[test]
+    fn test_add_scope_vector() {
+        let span = Span { lo: 0, hi: 1 };
+        let vector = SExpr::Vector(
+            Vector(vec![
+                SExpr::Id(Id::new("a", [1]), span),
+                SExpr::Id(Id::new("b", [0]), span),
+                SExpr::Num(Num(42.0), span),
+            ]),
+            span,
+        );
+        assert_eq!(
+            vector.add_scope(2).without_spans(),
+            SExpr::Vector(
+                Vector(vec![
+                    SExpr::Id(Id::new("a", [1, 2]), span),
+                    SExpr::Id(Id::new("b", [0, 2]), span),
+                    SExpr::Num(Num(42.0), span),
+                ]),
+                span,
+            )
+            .without_spans()
+        )
+    }
+
+    #[test]
+    fn test_flip_scope_vector() {
+        let span = Span { lo: 0, hi: 1 };
+        let vector = SExpr::Vector(
+            Vector(vec![
+                SExpr::Id(Id::new("a", [0, 1]), span),
+                SExpr::Id(Id::new("b", [1]), span),
+            ]),
+            span,
+        );
+        assert_eq!(
+            vector.flip_scope(1).without_spans(),
+            SExpr::Vector(
+                Vector(vec![
+                    SExpr::Id(Id::new("a", [0]), span),
+                    SExpr::Id(Id::new("b", []), span),
+                ]),
+                span,
+            )
+            .without_spans()
+        )
+    }
+
+    #[test]
+    fn test_add_scope_nested_vector() {
+        let span = Span { lo: 0, hi: 1 };
+        let nested = sexpr!(
+            SExpr::Vector(Vector(vec![SExpr::Id(Id::new("x", [1]), span)]), span,),
+            SExpr::Id(Id::new("y", [1]), span),
+        );
+        assert_eq!(
+            nested.add_scope(2).without_spans(),
+            sexpr!(
+                SExpr::Vector(Vector(vec![SExpr::Id(Id::new("x", [1, 2]), span)]), span,),
+                SExpr::Id(Id::new("y", [1, 2]), span),
             )
             .without_spans()
         )
