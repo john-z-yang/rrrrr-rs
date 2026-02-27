@@ -8,248 +8,243 @@ use crate::compile::{
 };
 
 pub(crate) fn parse(tokens: &[Token]) -> Result<SExpr> {
-    struct Parser<'tokens> {
-        it: Peekable<Iter<'tokens, Token>>,
-        cur: &'tokens Token,
+    Parser::new(tokens).parse()
+}
+
+struct Parser<'tokens> {
+    it: Peekable<Iter<'tokens, Token>>,
+    cur: &'tokens Token,
+}
+
+impl Parser<'_> {
+    fn new(tokens: &'_ [Token]) -> Parser<'_> {
+        assert_ne!(tokens.len(), 0, "Token stream must have at least 1 token");
+        Parser {
+            it: tokens.iter().peekable(),
+            cur: &tokens[0],
+        }
     }
 
-    impl Parser<'_> {
-        fn new(tokens: &'_ [Token]) -> Parser<'_> {
-            assert_ne!(tokens.len(), 0, "Token stream must have at least 1 token");
-            Parser {
-                it: tokens.iter().peekable(),
-                cur: &tokens[0],
-            }
+    fn parse(&mut self) -> Result<SExpr> {
+        let res = self.parse_datum()?;
+        match self.look_ahead() {
+            Some(Token::EoF(_)) => Ok(res),
+            Some(token) => Err(self.emit_err("Expected end of input", token)),
+            None => unreachable!("parse expected token stream to end with the EoF token"),
         }
+    }
 
-        fn parse(&mut self) -> Result<SExpr> {
-            let res = self.parse_datum()?;
-            match self.look_ahead() {
-                Some(Token::EoF(_)) => Ok(res),
-                Some(token) => Err(self.emit_err("Expected end of input", token)),
-                None => unreachable!("parse expected token stream to end with the EoF token"),
-            }
+    fn parse_datum(&mut self) -> Result<SExpr> {
+        match self.look_ahead() {
+            Some(
+                Token::Id(_, _)
+                | Token::Bool(_, _)
+                | Token::Num(_, _)
+                | Token::Char(_, _)
+                | Token::Str(_, _),
+            ) => Ok(self.parse_atom()),
+            Some(
+                Token::LParen(_)
+                | Token::HashLParen(_)
+                | Token::Quote(_)
+                | Token::QuasiQuote(_)
+                | Token::Comma(_)
+                | Token::CommaAt(_),
+            ) => self.parse_compound(),
+            Some(token) => Err(self.emit_err("Expected a datum", token)),
+            _ => unreachable!("parse_datum expected at least 1 token to look ahead"),
         }
+    }
 
-        fn parse_datum(&mut self) -> Result<SExpr> {
-            match self.look_ahead() {
+    fn parse_atom(&mut self) -> SExpr {
+        assert!(
+            matches!(
+                self.look_ahead(),
                 Some(
-                    Token::Id(_, _)
-                    | Token::Bool(_, _)
-                    | Token::Num(_, _)
-                    | Token::Char(_, _)
-                    | Token::Str(_, _),
-                ) => Ok(self.parse_atom()),
-                Some(
-                    Token::LParen(_)
-                    | Token::HashLParen(_)
-                    | Token::Quote(_)
-                    | Token::QuasiQuote(_)
-                    | Token::Comma(_)
-                    | Token::CommaAt(_),
-                ) => self.parse_compound(),
-                Some(token) => Err(self.emit_err("Expected a datum", token)),
-                _ => unreachable!("parse_datum expected at least 1 token to look ahead"),
-            }
+                    Token::Id(..)
+                        | Token::Bool(..)
+                        | Token::Num(..)
+                        | Token::Char(..)
+                        | Token::Str(..)
+                )
+            ),
+            "parse_atom expected a token that represents an atomic value",
+        );
+
+        match self.consume() {
+            Token::Id(symbol, span) => SExpr::Id(Id::new(&symbol.0, []), *span),
+            Token::Bool(bool, span) => SExpr::Bool(bool.clone(), *span),
+            Token::Num(num, span) => SExpr::Num(num.clone(), *span),
+            Token::Char(char, span) => SExpr::Char(char.clone(), *span),
+            Token::Str(string, span) => SExpr::Str(string.clone(), *span),
+            _ => unreachable!("parse_atom expected only tokens for atomic values"),
+        }
+    }
+
+    fn parse_compound(&mut self) -> Result<SExpr> {
+        match self.look_ahead() {
+            Some(Token::HashLParen(_)) => self.parse_vector(),
+            _ => self.parse_list(),
+        }
+    }
+
+    fn parse_list(&mut self) -> Result<SExpr> {
+        if matches!(
+            self.look_ahead(),
+            Some(Token::Quote(_) | Token::QuasiQuote(_) | Token::Comma(_) | Token::CommaAt(_))
+        ) {
+            return self.parse_abbreviation();
         }
 
-        fn parse_atom(&mut self) -> SExpr {
-            assert!(
-                matches!(
-                    self.look_ahead(),
-                    Some(
-                        Token::Id(..)
-                            | Token::Bool(..)
-                            | Token::Num(..)
-                            | Token::Char(..)
-                            | Token::Str(..)
-                    )
-                ),
-                "parse_atom expected a token that represents an atomic value",
-            );
+        assert!(
+            matches!(self.look_ahead(), Some(Token::LParen(_))),
+            "parse_list expected a '(' token",
+        );
 
-            match self.consume() {
-                Token::Id(symbol, span) => SExpr::Id(Id::new(&symbol.0, []), *span),
-                Token::Bool(bool, span) => SExpr::Bool(bool.clone(), *span),
-                Token::Num(num, span) => SExpr::Num(num.clone(), *span),
-                Token::Char(char, span) => SExpr::Char(char.clone(), *span),
-                Token::Str(string, span) => SExpr::Str(string.clone(), *span),
-                _ => unreachable!("parse_atom expected only tokens for atomic values"),
+        let start = self.consume().get_span();
+        let mut elements: Vec<SExpr> = vec![];
+        while let Some(t) = self.look_ahead() {
+            if matches!(t, Token::RParen(_))
+                || matches!(t, Token::Dot(_))
+                || matches!(t, Token::EoF(_))
+            {
+                break;
+            }
+            elements.push(self.parse_datum()?);
+        }
+        match self.look_ahead() {
+            Some(dot @ Token::Dot(_)) => {
+                if elements.is_empty() {
+                    return Err(self.emit_err("Expected a datum after '('", dot));
+                }
+                elements.push(self.parse_dot_notation()?);
+                assert!(
+                    matches!(self.look_ahead(), Some(Token::RParen(_))),
+                    "parse_list expected a ')' token after parse_dot_notation returns",
+                );
+                Ok(Self::make_improper_list(
+                    &elements,
+                    start,
+                    self.consume().get_span(),
+                ))
+            }
+            Some(Token::RParen(end)) => {
+                self.consume();
+                Ok(Self::make_list(&elements, start, end))
+            }
+            Some(token) => Err(self.emit_err("Expected ')' to close '('", token)),
+            None => {
+                unreachable!("parse_datum expected token stream to end with the EoF token")
             }
         }
+    }
 
-        fn parse_compound(&mut self) -> Result<SExpr> {
-            match self.look_ahead() {
-                Some(Token::HashLParen(_)) => self.parse_vector(),
-                _ => self.parse_list(),
+    fn parse_dot_notation(&mut self) -> Result<SExpr> {
+        assert!(
+            matches!(self.look_ahead(), Some(Token::Dot(_))),
+            "parse_dot_notation expected the '.' token"
+        );
+        self.consume();
+        let tail = self.parse_datum()?;
+        match self.look_ahead() {
+            Some(Token::RParen(_)) => Ok(tail),
+            Some(token) => Err(self.emit_err("Expected ')' after dotted datum", token)),
+            None => {
+                unreachable!("parse_list expected at least 1 token to look ahead")
             }
         }
+    }
 
-        fn parse_list(&mut self) -> Result<SExpr> {
-            if matches!(
+    fn parse_abbreviation(&mut self) -> Result<SExpr> {
+        let elements = [self.parse_prefix(), self.parse_datum()?];
+        Ok(Self::make_list(
+            &elements,
+            elements[0].get_span(),
+            elements[1].get_span(),
+        ))
+    }
+
+    fn parse_prefix(&mut self) -> SExpr {
+        assert!(
+            matches!(
                 self.look_ahead(),
                 Some(Token::Quote(_) | Token::QuasiQuote(_) | Token::Comma(_) | Token::CommaAt(_))
-            ) {
-                return self.parse_abbreviation();
-            }
+            ),
+            "parse_prefix expected either '(' or an abbreviation prefix",
+        );
 
-            assert!(
-                matches!(self.look_ahead(), Some(Token::LParen(_))),
-                "parse_list expected a '(' token",
-            );
-
-            let start = self.consume().get_span();
-            let mut elements: Vec<SExpr> = vec![];
-            while let Some(t) = self.look_ahead() {
-                if matches!(t, Token::RParen(_))
-                    || matches!(t, Token::Dot(_))
-                    || matches!(t, Token::EoF(_))
-                {
-                    break;
-                }
-                elements.push(self.parse_datum()?);
-            }
-            match self.look_ahead() {
-                Some(dot @ Token::Dot(_)) => {
-                    if elements.is_empty() {
-                        return Err(self.emit_err("Expected a datum after '('", dot));
-                    }
-                    elements.push(self.parse_dot_notation()?);
-                    assert!(
-                        matches!(self.look_ahead(), Some(Token::RParen(_))),
-                        "parse_list expected a ')' token after parse_dot_notation returns",
-                    );
-                    Ok(Self::make_improper_list(
-                        &elements,
-                        start,
-                        self.consume().get_span(),
-                    ))
-                }
-                Some(Token::RParen(end)) => {
-                    self.consume();
-                    Ok(Self::make_list(&elements, start, end))
-                }
-                Some(token) => Err(self.emit_err("Expected ')' to close '('", token)),
-                None => {
-                    unreachable!("parse_datum expected token stream to end with the EoF token")
-                }
-            }
-        }
-
-        fn parse_dot_notation(&mut self) -> Result<SExpr> {
-            assert!(
-                matches!(self.look_ahead(), Some(Token::Dot(_))),
-                "parse_dot_notation expected the '.' token"
-            );
-            self.consume();
-            let tail = self.parse_datum()?;
-            match self.look_ahead() {
-                Some(Token::RParen(_)) => Ok(tail),
-                Some(token) => Err(self.emit_err("Expected ')' after dotted datum", token)),
-                None => {
-                    unreachable!("parse_list expected at least 1 token to look ahead")
-                }
-            }
-        }
-
-        fn parse_abbreviation(&mut self) -> Result<SExpr> {
-            let elements = [self.parse_prefix(), self.parse_datum()?];
-            Ok(Self::make_list(
-                &elements,
-                elements[0].get_span(),
-                elements[1].get_span(),
-            ))
-        }
-
-        fn parse_prefix(&mut self) -> SExpr {
-            assert!(
-                matches!(
-                    self.look_ahead(),
-                    Some(
-                        Token::Quote(_)
-                            | Token::QuasiQuote(_)
-                            | Token::Comma(_)
-                            | Token::CommaAt(_)
-                    )
-                ),
-                "parse_prefix expected either '(' or an abbreviation prefix",
-            );
-
-            match self.consume() {
-                Token::Quote(span) => SExpr::Id(Id::new("quote", []), *span),
-                Token::QuasiQuote(span) => SExpr::Id(Id::new("quasiquote", []), *span),
-                Token::Comma(span) => SExpr::Id(Id::new("unquote", []), *span),
-                Token::CommaAt(span) => SExpr::Id(Id::new("unquote-splicing", []), *span),
-                _ => unreachable!("parse_abbreviation expected only tokens for abbreviated prefix"),
-            }
-        }
-
-        fn parse_vector(&mut self) -> Result<SExpr> {
-            assert!(
-                matches!(self.look_ahead(), Some(Token::HashLParen(_))),
-                "parse_vector expected the '#(' token"
-            );
-            let start = self.consume().get_span();
-            let mut elements: Vec<SExpr> = vec![];
-            while let Some(t) = self.look_ahead() {
-                if matches!(t, Token::RParen(_)) || matches!(t, Token::EoF(_)) {
-                    break;
-                }
-                elements.push(self.parse_datum()?);
-            }
-            match self.look_ahead() {
-                Some(Token::RParen(end)) => {
-                    self.consume();
-                    Ok(SExpr::Vector(Vector(elements), start.combine(end)))
-                }
-                Some(token) => Err(self.emit_err("Expected ')' to close '#('", token)),
-                None => unreachable!("parse_datum expected at least 1 token to look ahead"),
-            }
-        }
-
-        fn make_list(elements: &[SExpr], start: Span, end: Span) -> SExpr {
-            let mut res = SExpr::Nil(end);
-            for element in elements.iter().rev() {
-                res = SExpr::cons(element.clone(), res);
-            }
-            res.update_span(start.combine(res.get_span()))
-        }
-
-        fn make_improper_list(slice: &[SExpr], start: Span, end: Span) -> SExpr {
-            assert!(
-                slice.len() >= 2,
-                "improper list has to have more than 2 elements"
-            );
-            let mut iter = slice.iter().rev();
-            let cdr = iter.next().unwrap().clone();
-            let car = iter.next().unwrap().clone();
-            let mut res = SExpr::cons(car, cdr);
-            res = res.update_span(res.get_span().combine(end));
-            for element in iter {
-                res = SExpr::cons(element.clone(), res);
-            }
-            res.update_span(start.combine(res.get_span()))
-        }
-
-        fn look_ahead(&mut self) -> Option<Token> {
-            self.it.peek().copied().cloned()
-        }
-
-        fn consume(&mut self) -> &Token {
-            let token = self.it.next().unwrap();
-            self.cur = token;
-            token
-        }
-
-        fn emit_err(&self, reason: &str, token: Token) -> CompilationError {
-            CompilationError {
-                span: token.get_span(),
-                reason: format!("{}, but got: {}", reason.to_owned(), token),
-            }
+        match self.consume() {
+            Token::Quote(span) => SExpr::Id(Id::new("quote", []), *span),
+            Token::QuasiQuote(span) => SExpr::Id(Id::new("quasiquote", []), *span),
+            Token::Comma(span) => SExpr::Id(Id::new("unquote", []), *span),
+            Token::CommaAt(span) => SExpr::Id(Id::new("unquote-splicing", []), *span),
+            _ => unreachable!("parse_abbreviation expected only tokens for abbreviated prefix"),
         }
     }
 
-    Parser::new(tokens).parse()
+    fn parse_vector(&mut self) -> Result<SExpr> {
+        assert!(
+            matches!(self.look_ahead(), Some(Token::HashLParen(_))),
+            "parse_vector expected the '#(' token"
+        );
+        let start = self.consume().get_span();
+        let mut elements: Vec<SExpr> = vec![];
+        while let Some(t) = self.look_ahead() {
+            if matches!(t, Token::RParen(_)) || matches!(t, Token::EoF(_)) {
+                break;
+            }
+            elements.push(self.parse_datum()?);
+        }
+        match self.look_ahead() {
+            Some(Token::RParen(end)) => {
+                self.consume();
+                Ok(SExpr::Vector(Vector(elements), start.combine(end)))
+            }
+            Some(token) => Err(self.emit_err("Expected ')' to close '#('", token)),
+            None => unreachable!("parse_datum expected at least 1 token to look ahead"),
+        }
+    }
+
+    fn make_list(elements: &[SExpr], start: Span, end: Span) -> SExpr {
+        let mut res = SExpr::Nil(end);
+        for element in elements.iter().rev() {
+            res = SExpr::cons(element.clone(), res);
+        }
+        res.update_span(start.combine(res.get_span()))
+    }
+
+    fn make_improper_list(slice: &[SExpr], start: Span, end: Span) -> SExpr {
+        assert!(
+            slice.len() >= 2,
+            "improper list has to have more than 2 elements"
+        );
+        let mut iter = slice.iter().rev();
+        let cdr = iter.next().unwrap().clone();
+        let car = iter.next().unwrap().clone();
+        let mut res = SExpr::cons(car, cdr);
+        res = res.update_span(res.get_span().combine(end));
+        for element in iter {
+            res = SExpr::cons(element.clone(), res);
+        }
+        res.update_span(start.combine(res.get_span()))
+    }
+
+    fn look_ahead(&mut self) -> Option<Token> {
+        self.it.peek().copied().cloned()
+    }
+
+    fn consume(&mut self) -> &Token {
+        let token = self.it.next().unwrap();
+        self.cur = token;
+        token
+    }
+
+    fn emit_err(&self, reason: &str, token: Token) -> CompilationError {
+        CompilationError {
+            span: token.get_span(),
+            reason: format!("{}, but got: {}", reason, token),
+        }
+    }
 }
 
 #[cfg(test)]
