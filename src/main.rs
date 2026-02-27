@@ -1,5 +1,3 @@
-extern crate rustyline;
-
 use std::collections::HashMap;
 
 use compile::bindings::Bindings;
@@ -12,6 +10,9 @@ use compile::lex::tokenize;
 mod compile;
 
 fn main() {
+    let mut bindings = Bindings::new();
+    let mut env = HashMap::new();
+
     let mut rl = DefaultEditor::new().expect("Unable to open interactive terminal");
     let _ = rl.load_history("history.txt");
     let mut lines = String::new();
@@ -21,16 +22,9 @@ fn main() {
             Ok(line) => {
                 let _ = rl.add_history_entry(line.as_str());
                 if line.is_empty() {
-                    let expanded =
-                        tokenize(&lines)
-                            .and_then(|tokens| parse(&tokens))
-                            .and_then(|sexpr| {
-                                expand(
-                                    &introduce(&sexpr),
-                                    &mut Bindings::new(),
-                                    &mut HashMap::new(),
-                                )
-                            });
+                    let expanded = tokenize(&lines)
+                        .and_then(|tokens| parse(&tokens))
+                        .and_then(|sexpr| expand(&introduce(&sexpr), &mut bindings, &mut env));
                     match expanded {
                         Ok(sexpr) => println!("{}", sexpr),
                         Err(err) => err.pprint_with_source(&lines),

@@ -4,7 +4,7 @@ use std::collections::{BTreeSet, HashMap};
 pub(crate) type ScopeId = u64;
 pub(crate) type Scopes = BTreeSet<ScopeId>;
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub(crate) struct Bindings {
     symbols: HashMap<Symbol, HashMap<Scopes, Symbol>>,
     scope_counter: ScopeId,

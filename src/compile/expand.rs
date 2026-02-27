@@ -1,4 +1,4 @@
-use std::{collections::HashMap, fmt};
+use std::{collections::HashMap, fmt, mem};
 
 use super::{
     bindings::Bindings,
@@ -23,7 +23,14 @@ pub(crate) fn introduce(sexpr: &SExpr) -> SExpr {
 }
 
 pub(crate) fn expand(sexpr: &SExpr, bindings: &mut Bindings, env: &mut Env) -> Result<SExpr> {
-    expand_sexpr(sexpr, bindings, env, Context::TopLevel)
+    let mut bindings_snapshot = bindings.clone();
+    let mut env_snapshot = env.clone();
+    let result = expand_sexpr(sexpr, bindings, env, Context::TopLevel);
+    if result.is_err() {
+        mem::swap(&mut bindings_snapshot, bindings);
+        mem::swap(&mut env_snapshot, env);
+    }
+    result
 }
 
 #[derive(PartialEq, Clone, Copy, Eq, Hash, Debug)]
@@ -533,7 +540,7 @@ fn expand_syntax_binding(
         let scope_id = bindings.new_scope_id();
         let mut transformer_bindings = vec![];
 
-        if let Err(e) = try_for_each(binding_pairs, |binding_pair| {
+        try_for_each(binding_pairs, |binding_pair| {
             if_let_sexpr! {(SExpr::Id(id, _), transformer_spec) = binding_pair =>
                 let id = id.add_scope(scope_id);
                 let transformer_spec = match form {
@@ -562,12 +569,7 @@ fn expand_syntax_binding(
                 span: binding_pair.get_span(),
                 reason: format!("Invalid '{form}' binding pair: expected (identifier 'syntax-rules' transformer)"),
             })
-        }) {
-            transformer_bindings.iter().for_each(|transformer_binding| {
-                env.remove_entry(transformer_binding);
-            });
-            return Err(e);
-        }
+        })?;
 
         let body = expand_body(&body.add_scope(scope_id), bindings, env, exec_ctx).map(|body| {
             if len(&body) == 1 {
@@ -630,9 +632,17 @@ mod tests {
     fn expand_source_with_fresh_state(source: &str) -> (Bindings, Result<SExpr>) {
         let mut bindings = Bindings::new();
         let mut env = HashMap::<Symbol, Transformer>::new();
-        let expr = parse(&tokenize(source).unwrap()).unwrap();
-        let result = expand(&introduce(&expr), &mut bindings, &mut env);
+        let result = expand_source(source, &mut bindings, &mut env);
         (bindings, result)
+    }
+
+    fn expand_source(
+        source: &str,
+        bindings: &mut Bindings,
+        env: &mut HashMap<Symbol, Transformer>,
+    ) -> Result<SExpr> {
+        let expr = parse(&tokenize(source).unwrap()).unwrap();
+        expand(&introduce(&expr), bindings, env)
     }
 
     fn assert_generated_define_is_referenced(source: &str, expand_message: &str) {
@@ -2545,5 +2555,64 @@ mod tests {
             nth(&result, 3).unwrap().without_spans(),
             SExpr::Num(Num(3.0), span).without_spans()
         );
+    }
+
+    #[test]
+    fn test_expand_failed_expansion_does_not_affect_bindings_or_env() {
+        let mut bindings = Bindings::new();
+        let mut env = HashMap::<Symbol, Transformer>::new();
+
+        // A begin with a define followed by an invalid form.
+        // The define will mutate bindings before the error is hit.
+        let result = expand_source("(begin (define x 1) ())", &mut bindings, &mut env);
+        assert!(result.is_err());
+
+        // x should not be resolvable since the expansion failed
+        assert_eq!(
+            bindings.resolve_sym(&Id::new("x", [Bindings::CORE_SCOPE])),
+            None
+        );
+    }
+
+    #[test]
+    fn test_expand_successful_expansion_persists_bindings() {
+        let mut bindings = Bindings::new();
+        let mut env = HashMap::<Symbol, Transformer>::new();
+
+        let result = expand_source("(define x 1)", &mut bindings, &mut env);
+        assert!(result.is_ok());
+
+        // x should be resolvable after a successful define
+        assert!(
+            bindings
+                .resolve_sym(&Id::new("x", [Bindings::CORE_SCOPE]))
+                .is_some()
+        );
+
+        // A second expansion should be able to reference x
+        let result = expand_source("x", &mut bindings, &mut env);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_expand_failed_define_syntax_does_not_persist_transformer() {
+        let mut bindings = Bindings::new();
+        let mut env = HashMap::<Symbol, Transformer>::new();
+
+        // define-syntax followed by a use of the macro in a begin that also has an error
+        let result = expand_source(
+            "(begin (define-syntax my-id (syntax-rules () ((_ x) x))) (my-id ()))",
+            &mut bindings,
+            &mut env,
+        );
+        assert!(result.is_err());
+
+        // my-id should not be resolvable
+        assert_eq!(
+            bindings.resolve_sym(&Id::new("my-id", [Bindings::CORE_SCOPE])),
+            None
+        );
+        // env should be empty (no transformer persisted)
+        assert!(env.is_empty());
     }
 }

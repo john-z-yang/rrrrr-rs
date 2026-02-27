@@ -9,12 +9,12 @@ use crate::if_let_sexpr;
 use super::compilation_error::{CompilationError, Result};
 use super::sexpr::{Id, SExpr, Symbol};
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub(crate) struct Transformer {
     syntax_rules: Vec<SyntaxRule>,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 struct SyntaxRule {
     pattern: SExpr,
     template: SExpr,
