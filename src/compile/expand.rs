@@ -64,7 +64,7 @@ fn expand_sexpr(
     if let SExpr::Nil(span) = sexpr {
         return Err(CompilationError {
             span: *span,
-            reason: "Unexpected empty list in expression position".to_owned(),
+            reason: "Unexpected empty list".to_owned(),
         });
     };
     if let SExpr::Id(..) = sexpr {
