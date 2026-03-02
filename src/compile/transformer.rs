@@ -3,6 +3,7 @@ use std::sync::Arc;
 
 use crate::compile::bindings::Bindings;
 
+use crate::compile::sexpr::Vector;
 use crate::compile::util::{is_proper_list, len, try_dotted_tail, try_for_each};
 use crate::if_let_sexpr;
 
@@ -41,6 +42,11 @@ fn collect_capture_variables(
         SExpr::Cons(cons, _) => {
             collect_capture_variables(&cons.car, literals, vars);
             collect_capture_variables(&cons.cdr, literals, vars);
+        }
+        SExpr::Vector(vector, _) => {
+            for sexpr in &vector.0 {
+                collect_capture_variables(sexpr, literals, vars);
+            }
         }
         _ => {}
     }
@@ -116,6 +122,9 @@ fn validate_pattern(
             } else {
                 validate_pattern(cur, literals, symbols_seen)
             }
+        }
+        SExpr::Vector(vector, span) => {
+            validate_pattern(&vector.clone().into_cons_list(*span), literals, symbols_seen)
         }
         _ => Ok(()),
     }
@@ -215,6 +224,15 @@ fn match_subpattern(
             Some(())
         }
         (SExpr::Cons(_, _), _) => match_subpatterns(pattern, target, literals, bindings, captures),
+        (SExpr::Vector(pattern, pattern_span), SExpr::Vector(target, target_span)) => {
+            match_subpatterns(
+                &pattern.clone().into_cons_list(*pattern_span),
+                &target.clone().into_cons_list(*target_span),
+                literals,
+                bindings,
+                captures,
+            )
+        }
         _ if pattern.without_spans() == target.without_spans() => Some(()),
         _ => None,
     }
@@ -291,6 +309,15 @@ fn render_template(template: &SExpr, captures: &HashMap<Symbol, CapturedSExpr>) 
             None => Ok(template.clone()),
         },
         SExpr::Cons(_, _) => render_templates(template, captures),
+        SExpr::Vector(vector, span) => Ok(
+            match render_templates(&vector.clone().into_cons_list(*span), captures)? {
+                SExpr::Cons(cons, span) => cons.try_into_vector(span).expect("Expected Cons list to be proper after rendering template converted from Vector"),
+                SExpr::Nil(span) => SExpr::Vector(Vector(vec![]), span),
+                _ => unreachable!(
+                    "Expected Cons or Nil after rendering template converted from Vector"
+                ),
+            },
+        ),
         _ => Ok(template.clone()),
     }
 }
@@ -709,6 +736,26 @@ mod tests {
         assert!(do_match("(a ...)", "42").is_none());
     }
 
+    #[test]
+    fn test_match_vector_ellipsis() {
+        let captures = do_match("#(a ...)", "#(1 2 3)").expect("should match");
+        assert_eq!(captures.len(), 1);
+        assert_binding(&captures, "a", &many(vec![one("1"), one("2"), one("3")]));
+    }
+
+    #[test]
+    fn test_match_vector_ellipsis_zero() {
+        let captures = do_match("#(a ...)", "#()").expect("should match");
+        assert_eq!(captures.len(), 1);
+        assert_binding(&captures, "a", &many(vec![]));
+    }
+
+    #[test]
+    fn test_match_vector_and_list_shape_mismatch() {
+        assert!(do_match("#(a b)", "(1 2)").is_none());
+        assert!(do_match("(a b)", "#(1 2)").is_none());
+    }
+
     // --- render tests ---
 
     fn assert_renders_to(pattern: &str, template: &str, target: &str, expected: &str) {
@@ -775,6 +822,31 @@ mod tests {
     #[test]
     fn test_render_literal_in_repeated_template() {
         assert_renders_to("(_ x ...)", "((f x) ...)", "(mac 1 2)", "((f 1) (f 2))");
+    }
+
+    #[test]
+    fn test_render_vector_template_repetition_reproducer() {
+        assert_renders_to("(_ x ...)", "(#(x) ...)", "(mac 1 2)", "(#(1) #(2))");
+    }
+
+    #[test]
+    fn test_render_vector_internal_ellipsis() {
+        assert_renders_to("(_ x ...)", "#(x ...)", "(mac 1 2 3)", "#(1 2 3)");
+    }
+
+    #[test]
+    fn test_render_vector_internal_ellipsis_zero() {
+        assert_renders_to("(_ x ...)", "#(x ...)", "(mac)", "#()");
+    }
+
+    #[test]
+    fn test_render_vector_nested_ellipsis() {
+        assert_renders_to(
+            "(_ (x ...) ...)",
+            "#((x ...) ...)",
+            "(mac (1 2) (3))",
+            "#((1 2) (3))",
+        );
     }
 
     #[test]
@@ -1138,6 +1210,41 @@ mod tests {
         assert_eq!(
             transform(&t, "(mac)").without_spans(),
             introduce(&parse(&tokenize("(begin)").unwrap()).unwrap()).without_spans()
+        );
+    }
+
+    #[test]
+    fn test_transformer_vector_template_with_ellipsis() {
+        let t = make_transformer(
+            "(syntax-rules ()
+               ((_ x ...) #(x ...)))",
+        );
+        assert_eq!(
+            transform(&t, "(mac 1 2 3)").without_spans(),
+            introduce(&parse(&tokenize("#(1 2 3)").unwrap()).unwrap()).without_spans()
+        );
+        assert_eq!(
+            transform(&t, "(mac)").without_spans(),
+            introduce(&parse(&tokenize("#()").unwrap()).unwrap()).without_spans()
+        );
+    }
+
+    #[test]
+    fn test_transformer_vector_pattern_matches_only_vectors() {
+        let t = make_transformer(
+            "(syntax-rules ()
+               ((_ #(x ...)) (x ...)))",
+        );
+        assert_eq!(
+            transform(&t, "(mac #(1 2 3))").without_spans(),
+            introduce(&parse(&tokenize("(1 2 3)").unwrap()).unwrap()).without_spans()
+        );
+        assert!(
+            t.transform(
+                &introduce(&parse(&tokenize("(mac (1 2 3))").unwrap()).unwrap()),
+                &Bindings::new(),
+            )
+            .is_none()
         );
     }
 

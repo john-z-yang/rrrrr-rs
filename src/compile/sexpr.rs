@@ -273,6 +273,20 @@ impl Cons {
         }
     }
 
+    pub(crate) fn try_into_vector(self, span: Span) -> Option<SExpr> {
+        let mut vector = vec![*self.car];
+        let mut cur = *self.cdr;
+        while let SExpr::Cons(Cons { car, cdr }, _) = cur {
+            vector.push(*car);
+            cur = *cdr;
+        }
+        if let SExpr::Nil(_) = cur {
+            Some(SExpr::Vector(Vector(vector), span))
+        } else {
+            None
+        }
+    }
+
     fn fmt_disp(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "{}", self.car)?;
         match self.cdr.as_ref() {
@@ -364,6 +378,19 @@ impl fmt::Display for Str {
 #[derive(Debug, PartialEq, Clone)]
 pub(crate) struct Vector(pub(crate) Vec<SExpr>);
 
+impl Vector {
+    pub(crate) fn into_cons_list(self, span: Span) -> SExpr {
+        let mut prev = SExpr::Nil(Span {
+            lo: span.hi - 1,
+            hi: span.hi,
+        });
+        for e in self.0.into_iter().rev() {
+            prev = SExpr::cons(e, prev);
+        }
+        prev
+    }
+}
+
 impl fmt::Display for Vector {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "#(")?;
@@ -379,7 +406,10 @@ impl fmt::Display for Vector {
 
 #[cfg(test)]
 mod tests {
-    use crate::sexpr;
+    use crate::{
+        compile::{lex::tokenize, parse::parse},
+        sexpr,
+    };
 
     use super::*;
 
@@ -488,6 +518,36 @@ mod tests {
             )
             .without_spans()
         )
+    }
+
+    #[test]
+    fn test_vector_to_cons_list() {
+        let SExpr::Vector(vector, span) = parse(&tokenize("#(1 2 3)").unwrap()).unwrap() else {
+            unreachable!("Expected a vector")
+        };
+
+        assert_eq!(
+            vector.into_cons_list(span),
+            SExpr::Cons(
+                Cons {
+                    car: Box::new(SExpr::Num(Num(1.0), Span { lo: 2, hi: 3 })),
+                    cdr: Box::new(SExpr::Cons(
+                        Cons {
+                            car: Box::new(SExpr::Num(Num(2.0), Span { lo: 4, hi: 5 })),
+                            cdr: Box::new(SExpr::Cons(
+                                Cons {
+                                    car: Box::new(SExpr::Num(Num(3.0), Span { lo: 6, hi: 7 })),
+                                    cdr: Box::new(SExpr::Nil(Span { lo: 7, hi: 8 })),
+                                },
+                                Span { lo: 6, hi: 8 },
+                            )),
+                        },
+                        Span { lo: 4, hi: 8 },
+                    )),
+                },
+                Span { lo: 2, hi: 8 },
+            ),
+        );
     }
 
     #[test]
