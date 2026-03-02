@@ -1,8 +1,8 @@
 pub(crate) mod bindings;
 pub(crate) mod compilation_error;
-pub(crate) mod expand;
 pub(crate) mod lex;
 pub(crate) mod parse;
+pub(crate) mod sema;
 pub(crate) mod sexpr;
 pub(crate) mod span;
 pub(crate) mod token;

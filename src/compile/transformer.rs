@@ -123,9 +123,11 @@ fn validate_pattern(
                 validate_pattern(cur, literals, symbols_seen)
             }
         }
-        SExpr::Vector(vector, span) => {
-            validate_pattern(&vector.clone().into_cons_list(*span), literals, symbols_seen)
-        }
+        SExpr::Vector(vector, span) => validate_pattern(
+            &vector.clone().into_cons_list(*span),
+            literals,
+            symbols_seen,
+        ),
         _ => Ok(()),
     }
 }
@@ -485,7 +487,7 @@ impl Transformer {
 mod tests {
     use std::collections::HashSet;
 
-    use crate::compile::{expand::introduce, lex::tokenize, parse::parse, span::Span};
+    use crate::compile::{lex::tokenize, parse::parse, sema::introduce, span::Span};
 
     use super::*;
 

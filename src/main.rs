@@ -1,8 +1,8 @@
 use std::collections::HashMap;
 
 use compile::bindings::Bindings;
-use compile::expand::{expand, introduce};
 use compile::parse::parse;
+use compile::sema::{expand, introduce};
 use rustyline::DefaultEditor;
 use rustyline::error::ReadlineError;
 
