@@ -1,17 +1,9 @@
-use std::collections::HashMap;
-
-use compile::bindings::Bindings;
-use compile::parse::parse;
-use compile::sema::{expand, introduce};
+use rrrrr_rs::Session;
 use rustyline::DefaultEditor;
 use rustyline::error::ReadlineError;
 
-use compile::lex::tokenize;
-mod compile;
-
 fn main() {
-    let mut bindings = Bindings::new();
-    let mut env = HashMap::new();
+    let mut session = Session::new();
 
     let mut rl = DefaultEditor::new().expect("Unable to open interactive terminal");
     let _ = rl.load_history("history.txt");
@@ -22,11 +14,12 @@ fn main() {
             Ok(line) => {
                 let _ = rl.add_history_entry(line.as_str());
                 if line.is_empty() {
-                    let expanded = tokenize(&lines)
-                        .and_then(|tokens| parse(&tokens))
-                        .and_then(|sexpr| expand(&introduce(&sexpr), &mut bindings, &mut env));
+                    let expanded = session
+                        .tokenize(&lines)
+                        .and_then(|tokens| session.parse(&tokens))
+                        .and_then(|sexpr| session.expand(&session.introduce(&sexpr)));
                     match expanded {
-                        Ok(sexpr) => println!("{}", sexpr),
+                        Ok(expanded) => println!("{}", expanded),
                         Err(err) => err.pprint_with_source(&lines),
                     };
                     lines.clear();

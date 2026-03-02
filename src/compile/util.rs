@@ -3,7 +3,7 @@ use super::sexpr::{Cons, SExpr};
 #[macro_export]
 macro_rules! sexpr {
     () => {
-        $crate::compile::sexpr::SExpr::Nil(Span {
+        $crate::compile::sexpr::SExpr::Nil($crate::compile::span::Span {
             lo: 0,
             hi: 1,
         })
@@ -128,7 +128,7 @@ macro_rules! template_sexpr {
     (@
         () => $targ:ident
     ) => {
-        if matches!($targ, SExpr::Nil(_)) {
+        if matches!($targ, $crate::compile::sexpr::SExpr::Nil(_)) {
             Some($targ.clone())
         } else {
             None
@@ -196,29 +196,29 @@ macro_rules! template_sexpr {
     }};
 }
 
-pub(crate) fn try_first(sexpr: &SExpr) -> Option<SExpr> {
+pub fn try_first(sexpr: &SExpr) -> Option<SExpr> {
     match sexpr {
         SExpr::Cons(cons, _) => Some(*cons.car.clone()),
         _ => None,
     }
 }
 
-pub(crate) fn first(sexpr: &SExpr) -> SExpr {
+pub fn first(sexpr: &SExpr) -> SExpr {
     try_first(sexpr).expect("first expected parameter to be a cons")
 }
 
-pub(crate) fn try_rest(sexpr: &SExpr) -> Option<SExpr> {
+pub fn try_rest(sexpr: &SExpr) -> Option<SExpr> {
     match sexpr {
         SExpr::Cons(cons, _) => Some(*cons.cdr.clone()),
         _ => None,
     }
 }
 
-pub(crate) fn rest(sexpr: &SExpr) -> SExpr {
+pub fn rest(sexpr: &SExpr) -> SExpr {
     try_rest(sexpr).expect("rest expected parameter to be a cons")
 }
 
-pub(crate) fn len(sexpr: &SExpr) -> usize {
+pub fn len(sexpr: &SExpr) -> usize {
     let mut res = 0;
     let mut cur = sexpr;
     while let SExpr::Cons(Cons { cdr, .. }, _) = cur {
@@ -228,7 +228,7 @@ pub(crate) fn len(sexpr: &SExpr) -> usize {
     res
 }
 
-pub(crate) fn try_dotted_tail(sexpr: &SExpr) -> Option<SExpr> {
+pub fn try_dotted_tail(sexpr: &SExpr) -> Option<SExpr> {
     let SExpr::Cons(Cons { cdr: cur, .. }, _) = sexpr else {
         return None;
     };
@@ -239,14 +239,14 @@ pub(crate) fn try_dotted_tail(sexpr: &SExpr) -> Option<SExpr> {
     Some(cur.clone())
 }
 
-pub(crate) fn is_proper_list(sexpr: &SExpr) -> bool {
+pub fn is_proper_list(sexpr: &SExpr) -> bool {
     if let SExpr::Nil(_) = sexpr {
         return true;
     }
     try_dotted_tail(sexpr).is_some_and(|tail| matches!(tail, SExpr::Nil(_)))
 }
 
-pub(crate) fn append(head: &SExpr, tail: &SExpr) -> SExpr {
+pub fn append(head: &SExpr, tail: &SExpr) -> SExpr {
     match head {
         SExpr::Nil(_) => tail.clone(),
         SExpr::Cons(cons, span) => {
@@ -256,7 +256,7 @@ pub(crate) fn append(head: &SExpr, tail: &SExpr) -> SExpr {
     }
 }
 
-pub(crate) fn try_for_each<F, E>(sexpr: &SExpr, mut op: F) -> Result<(), E>
+pub fn try_for_each<F, E>(sexpr: &SExpr, mut op: F) -> Result<(), E>
 where
     F: FnMut(&SExpr) -> Result<(), E>,
 {
@@ -268,7 +268,7 @@ where
     Ok(())
 }
 
-pub(crate) fn try_map<F, E>(sexpr: &SExpr, mut op: F) -> Result<SExpr, E>
+pub fn try_map<F, E>(sexpr: &SExpr, mut op: F) -> Result<SExpr, E>
 where
     F: FnMut(&SExpr) -> Result<SExpr, E>,
 {

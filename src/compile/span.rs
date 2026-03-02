@@ -1,9 +1,9 @@
 use std::fmt;
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
-pub(crate) struct Span {
-    pub(crate) lo: usize,
-    pub(crate) hi: usize,
+pub struct Span {
+    pub lo: usize,
+    pub hi: usize,
 }
 
 impl Span {

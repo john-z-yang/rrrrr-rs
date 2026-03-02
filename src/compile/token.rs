@@ -6,7 +6,7 @@ use super::{
 };
 
 #[derive(Clone, Debug, PartialEq)]
-pub(crate) enum Token {
+pub enum Token {
     Id(Symbol, Span),
     Bool(Bool, Span),
     Num(Num, Span),
@@ -25,7 +25,7 @@ pub(crate) enum Token {
 }
 
 impl Token {
-    pub(crate) fn get_span(&self) -> Span {
+    pub fn get_span(&self) -> Span {
         *match self {
             Token::Id(_, span) => span,
             Token::Bool(_, span) => span,

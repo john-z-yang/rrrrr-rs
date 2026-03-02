@@ -7,7 +7,7 @@ use super::{
 };
 
 #[derive(PartialEq, Clone, Debug)]
-pub(crate) enum SExpr {
+pub enum SExpr {
     Id(Id, Span),
     Cons(Cons, Span),
     Nil(Span),
@@ -19,11 +19,11 @@ pub(crate) enum SExpr {
 }
 
 impl SExpr {
-    pub(crate) fn without_spans(&self) -> SExprWithoutSpans<'_> {
+    pub fn without_spans(&self) -> SExprWithoutSpans<'_> {
         SExprWithoutSpans(self)
     }
 
-    pub(crate) fn get_span(&self) -> Span {
+    pub fn get_span(&self) -> Span {
         *match self {
             SExpr::Id(_, span) => span,
             SExpr::Cons(_, span) => span,
@@ -36,7 +36,7 @@ impl SExpr {
         }
     }
 
-    pub(crate) fn update_span(&self, span: Span) -> Self {
+    pub fn update_span(&self, span: Span) -> Self {
         match self {
             SExpr::Id(id, _) => SExpr::Id(id.clone(), span),
             SExpr::Cons(cons, _) => SExpr::Cons(cons.clone(), span),
@@ -49,7 +49,7 @@ impl SExpr {
         }
     }
 
-    pub(crate) fn cons(car: SExpr, cdr: SExpr) -> Self {
+    pub fn cons(car: SExpr, cdr: SExpr) -> Self {
         let start = car.get_span();
         let end = cdr.get_span();
         Self::Cons(Cons::new(car, cdr), start.combine(end))
@@ -79,7 +79,7 @@ impl SExpr {
         }
     }
 
-    pub(crate) fn add_scope(&self, scope: ScopeId) -> Self {
+    pub fn add_scope(&self, scope: ScopeId) -> Self {
         let op = |scopes: &Scopes| {
             let mut scopes = scopes.clone();
             scopes.insert(scope);
@@ -88,7 +88,7 @@ impl SExpr {
         self.adjust_scope(&op)
     }
 
-    pub(crate) fn flip_scope(&self, scope: ScopeId) -> Self {
+    pub fn flip_scope(&self, scope: ScopeId) -> Self {
         let op = |scopes: &Scopes| {
             let mut scopes = scopes.clone();
             if scopes.contains(&scope) {
@@ -134,7 +134,7 @@ impl fmt::Display for SExpr {
 }
 
 #[derive(Clone, Copy)]
-pub(crate) struct SExprWithoutSpans<'a>(&'a SExpr);
+pub struct SExprWithoutSpans<'a>(&'a SExpr);
 
 impl PartialEq for SExprWithoutSpans<'_> {
     fn eq(&self, other: &Self) -> bool {
@@ -194,20 +194,20 @@ impl fmt::Debug for SExprWithoutSpans<'_> {
 }
 
 #[derive(PartialEq, Clone, Eq, Hash, Debug)]
-pub(crate) struct Id {
-    pub(crate) symbol: Symbol,
-    pub(crate) scopes: Scopes,
+pub struct Id {
+    pub symbol: Symbol,
+    pub scopes: Scopes,
 }
 
 impl Id {
-    pub(crate) fn new<const N: usize>(symbol: &str, scopes: [ScopeId; N]) -> Self {
+    pub fn new<const N: usize>(symbol: &str, scopes: [ScopeId; N]) -> Self {
         Id {
             symbol: Symbol::new(symbol),
             scopes: BTreeSet::from(scopes),
         }
     }
 
-    pub(crate) fn adjust_scope<F>(&self, op: &F) -> Self
+    pub fn adjust_scope<F>(&self, op: &F) -> Self
     where
         F: Fn(&Scopes) -> Scopes,
     {
@@ -217,7 +217,7 @@ impl Id {
         }
     }
 
-    pub(crate) fn add_scope(&self, scope: ScopeId) -> Self {
+    pub fn add_scope(&self, scope: ScopeId) -> Self {
         let op = |scopes: &Scopes| {
             let mut scopes = scopes.clone();
             scopes.insert(scope);
@@ -245,10 +245,10 @@ impl TryFrom<SExpr> for Id {
 }
 
 #[derive(Debug, PartialEq, Eq, Clone, Hash)]
-pub(crate) struct Symbol(pub(crate) String);
+pub struct Symbol(pub String);
 
 impl Symbol {
-    pub(crate) fn new(symbol: &str) -> Self {
+    pub fn new(symbol: &str) -> Self {
         Symbol(symbol.to_string())
     }
 }
@@ -260,20 +260,20 @@ impl fmt::Display for Symbol {
 }
 
 #[derive(PartialEq, Clone, Debug)]
-pub(crate) struct Cons {
-    pub(crate) car: Box<SExpr>,
-    pub(crate) cdr: Box<SExpr>,
+pub struct Cons {
+    pub car: Box<SExpr>,
+    pub cdr: Box<SExpr>,
 }
 
 impl Cons {
-    pub(crate) fn new(car: SExpr, cdr: SExpr) -> Self {
+    pub fn new(car: SExpr, cdr: SExpr) -> Self {
         Cons {
             car: Box::new(car),
             cdr: Box::new(cdr),
         }
     }
 
-    pub(crate) fn try_into_vector(self, span: Span) -> Option<SExpr> {
+    pub fn try_into_vector(self, span: Span) -> Option<SExpr> {
         let mut vector = vec![*self.car];
         let mut cur = *self.cdr;
         while let SExpr::Cons(Cons { car, cdr }, _) = cur {
@@ -323,7 +323,7 @@ impl TryFrom<SExpr> for Cons {
 }
 
 #[derive(Debug, PartialEq, Clone)]
-pub(crate) struct Bool(pub(crate) bool);
+pub struct Bool(pub bool);
 
 impl fmt::Display for Bool {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
@@ -343,7 +343,7 @@ impl TryFrom<SExpr> for Bool {
 }
 
 #[derive(Debug, PartialEq, Clone)]
-pub(crate) struct Num(pub(crate) f64);
+pub struct Num(pub f64);
 
 impl fmt::Display for Num {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
@@ -352,7 +352,7 @@ impl fmt::Display for Num {
 }
 
 #[derive(Debug, PartialEq, Clone)]
-pub(crate) struct Char(pub(crate) char);
+pub struct Char(pub char);
 
 impl fmt::Display for Char {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
@@ -367,7 +367,7 @@ impl fmt::Display for Char {
 }
 
 #[derive(Debug, PartialEq, Clone)]
-pub(crate) struct Str(pub(crate) String);
+pub struct Str(pub String);
 
 impl fmt::Display for Str {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
@@ -376,10 +376,10 @@ impl fmt::Display for Str {
 }
 
 #[derive(Debug, PartialEq, Clone)]
-pub(crate) struct Vector(pub(crate) Vec<SExpr>);
+pub struct Vector(pub Vec<SExpr>);
 
 impl Vector {
-    pub(crate) fn into_cons_list(self, span: Span) -> SExpr {
+    pub fn into_cons_list(self, span: Span) -> SExpr {
         let mut prev = SExpr::Nil(Span {
             lo: span.hi - 1,
             hi: span.hi,

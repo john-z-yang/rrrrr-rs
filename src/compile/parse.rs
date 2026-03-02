@@ -7,8 +7,8 @@ use crate::compile::{
     span::Span,
 };
 
-pub(crate) fn parse(tokens: &[Token]) -> Result<SExpr> {
-    Parser::new(tokens).parse()
+pub fn parse(tokens: &[Token]) -> Result<SExpr> {
+    Parser::new(tokens)?.parse()
 }
 
 struct Parser<'tokens> {
@@ -17,11 +17,22 @@ struct Parser<'tokens> {
 }
 
 impl Parser<'_> {
-    fn new(tokens: &'_ [Token]) -> Parser<'_> {
-        assert_ne!(tokens.len(), 0, "Token stream must have at least 1 token");
-        Parser {
-            it: tokens.iter().peekable(),
-            cur: &tokens[0],
+    fn new(tokens: &'_ [Token]) -> Result<Parser<'_>> {
+        if tokens.is_empty() {
+            Err(CompilationError {
+                span: Span { lo: 0, hi: 0 },
+                reason: "Token stream must have at least 1 token".to_owned(),
+            })
+        } else if !matches!(tokens.last().unwrap(), Token::EoF(_)) {
+            Err(CompilationError {
+                span: tokens.last().unwrap().get_span(),
+                reason: "Token stream must end with the EOF token".to_owned(),
+            })
+        } else {
+            Ok(Parser {
+                it: tokens.iter().peekable(),
+                cur: &tokens[0],
+            })
         }
     }
 
@@ -767,25 +778,22 @@ mod tests {
     }
 
     #[test]
-    #[should_panic(expected = "Token stream must have at least 1 token")]
     fn test_parse_empty_token_stream_panics_as_internal_error() {
-        let _ = parse(&[]);
+        assert!(parse(&[]).is_err());
     }
 
     #[test]
-    #[should_panic(expected = "parse expected token stream to end with the EoF token")]
     fn test_parse_missing_eof_panics_as_internal_error() {
         let tokens = vec![
             Token::LParen(Span { lo: 0, hi: 1 }),
             Token::RParen(Span { lo: 1, hi: 2 }),
         ];
-        let _ = parse(&tokens);
+        assert!(parse(&tokens).is_err());
     }
 
     #[test]
-    #[should_panic(expected = "parse_datum expected token stream to end with the EoF token")]
     fn test_parse_unclosed_list_without_eof_panics_as_internal_error() {
         let tokens = vec![Token::LParen(Span { lo: 0, hi: 1 })];
-        let _ = parse(&tokens);
+        assert!(parse(&tokens).is_err());
     }
 }

@@ -2,12 +2,12 @@ use std::fmt;
 
 use super::span::Span;
 
-pub(crate) type Result<T> = std::result::Result<T, CompilationError>;
+pub type Result<T> = std::result::Result<T, CompilationError>;
 
 #[derive(Debug, Clone)]
-pub(crate) struct CompilationError {
-    pub(crate) span: Span,
-    pub(crate) reason: String,
+pub struct CompilationError {
+    pub span: Span,
+    pub reason: String,
 }
 
 impl fmt::Display for CompilationError {
@@ -16,8 +16,10 @@ impl fmt::Display for CompilationError {
     }
 }
 
+impl std::error::Error for CompilationError {}
+
 impl CompilationError {
-    pub(crate) fn pprint_with_source(&self, source: &str) {
+    pub fn pprint_with_source(&self, source: &str) {
         println!("Error: {}", self.reason);
         let mut offset = 0;
         let mut lines = source.lines().enumerate().peekable();

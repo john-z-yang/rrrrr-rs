@@ -1,8 +1,8 @@
 use super::sexpr::{Id, Symbol};
 use std::collections::{BTreeSet, HashMap};
 
-pub(crate) type ScopeId = u64;
-pub(crate) type Scopes = BTreeSet<ScopeId>;
+pub type ScopeId = u64;
+pub type Scopes = BTreeSet<ScopeId>;
 
 #[derive(Debug, Clone)]
 pub(crate) struct Bindings {

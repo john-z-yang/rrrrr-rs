@@ -18,7 +18,7 @@ use crate::{
 
 type Env = HashMap<Symbol, Transformer>;
 
-pub(crate) fn introduce(sexpr: &SExpr) -> SExpr {
+pub fn introduce(sexpr: &SExpr) -> SExpr {
     sexpr.add_scope(Bindings::CORE_SCOPE)
 }
 

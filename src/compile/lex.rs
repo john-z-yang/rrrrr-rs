@@ -8,7 +8,7 @@ use crate::compile::{
 
 use super::{compilation_error::CompilationError, token::Token};
 
-pub(crate) fn tokenize(source: &str) -> Result<Vec<Token>> {
+pub fn tokenize(source: &str) -> Result<Vec<Token>> {
     Lexer::new(source).scan()
 }
 
