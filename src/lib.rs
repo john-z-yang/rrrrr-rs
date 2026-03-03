@@ -5,7 +5,7 @@ use std::collections::HashMap;
 use compile::{
     bindings::Bindings,
     compilation_error::Result,
-    sexpr::{SExpr, Symbol},
+    sexpr::{Id, SExpr, Symbol},
     token::Token,
     transformer::Transformer,
 };
@@ -42,6 +42,10 @@ impl Session {
 
     pub fn expand(&mut self, form: &SExpr) -> Result<SExpr> {
         compile::sema::expand(form, &mut self.bindings, &mut self.env)
+    }
+
+    pub fn resolve_sym(&self, id: &Id) -> Option<Symbol> {
+        self.bindings.resolve_sym(id)
     }
 }
 

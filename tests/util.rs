@@ -1,0 +1,172 @@
+use rrrrr_rs::{
+    compile::{
+        lex::tokenize,
+        parse::parse,
+        sexpr::{Num, SExpr},
+        span::Span,
+    },
+    if_let_sexpr, match_sexpr, template_sexpr,
+};
+
+#[test]
+fn test_multi_match_sexpr() {
+    let nil = parse(&tokenize("()").unwrap()).unwrap();
+    let list = parse(&tokenize("(1 2 3)").unwrap()).unwrap();
+    let num = parse(&tokenize("42").unwrap()).unwrap();
+
+    let classify = |sexpr: &SExpr| -> &str {
+        match_sexpr! {
+            sexpr;
+
+            () => { "nil" },
+            (..) => { "list" },
+            _ => { "other" },
+        }
+    };
+
+    assert_eq!(classify(&nil), "nil");
+    assert_eq!(classify(&list), "list");
+    assert_eq!(classify(&num), "other");
+}
+
+#[test]
+fn test_multi_match_sexpr_arm_priority() {
+    let list = parse(&tokenize("(1 2)").unwrap()).unwrap();
+
+    // First matching arm wins — (_, _) matches before (..)
+    let result: &str = match_sexpr! {
+        &list;
+
+        (_, _) => { "two" },
+        (..) => { "any-list" },
+        _ => { "other" },
+    };
+    assert_eq!(result, "two");
+
+    // Single-element list should skip (_, _) and match (..)
+    let single = parse(&tokenize("(1)").unwrap()).unwrap();
+    let result: &str = match_sexpr! {
+        &single;
+
+        (_, _) => { "two" },
+        (..) => { "any-list" },
+        _ => { "other" },
+    };
+    assert_eq!(result, "any-list");
+}
+
+#[test]
+fn test_multi_match_sexpr_nested_list() {
+    let nested = parse(&tokenize("((a b) c)").unwrap()).unwrap();
+    let flat = parse(&tokenize("(a b c)").unwrap()).unwrap();
+
+    let classify = |sexpr: &SExpr| -> &str {
+        match_sexpr! {
+            sexpr;
+
+            ((_first, _), _) => { "nested-pair" },
+            (_, _, _) => { "three" },
+            _ => { "other" },
+        }
+    };
+
+    assert_eq!(classify(&nested), "nested-pair");
+    assert_eq!(classify(&flat), "three");
+}
+
+#[test]
+fn test_multi_match_sexpr_with_try_operator() {
+    fn extract_second(sexpr: &SExpr) -> Result<&SExpr, &str> {
+        match_sexpr! {
+            sexpr;
+
+            (_, second, _) => { Ok(second) },
+            _ => { Err("expected a 3-element list") },
+        }
+    }
+
+    let list = parse(&tokenize("(1 2 3)").unwrap()).unwrap();
+    let short = parse(&tokenize("(1)").unwrap()).unwrap();
+
+    assert!(matches!(extract_second(&list), Ok(SExpr::Num(Num(2.0), _))));
+    assert!(extract_second(&short).is_err());
+}
+
+#[test]
+fn test_multi_match_sexpr_default_arm() {
+    let num = parse(&tokenize("42").unwrap()).unwrap();
+    let result: i32 = match_sexpr! {
+        &num;
+        () => { 0 },
+        (..) => { 1 },
+        _ => { 2 },
+    };
+    assert_eq!(result, 2);
+}
+
+#[test]
+fn test_template_sexpr_nil() {
+    let original = parse(&tokenize("()").unwrap()).unwrap();
+    let templated = template_sexpr!(() => original).unwrap();
+    assert!(templated == parse(&tokenize("()").unwrap()).unwrap());
+}
+
+#[test]
+fn test_template_sexpr_single() {
+    let original = parse(&tokenize("(0)").unwrap()).unwrap();
+    let templated = template_sexpr!(
+        (
+            SExpr::Num(Num(1.0), Span {lo: 1, hi: 2 })
+        ) => &original)
+    .unwrap();
+    assert!(templated == parse(&tokenize("(1)").unwrap()).unwrap());
+}
+
+#[test]
+fn test_template_sexpr_double() {
+    let original = parse(&tokenize("(0 1)").unwrap()).unwrap();
+    let templated = template_sexpr!(
+        (
+            SExpr::Num(Num(1.0), Span { lo: 1, hi: 2 }),
+            SExpr::Num(Num(2.0), Span { lo: 3, hi: 4 })
+        ) => &original)
+    .unwrap();
+    assert!(templated == parse(&tokenize("(1 2)").unwrap()).unwrap());
+}
+
+#[test]
+fn test_template_sexpr_nested_list_first() {
+    let original = parse(&tokenize("((0) 1)").unwrap()).unwrap();
+    let templated = template_sexpr!(
+        (
+            (SExpr::Num(Num(1.0), Span { lo: 2, hi: 3 })),
+            SExpr::Num(Num(2.0), Span { lo: 5, hi: 6 })
+        ) => &original)
+    .unwrap();
+    assert!(templated == parse(&tokenize("((1) 2)").unwrap()).unwrap());
+}
+
+#[test]
+fn test_template_sexpr_nested_list_middle() {
+    let original = parse(&tokenize("(0 (1) 2)").unwrap()).unwrap();
+    let templated = template_sexpr!(
+        (
+            SExpr::Num(Num(1.0), Span { lo: 1, hi: 2 }),
+            (SExpr::Num(Num(2.0), Span { lo: 4, hi: 5 })),
+            SExpr::Num(Num(3.0), Span { lo: 7, hi: 8 })
+        ) => &original)
+    .unwrap();
+    assert!(templated == parse(&tokenize("(1 (2) 3)").unwrap()).unwrap());
+}
+
+#[test]
+fn test_template_sexpr_nested_list_last() {
+    let original = parse(&tokenize("(0 (1))").unwrap()).unwrap();
+    let templated = template_sexpr!(
+        (
+            SExpr::Num(Num(1.0), Span { lo: 1, hi: 2 }),
+            (SExpr::Num(Num(2.0), Span { lo: 4, hi: 5 }))
+        ) => &original)
+    .unwrap();
+    assert!(templated == parse(&tokenize("(1 (2))").unwrap()).unwrap());
+}
