@@ -487,7 +487,7 @@ impl Transformer {
 mod tests {
     use std::collections::HashSet;
 
-    use crate::compile::{lex::tokenize, parse::parse, sema::introduce, span::Span};
+    use crate::compile::{expand::introduce, lex::tokenize, parse::parse, span::Span};
 
     use super::*;
 

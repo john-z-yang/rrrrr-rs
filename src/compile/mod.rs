@@ -1,8 +1,8 @@
 pub mod bindings;
 pub mod compilation_error;
+pub mod expand;
 pub mod lex;
 pub mod parse;
-pub mod sema;
 pub mod sexpr;
 pub mod span;
 pub mod token;

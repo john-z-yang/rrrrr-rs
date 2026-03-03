@@ -37,11 +37,11 @@ impl Session {
     }
 
     pub fn introduce(&self, form: &SExpr) -> SExpr {
-        compile::sema::introduce(form)
+        compile::expand::introduce(form)
     }
 
     pub fn expand(&mut self, form: &SExpr) -> Result<SExpr> {
-        compile::sema::expand(form, &mut self.bindings, &mut self.env)
+        compile::expand::expand(form, &mut self.bindings, &mut self.env)
     }
 
     pub fn resolve_sym(&self, id: &Id) -> Option<Symbol> {
