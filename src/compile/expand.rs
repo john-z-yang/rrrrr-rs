@@ -11,9 +11,12 @@ use crate::{
     compile::{
         compilation_error::CompilationError,
         sexpr::{Cons, Id},
-        util::{append, first, is_proper_list, len, rest, try_dotted_tail, try_for_each, try_map},
+        util::{
+            append, first, is_proper_list, len, rest, try_dotted_tail, try_for_each, try_map,
+            try_rest,
+        },
     },
-    if_let_sexpr, match_sexpr, template_sexpr,
+    if_let_sexpr, make_sexpr, match_sexpr, template_sexpr,
 };
 
 type Env = HashMap<Symbol, Transformer>;
@@ -136,6 +139,7 @@ fn expand_id_application(
     let exec_ctx = ctx.exec_context();
     match binding.0.as_str() {
         "quote" | "quote-syntax" => Ok(sexpr.clone()),
+        "quasiquote" => expand_quasiquote(sexpr, bindings, env, ctx),
         "let-syntax" => expand_let_syntax(sexpr, bindings, env, exec_ctx),
         "letrec-syntax" => expand_letrec_syntax(sexpr, bindings, env, exec_ctx),
         "lambda" => expand_lambda(sexpr, bindings, env),
@@ -594,6 +598,161 @@ fn expand_syntax_binding(
     })
 }
 
+fn expand_quasiquote(
+    sexpr: &SExpr,
+    bindings: &mut Bindings,
+    env: &mut Env,
+    ctx: Context,
+) -> Result<SExpr> {
+    if_let_sexpr! {(_, args) = sexpr => {
+        return expand_sexpr(&expand_quasiquote_args(args, bindings, 0)?, bindings, env, ctx);
+    }};
+    Err(CompilationError {
+        span: sexpr.get_span(),
+        reason: "Invalid 'quasiquote': expected a single argument".to_owned(),
+    })
+}
+
+fn expand_quasiquote_args_list(
+    sexpr: &SExpr,
+    bindings: &mut Bindings,
+    depth: u32,
+) -> Result<SExpr> {
+    println!("expand_quasiquote_list {}", sexpr);
+
+    match_sexpr! {
+        sexpr;
+
+        (car, cdr @ ..) => {
+            if let SExpr::Id(id, _) = car
+                && let Some(binding) = bindings.resolve(id)
+                && binding.symbol.0 == "quasiquote"
+            {
+                Ok(make_sexpr!(
+                    SExpr::Id(Id::new("list", [Bindings::CORE_SCOPE]), sexpr.get_span()),
+                    (
+                        SExpr::Id(Id::new("cons", [Bindings::CORE_SCOPE]), sexpr.get_span()),
+                        (
+                            SExpr::Id(Id::new("quote", [Bindings::CORE_SCOPE]), sexpr.get_span()),
+                            SExpr::Id(Id::new("quasiquote", [Bindings::CORE_SCOPE]), sexpr.get_span()),
+                        ),
+                        expand_quasiquote_args(cdr, bindings, depth + 1)?,
+                    ),
+                ))
+            } else if let SExpr::Id(id, _) = car
+                && let Some(binding) = bindings.resolve(id)
+                && (binding.symbol.0 == "unquote" || binding.symbol.0 == "unquote-splicing")
+            {
+                if depth > 0 {
+                    Ok(make_sexpr!(
+                        SExpr::Id(Id::new("list", [Bindings::CORE_SCOPE]), sexpr.get_span()),
+                        (
+                            SExpr::Id(Id::new("cons", [Bindings::CORE_SCOPE]), sexpr.get_span()),
+                            (
+                                SExpr::Id(Id::new("quote", [Bindings::CORE_SCOPE]), sexpr.get_span()),
+                                car.clone(),
+                            ),
+                            expand_quasiquote_args(cdr, bindings, depth - 1)?,
+                        ),
+                    ))
+                } else if binding.symbol.0 == "unquote" {
+                    Ok(make_sexpr!(
+                        SExpr::Id(Id::new("list", [Bindings::CORE_SCOPE]), sexpr.get_span()),
+                        ..(*cdr).clone(),
+                    ))
+                } else {
+                    Ok(make_sexpr!(
+                        SExpr::Id(Id::new("append", [Bindings::CORE_SCOPE]), sexpr.get_span()),
+                        ..(*cdr).clone(),
+                    ))
+                }
+            } else {
+                Ok(make_sexpr!(
+                    SExpr::Id(Id::new("list", [Bindings::CORE_SCOPE]), sexpr.get_span()),
+                    (
+                        SExpr::Id(Id::new("append", [Bindings::CORE_SCOPE]), sexpr.get_span()),
+                        expand_quasiquote_args_list(car, bindings, depth)?,
+                        expand_quasiquote_args(cdr, bindings, depth)?,
+                    ),
+                ))
+            }
+        },
+
+        _ => {
+            Ok(make_sexpr!(
+                SExpr::Id(Id::new("quote", [Bindings::CORE_SCOPE]), sexpr.get_span()),
+                (
+                    sexpr.clone(),
+                ),
+            ))
+        },
+    }
+}
+
+fn expand_quasiquote_args(sexpr: &SExpr, bindings: &mut Bindings, depth: u32) -> Result<SExpr> {
+    println!("expand_quasiquote {}", sexpr);
+
+    match_sexpr! {
+        sexpr;
+
+        (car, cdr @ ..) => {
+            if let SExpr::Id(id, _) = car
+                && let Some(binding) = bindings.resolve(id)
+                && binding.symbol.0 == "quasiquote"
+            {
+                Ok(make_sexpr!(
+                    SExpr::Id(Id::new("cons", [Bindings::CORE_SCOPE]), sexpr.get_span()),
+                    (
+                        SExpr::Id(
+                            Id::new("quote", [Bindings::CORE_SCOPE]),
+                            sexpr.get_span(),
+                        ),
+                        SExpr::Id(
+                            Id::new("quasiquote", [Bindings::CORE_SCOPE]),
+                            sexpr.get_span(),
+                        ),
+                    ),
+                    expand_quasiquote_args(cdr, bindings, depth + 1)?,
+                ))
+            } else if let SExpr::Id(id, _) = car
+                && let Some(binding) = bindings.resolve(id)
+                && (binding.symbol.0 == "unquote" || binding.symbol.0 == "unquote-splicing")
+            {
+                if depth > 0 {
+                    Ok(make_sexpr!(
+                        SExpr::Id(Id::new("cons", [Bindings::CORE_SCOPE]), sexpr.get_span()),
+                        (
+                            SExpr::Id(Id::new("quote", [Bindings::CORE_SCOPE]), sexpr.get_span()),
+                            car.clone(),
+                        ),
+                        expand_quasiquote_args(cdr, bindings, depth - 1)?,
+                    ))
+                } else if binding.symbol.0 == "unquote" && matches!(try_rest(cdr), Some(SExpr::Nil(..))) {
+                    Ok(first(cdr))
+                } else {
+                    Err(CompilationError {
+                        span: car.get_span().combine(cdr.get_span()),
+                        reason: format!("Invalid '{}' form", id),
+                    })
+                }
+            } else {
+                Ok(make_sexpr!(
+                    SExpr::Id(Id::new("append", [Bindings::CORE_SCOPE]), sexpr.get_span()),
+                    expand_quasiquote_args_list(car, bindings, depth)?,
+                    expand_quasiquote_args(cdr, bindings, depth)?,
+                ))
+            }
+        },
+
+        _ => {
+            Ok(make_sexpr!(
+                SExpr::Id(Id::new("quote", [Bindings::CORE_SCOPE]), sexpr.get_span()),
+                sexpr.clone(),
+            ))
+        },
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use crate::{
@@ -604,7 +763,7 @@ mod tests {
             span::Span,
             util::{first, last, nth},
         },
-        sexpr,
+        make_sexpr,
     };
 
     fn expand_source(
@@ -624,7 +783,7 @@ mod tests {
         let span = Span { lo: 0, hi: 0 };
         assert_eq!(
             introduce(&list).without_spans(),
-            sexpr!(
+            make_sexpr!(
                 SExpr::Id(Id::new("cons", [Bindings::CORE_SCOPE]), span),
                 SExpr::Num(Num(0.0), span),
                 SExpr::Num(Num(1.0), span),
@@ -640,7 +799,7 @@ mod tests {
         let lambda_expr = parse(&tokenize("(lambda (x y) (cons x y))").unwrap()).unwrap();
         let result = expand(&introduce(&lambda_expr), &mut bindings, &mut env).unwrap();
         let span = Span { lo: 0, hi: 0 };
-        let expected = sexpr!(
+        let expected = make_sexpr!(
             SExpr::Id(Id::new("lambda", [Bindings::CORE_SCOPE]), span),
             (
                 SExpr::Id(Id::new("x", [Bindings::CORE_SCOPE, 1]), span),
@@ -705,7 +864,7 @@ mod tests {
         .unwrap();
         let result = expand(&introduce(&lambda_expr), &mut bindings, &mut env).unwrap();
         let span = Span { lo: 0, hi: 0 };
-        let expected = sexpr!(
+        let expected = make_sexpr!(
             SExpr::Id(Id::new("lambda", [Bindings::CORE_SCOPE]), span),
             (SExpr::Id(Id::new("x", [Bindings::CORE_SCOPE, 1]), span)),
             (
@@ -733,7 +892,7 @@ mod tests {
         let lambda_expr = parse(&tokenize("(lambda (x y . z) (cons x z))").unwrap()).unwrap();
         let result = expand(&introduce(&lambda_expr), &mut bindings, &mut env).unwrap();
         let span = Span { lo: 0, hi: 0 };
-        let expected = sexpr!(
+        let expected = make_sexpr!(
             SExpr::Id(Id::new("lambda", [Bindings::CORE_SCOPE]), span),
             (
                 SExpr::Id(Id::new("x", [Bindings::CORE_SCOPE, 1]), span),
@@ -756,7 +915,7 @@ mod tests {
         let lambda_expr = parse(&tokenize("(lambda x (cons x x))").unwrap()).unwrap();
         let result = expand(&introduce(&lambda_expr), &mut bindings, &mut env).unwrap();
         let span = Span { lo: 0, hi: 0 };
-        let expected = sexpr!(
+        let expected = make_sexpr!(
             SExpr::Id(Id::new("lambda", [Bindings::CORE_SCOPE]), span),
             SExpr::Id(Id::new("x", [Bindings::CORE_SCOPE, 1]), span),
             (
@@ -786,7 +945,7 @@ mod tests {
             expand(&introduce(&sexpr), &mut bindings, &mut env)
                 .unwrap()
                 .without_spans(),
-            sexpr!(SExpr::Bool(Bool(false), span)).without_spans()
+            make_sexpr!(SExpr::Bool(Bool(false), span)).without_spans()
         );
     }
 
@@ -895,7 +1054,7 @@ mod tests {
         let sexpr = parse(&tokenize("(and list list)").unwrap()).unwrap();
         let result = expand(&introduce(&sexpr), &mut bindings, &mut env).unwrap();
         let span = Span { lo: 0, hi: 0 };
-        let expected = sexpr!(
+        let expected = make_sexpr!(
             SExpr::Id(Id::new("if", [Bindings::CORE_SCOPE, 1]), span),
             SExpr::Id(Id::new("list", [Bindings::CORE_SCOPE]), span),
             SExpr::Id(Id::new("list", [Bindings::CORE_SCOPE]), span),
@@ -942,7 +1101,7 @@ mod tests {
         // (if t (if t (if t t f) f) f) f)
         let result = expand(&introduce(&sexpr), &mut bindings, &mut env).unwrap();
         let span = Span { lo: 0, hi: 0 };
-        let expected = sexpr!(
+        let expected = make_sexpr!(
             SExpr::Id(Id::new("if", [Bindings::CORE_SCOPE, 1]), span),
             SExpr::Bool(Bool(true), span),
             (
@@ -1001,7 +1160,7 @@ mod tests {
         let sexpr = parse(&tokenize("(my-macro x)").unwrap()).unwrap();
         let result = expand(&introduce(&sexpr), &mut bindings, &mut env).unwrap();
         let span = Span { lo: 0, hi: 0 };
-        let expected = sexpr!(
+        let expected = make_sexpr!(
             SExpr::Id(Id::new("lambda", [Bindings::CORE_SCOPE, 1]), span),
             (SExpr::Id(Id::new("x", [Bindings::CORE_SCOPE, 1, 2]), span)),
             SExpr::Id(Id::new("x", [Bindings::CORE_SCOPE, 2, 3]), span),
@@ -1062,7 +1221,7 @@ mod tests {
         let result = expand(&introduce(&sexpr), &mut bindings, &mut env).unwrap();
         let span = Span { lo: 0, hi: 0 };
 
-        let expected = sexpr!(
+        let expected = make_sexpr!(
             (
                 SExpr::Id(Id::new("lambda", [Bindings::CORE_SCOPE]), span),
                 (SExpr::Id(Id::new("temp", [Bindings::CORE_SCOPE, 1]), span)),
@@ -1160,7 +1319,7 @@ mod tests {
         .unwrap();
         let result = expand(&introduce(let_syntax_expr), &mut bindings, &mut env).unwrap();
         let span = Span { lo: 0, hi: 0 };
-        let expected = sexpr!(
+        let expected = make_sexpr!(
             (
                 SExpr::Id(Id::new("lambda", [Bindings::CORE_SCOPE, 1, 2]), span),
                 (SExpr::Id(Id::new("temp", [Bindings::CORE_SCOPE, 1, 2, 3]), span)),
@@ -1280,14 +1439,14 @@ mod tests {
         .unwrap();
         let result = expand(&introduce(let_syntax_expr), &mut bindings, &mut env).unwrap();
         let span = Span { lo: 0, hi: 0 };
-        let expected = sexpr!(
+        let expected = make_sexpr!(
             SExpr::Id(Id::new("begin", [Bindings::CORE_SCOPE]), span),
             (
                 SExpr::Id(Id::new("define", [Bindings::CORE_SCOPE, 1, 2]), span),
                 SExpr::Id(Id::new("x", [Bindings::CORE_SCOPE, 1, 2]), span),
                 (
                     SExpr::Id(Id::new("lambda", [Bindings::CORE_SCOPE, 1, 2]), span),
-                    (),
+                    SExpr::Nil(span),
                     SExpr::Id(Id::new("y", [Bindings::CORE_SCOPE, 1, 2, 3, 4]), span),
                 )
             ),
@@ -1296,7 +1455,7 @@ mod tests {
                 SExpr::Id(Id::new("y", [Bindings::CORE_SCOPE, 1, 2]), span),
                 (
                     SExpr::Id(Id::new("lambda", [Bindings::CORE_SCOPE, 1, 2]), span),
-                    (),
+                    SExpr::Nil(span),
                     SExpr::Id(Id::new("x", [Bindings::CORE_SCOPE, 1, 2, 5, 6]), span),
                 )
             )
@@ -1325,7 +1484,7 @@ mod tests {
         .unwrap();
         let result = expand(&introduce(let_syntax_expr), &mut bindings, &mut env).unwrap();
         let span = Span { lo: 0, hi: 0 };
-        let expected = sexpr!(
+        let expected = make_sexpr!(
             SExpr::Id(Id::new("begin", [Bindings::CORE_SCOPE]), span),
             SExpr::Num(Num(1.0), span),
             SExpr::Num(Num(2.0), span),

@@ -1,24 +1,34 @@
 use super::sexpr::{Cons, SExpr};
 
 #[macro_export]
-macro_rules! sexpr {
-    () => {
-        $crate::compile::sexpr::SExpr::Nil($crate::compile::span::Span {
-            lo: 0,
-            hi: 1,
-        })
-    };
-    (..$expr:expr) => {
+macro_rules! make_sexpr {
+    (..$expr:expr $(,)?) => {
         $expr
     };
-    (($($inner:tt)*) $(, $($rest:tt)*)?) => {
+    (($($inner:tt)+) $(,)?) => {{
+        let car = make_sexpr!($($inner)+);
+        let span = car.get_span();
         $crate::compile::sexpr::SExpr::cons(
-            sexpr!($($inner)*),
-            sexpr!($($($rest)*)?)
+            car,
+            $crate::compile::sexpr::SExpr::Nil(span),
+        )
+    }};
+    (($($inner:tt)+), $($rest:tt)+) => {
+        $crate::compile::sexpr::SExpr::cons(
+            make_sexpr!($($inner)+),
+            make_sexpr!($($rest)+),
         )
     };
-    ($first:expr $(, $($rest:tt)*)?) => {
-        $crate::compile::sexpr::SExpr::cons($first, sexpr!($($($rest)*)?))
+    ($expr:expr $(,)?) => {{
+        let car = $expr;
+        let span = car.get_span();
+        $crate::compile::sexpr::SExpr::cons(
+            car,
+            $crate::compile::sexpr::SExpr::Nil(span),
+        )
+    }};
+    ($first:expr, $($rest:tt)+) => {
+        $crate::compile::sexpr::SExpr::cons($first, make_sexpr!($($rest)+))
     };
 }
 
