@@ -739,9 +739,8 @@ fn test_expand_lambda_shadowed_begin_is_not_spliced() {
 
 #[test]
 fn test_expand_lambda_begin_binding_defined_inside_spliced_begin_shadows_nested_begin() {
-    let (session, result) = expand_with_session(
-        "(lambda () (begin (define begin (lambda x x)) (begin 1 2)))",
-    );
+    let (session, result) =
+        expand_with_session("(lambda () (begin (define begin (lambda x x)) (begin 1 2)))");
     let result = result.unwrap();
 
     let define_begin_var = nth(&nth(&result, 2).unwrap(), 1).unwrap();
@@ -773,9 +772,8 @@ fn test_expand_lambda_begin_binding_defined_inside_spliced_begin_shadows_nested_
 
 #[test]
 fn test_expand_lambda_begin_binding_defined_in_begin_group_shadows_following_begin_form() {
-    let (session, result) = expand_with_session(
-        "(lambda () (begin (define begin (lambda x x))) (begin 1 2))",
-    );
+    let (session, result) =
+        expand_with_session("(lambda () (begin (define begin (lambda x x))) (begin 1 2))");
     let result = result.unwrap();
 
     let define_begin_var = nth(&nth(&result, 2).unwrap(), 1).unwrap();
@@ -807,9 +805,8 @@ fn test_expand_lambda_begin_binding_defined_in_begin_group_shadows_following_beg
 
 #[test]
 fn test_expand_lambda_rebound_begin_reference_and_call_share_local_binding() {
-    let (session, result) = expand_with_session(
-        "(lambda () (begin (define begin (lambda x x)) begin (begin 1 2)))",
-    );
+    let (session, result) =
+        expand_with_session("(lambda () (begin (define begin (lambda x x)) begin (begin 1 2)))");
     let result = result.unwrap();
 
     let define_begin_var = nth(&nth(&result, 2).unwrap(), 1).unwrap();
@@ -850,8 +847,7 @@ fn test_expand_lambda_rebound_begin_reference_and_call_share_local_binding() {
 
 #[test]
 fn test_expand_lambda_define_after_spliced_begin_is_collected() {
-    let (session, result) =
-        expand_with_session("(lambda () (begin (define x 1)) (define y 2) y)");
+    let (session, result) = expand_with_session("(lambda () (begin (define x 1)) (define y 2) y)");
     assert!(
         result.is_ok(),
         "Expected define after leading begin to be normalized and collected"

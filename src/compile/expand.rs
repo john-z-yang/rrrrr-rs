@@ -140,6 +140,10 @@ fn expand_id_application(
     match binding.0.as_str() {
         "quote" | "quote-syntax" => Ok(sexpr.clone()),
         "quasiquote" => expand_quasiquote(sexpr, bindings, env, ctx),
+        "unquote" | "unquote-splicing" => Err(CompilationError {
+            span: sexpr.get_span(),
+            reason: format!("Invalid '{}' form: not in 'quasiquote'", binding),
+        }),
         "let-syntax" => expand_let_syntax(sexpr, bindings, env, exec_ctx),
         "letrec-syntax" => expand_letrec_syntax(sexpr, bindings, env, exec_ctx),
         "lambda" => expand_lambda(sexpr, bindings, env),
@@ -335,6 +339,7 @@ fn expand_lambda(sexpr: &SExpr, bindings: &mut Bindings, env: &mut Env) -> Resul
             let body = expand_body(&body.add_scope(scope_id), bindings, env, ExecContext::Delayed)?;
             Ok(template_sexpr!((lambda.clone(), args, ..body) => sexpr).unwrap())
         },
+
         (lambda, arg @ SExpr::Id(..), body @ ..) => {
             let scope_id = bindings.new_scope_id();
             let arg = arg.add_scope(scope_id);
@@ -347,6 +352,7 @@ fn expand_lambda(sexpr: &SExpr, bindings: &mut Bindings, env: &mut Env) -> Resul
             let body = expand_body(&body.add_scope(scope_id), bindings, env, ExecContext::Delayed)?;
             Ok(template_sexpr!((lambda.clone(), arg, ..body) => sexpr).unwrap())
         },
+
         _ => {
             Err(CompilationError {
                 span: sexpr.get_span(),
@@ -618,8 +624,6 @@ fn expand_quasiquote_args_list(
     bindings: &mut Bindings,
     depth: u32,
 ) -> Result<SExpr> {
-    println!("expand_quasiquote_list {}", sexpr);
-
     match_sexpr! {
         sexpr;
 
@@ -690,8 +694,6 @@ fn expand_quasiquote_args_list(
 }
 
 fn expand_quasiquote_args(sexpr: &SExpr, bindings: &mut Bindings, depth: u32) -> Result<SExpr> {
-    println!("expand_quasiquote {}", sexpr);
-
     match_sexpr! {
         sexpr;
 
@@ -1234,10 +1236,10 @@ mod tests {
                             SExpr::Id(Id::new("temp", [Bindings::CORE_SCOPE, 3, 4, 5]), span),
                             SExpr::Id(Id::new("temp", [Bindings::CORE_SCOPE, 3, 4, 5]), span),
                             SExpr::Id(Id::new("temp", [Bindings::CORE_SCOPE, 1, 2, 4, 5]), span),
-                        )
+                        ),
                     ),
-                    SExpr::Bool(Bool(false), span)
-                )
+                    SExpr::Bool(Bool(false), span),
+                ),
             ),
             SExpr::Bool(Bool(true), span),
         );
@@ -1333,11 +1335,11 @@ mod tests {
                             SExpr::Id(Id::new("temp", [Bindings::CORE_SCOPE, 1, 5, 6, 7]), span),
                             SExpr::Id(
                                 Id::new("temp", [Bindings::CORE_SCOPE, 1, 2, 3, 4, 6, 7]),
-                                span
-                            )
-                        )
+                                span,
+                            ),
+                        ),
                     ),
-                    SExpr::Bool(Bool(false), span)
+                    SExpr::Bool(Bool(false), span),
                 ),
             ),
             SExpr::Bool(Bool(true), span),
@@ -1448,7 +1450,7 @@ mod tests {
                     SExpr::Id(Id::new("lambda", [Bindings::CORE_SCOPE, 1, 2]), span),
                     SExpr::Nil(span),
                     SExpr::Id(Id::new("y", [Bindings::CORE_SCOPE, 1, 2, 3, 4]), span),
-                )
+                ),
             ),
             (
                 SExpr::Id(Id::new("define", [Bindings::CORE_SCOPE, 1, 2]), span),
@@ -1457,8 +1459,8 @@ mod tests {
                     SExpr::Id(Id::new("lambda", [Bindings::CORE_SCOPE, 1, 2]), span),
                     SExpr::Nil(span),
                     SExpr::Id(Id::new("x", [Bindings::CORE_SCOPE, 1, 2, 5, 6]), span),
-                )
-            )
+                ),
+            ),
         );
         assert_eq!(result.without_spans(), expected.without_spans());
     }
