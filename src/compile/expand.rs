@@ -401,8 +401,7 @@ fn expand_body(
     if phase == NormalizationPhase::Define {
         return Err(CompilationError {
             span: body.get_span(),
-            reason: "Invalid body: expected at least one expression after definitions"
-                .to_owned(),
+            reason: "Invalid body: expected at least one expression after definitions".to_owned(),
         });
     }
 
@@ -544,7 +543,13 @@ fn expand_let_syntax(
     env: &mut Env,
     exec_ctx: ExecContext,
 ) -> Result<SExpr> {
-    expand_syntax_binding(sexpr, bindings, env, SyntaxBindingForm::LetSyntax, exec_ctx)
+    expand_syntax_binding(
+        sexpr,
+        bindings,
+        &mut env.clone(),
+        SyntaxBindingForm::LetSyntax,
+        exec_ctx,
+    )
 }
 
 fn expand_letrec_syntax(
@@ -556,7 +561,7 @@ fn expand_letrec_syntax(
     expand_syntax_binding(
         sexpr,
         bindings,
-        env,
+        &mut env.clone(),
         SyntaxBindingForm::LetrecSyntax,
         exec_ctx,
     )
@@ -589,7 +594,6 @@ fn expand_syntax_binding(
             });
         }
         let scope_id = bindings.new_scope_id();
-        let mut transformer_bindings = vec![];
 
         try_for_each(binding_pairs, |binding_pair| {
             if_let_sexpr! {(SExpr::Id(id, _), transformer_spec) = binding_pair =>
@@ -613,7 +617,6 @@ fn expand_syntax_binding(
                 }
                 let transformer = Transformer::new(transformer_spec)?;
                 env.insert(binding.clone(), transformer);
-                transformer_bindings.push(binding);
                 return Ok(());
             }
             Err(CompilationError {
@@ -631,10 +634,6 @@ fn expand_syntax_binding(
                     body,
                 )
             }
-        });
-
-        transformer_bindings.iter().for_each(|transformer_binding| {
-            env.remove_entry(transformer_binding);
         });
 
         return body;
