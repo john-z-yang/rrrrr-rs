@@ -66,6 +66,40 @@ fn test_expand_lambda_invalid_dotted_param() {
 }
 
 #[test]
+fn test_expand_lambda_rejects_duplicate_params() {
+    assert!(matches!(
+        expand_source("(lambda (x x) x)"),
+        Err(CompilationError { reason, .. }) if reason == "Duplicate parameter: 'x'"
+    ));
+}
+
+#[test]
+fn test_expand_lambda_rejects_duplicate_rest_param() {
+    assert!(matches!(
+        expand_source("(lambda (x . x) x)"),
+        Err(CompilationError { reason, .. }) if reason == "Duplicate parameter: 'x'"
+    ));
+}
+
+#[test]
+fn test_expand_lambda_requires_body_expression() {
+    assert!(matches!(
+        expand_source("(lambda (x))"),
+        Err(CompilationError { reason, .. })
+            if reason == "Invalid 'lambda' form: expected at least one body expression"
+    ));
+}
+
+#[test]
+fn test_expand_lambda_requires_expression_after_internal_definitions() {
+    assert!(matches!(
+        expand_source("(lambda () (define x 1))"),
+        Err(CompilationError { reason, .. })
+            if reason == "Invalid body: expected at least one expression after definitions"
+    ));
+}
+
+#[test]
 fn test_expand_top_level_unbound_id_reports_error() {
     assert!(
         expand_source("x").is_err(),
@@ -232,6 +266,15 @@ fn test_let_syntax_bindings_are_not_recursive() {
         result.is_err(),
         "Expected let-syntax bindings to not be recursive: (one) inside two's expansion should be unbound"
     );
+}
+
+#[test]
+fn test_expand_let_syntax_rejects_improper_binding_list() {
+    assert!(matches!(
+        expand_source("(let-syntax ((one (syntax-rules () ((_) 1))) . 42) (one))"),
+        Err(CompilationError { reason, .. })
+            if reason == "Invalid 'let-syntax' bindings: expected a proper list"
+    ));
 }
 
 #[test]

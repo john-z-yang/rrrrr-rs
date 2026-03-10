@@ -1,4 +1,7 @@
-use std::{collections::HashMap, fmt, mem};
+use std::{
+    collections::{HashMap, HashSet},
+    fmt, mem,
+};
 
 use super::{
     bindings::Bindings,
@@ -301,8 +304,15 @@ fn expand_lambda(sexpr: &SExpr, bindings: &mut Bindings, env: &mut Env) -> Resul
         sexpr;
 
         (lambda, (args @ ..), body @ ..) => {
+            if len(body) == 0 {
+                return Err(CompilationError {
+                    span: sexpr.get_span(),
+                    reason: "Invalid 'lambda' form: expected at least one body expression".to_owned(),
+                });
+            }
             let scope_id = bindings.new_scope_id();
             let args = args.add_scope(scope_id);
+            let mut seen = HashSet::new();
 
             try_for_each(&args, |arg| {
                 let SExpr::Id(id, _) = arg else {
@@ -314,6 +324,12 @@ fn expand_lambda(sexpr: &SExpr, bindings: &mut Bindings, env: &mut Env) -> Resul
                         ),
                     });
                 };
+                if !seen.insert(id.symbol.clone()) {
+                    return Err(CompilationError {
+                        span: arg.get_span(),
+                        reason: format!("Duplicate parameter: '{}'", id),
+                    });
+                }
                 let binding = bindings.gen_sym(id);
                 bindings.add_binding(id, &binding);
                 Ok(())
@@ -322,6 +338,12 @@ fn expand_lambda(sexpr: &SExpr, bindings: &mut Bindings, env: &mut Env) -> Resul
             match try_dotted_tail(&args) {
                 None | Some(SExpr::Nil(_)) => {}
                 Some(SExpr::Id(id, _)) => {
+                    if !seen.insert(id.symbol.clone()) {
+                        return Err(CompilationError {
+                            span: sexpr.get_span(),
+                            reason: format!("Duplicate parameter: '{}'", id),
+                        });
+                    }
                     let binding = bindings.gen_sym(&id);
                     bindings.add_binding(&id, &binding);
                 }
@@ -341,6 +363,12 @@ fn expand_lambda(sexpr: &SExpr, bindings: &mut Bindings, env: &mut Env) -> Resul
         },
 
         (lambda, arg @ SExpr::Id(..), body @ ..) => {
+            if len(body) == 0 {
+                return Err(CompilationError {
+                    span: sexpr.get_span(),
+                    reason: "Invalid 'lambda' form: expected at least one body expression".to_owned(),
+                });
+            }
             let scope_id = bindings.new_scope_id();
             let arg = arg.add_scope(scope_id);
             let SExpr::Id(id, _) = &arg else {
@@ -369,7 +397,14 @@ fn expand_body(
     exec_ctx: ExecContext,
 ) -> Result<SExpr> {
     let body = body.add_scope(bindings.new_scope_id());
-    let body = normalize_body(&body, bindings, env, NormalizationPhase::Define)?.0;
+    let (body, phase) = normalize_body(&body, bindings, env, NormalizationPhase::Define)?;
+    if phase == NormalizationPhase::Define {
+        return Err(CompilationError {
+            span: body.get_span(),
+            reason: "Invalid body: expected at least one expression after definitions"
+                .to_owned(),
+        });
+    }
 
     try_map(&body, |sexpr| {
         expand_sexpr(sexpr, bindings, env, Context::Body(exec_ctx))
@@ -535,6 +570,12 @@ fn expand_syntax_binding(
     exec_ctx: ExecContext,
 ) -> Result<SExpr> {
     if_let_sexpr! {(_, (binding_pairs @ ..), body @ ..) = sexpr =>
+        if !is_proper_list(binding_pairs) {
+            return Err(CompilationError {
+                span: sexpr.get_span(),
+                reason: format!("Invalid '{form}' bindings: expected a proper list"),
+            });
+        }
         if !is_proper_list(body) {
             return Err(CompilationError {
                 span: sexpr.get_span(),
@@ -1423,7 +1464,8 @@ mod tests {
                 (letrec-syntax
                     ((one (syntax-rules ()
                             ((_) 1))))
-                (define x 1))
+                (define x 1)
+                x)
                 "#,
             )
             .unwrap(),
@@ -1450,7 +1492,8 @@ mod tests {
                     (two (syntax-rules ()
                             ((_) 2))))
                 (define x (lambda () y))
-                (define y (lambda () x)))
+                (define y (lambda () x))
+                x)
                 "#,
             )
             .unwrap(),
@@ -1478,6 +1521,7 @@ mod tests {
                     SExpr::Id(Id::new("x", [Bindings::CORE_SCOPE, 1, 2, 5, 6]), span),
                 ),
             ),
+            SExpr::Id(Id::new("x", [Bindings::CORE_SCOPE, 1, 2]), span),
         );
         assert_eq!(result.without_spans(), expected.without_spans());
     }
