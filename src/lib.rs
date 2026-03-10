@@ -1,6 +1,6 @@
 pub mod compile;
 
-use std::collections::HashMap;
+use std::{collections::HashMap, sync::Arc};
 
 use compile::{
     bindings::Bindings,
@@ -13,7 +13,7 @@ use compile::{
 #[derive(Debug, Clone)]
 pub struct Session {
     bindings: Bindings,
-    env: HashMap<Symbol, Transformer>,
+    env: HashMap<Symbol, Arc<Transformer>>,
 }
 
 impl Session {
