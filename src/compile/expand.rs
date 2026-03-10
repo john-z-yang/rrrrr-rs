@@ -1639,4 +1639,163 @@ mod tests {
         // env should be empty (no transformer persisted)
         assert!(env.is_empty());
     }
+
+    // --- Quasiquote unit tests ---
+
+    #[test]
+    fn test_expand_quasiquote_atom() {
+        let mut bindings = Bindings::new();
+        let mut env = HashMap::<Symbol, Transformer>::new();
+        let result = expand_source("`42", &mut bindings, &mut env).unwrap();
+        let span = Span { lo: 0, hi: 0 };
+        let expected = make_sexpr!(
+            SExpr::Id(Id::new("quote", [Bindings::CORE_SCOPE]), span),
+            SExpr::Num(Num(42.0), span),
+        );
+        assert_eq!(result.without_spans(), expected.without_spans());
+    }
+
+    #[test]
+    fn test_expand_quasiquote_empty_list() {
+        let mut bindings = Bindings::new();
+        let mut env = HashMap::<Symbol, Transformer>::new();
+        let result = expand_source("`()", &mut bindings, &mut env).unwrap();
+        let span = Span { lo: 0, hi: 0 };
+        let expected = make_sexpr!(
+            SExpr::Id(Id::new("quote", [Bindings::CORE_SCOPE]), span),
+            SExpr::Nil(span),
+        );
+        assert_eq!(result.without_spans(), expected.without_spans());
+    }
+
+    #[test]
+    fn test_expand_quasiquote_constant_list() {
+        let mut bindings = Bindings::new();
+        let mut env = HashMap::<Symbol, Transformer>::new();
+        let result = expand_source("`(1 2)", &mut bindings, &mut env).unwrap();
+        let span = Span { lo: 0, hi: 0 };
+        // `(1 2) => (append (quote (1)) (append (quote (2)) (quote ())))
+        // Note: (quote (1)) wraps the element in a list for append
+        let expected = make_sexpr!(
+            SExpr::Id(Id::new("append", [Bindings::CORE_SCOPE]), span),
+            (
+                SExpr::Id(Id::new("quote", [Bindings::CORE_SCOPE]), span),
+                (SExpr::Num(Num(1.0), span)),
+            ),
+            (
+                SExpr::Id(Id::new("append", [Bindings::CORE_SCOPE]), span),
+                (
+                    SExpr::Id(Id::new("quote", [Bindings::CORE_SCOPE]), span),
+                    (SExpr::Num(Num(2.0), span)),
+                ),
+                (
+                    SExpr::Id(Id::new("quote", [Bindings::CORE_SCOPE]), span),
+                    SExpr::Nil(span),
+                ),
+            ),
+        );
+        assert_eq!(result.without_spans(), expected.without_spans());
+    }
+
+    #[test]
+    fn test_expand_quasiquote_with_unquote() {
+        let mut bindings = Bindings::new();
+        let mut env = HashMap::<Symbol, Transformer>::new();
+        let result =
+            expand_source("(lambda (x) `(1 ,x))", &mut bindings, &mut env).unwrap();
+        // Focus on the body: (append (quote (1)) (append (list x) (quote ())))
+        let body = nth(&result, 2).unwrap();
+        // The body head should be `append`
+        let head: Id = first(&body).try_into().unwrap();
+        assert_eq!(
+            bindings.resolve_sym(&head),
+            Some(Symbol::new("append")),
+            "Body head should resolve to 'append'"
+        );
+        // Second element of body is (quote (1))
+        let quote_1 = nth(&body, 1).unwrap();
+        let quote_head: Id = first(&quote_1).try_into().unwrap();
+        assert_eq!(
+            bindings.resolve_sym(&quote_head),
+            Some(Symbol::new("quote")),
+        );
+        // Third element contains (list x)
+        let inner_append = nth(&body, 2).unwrap();
+        let list_call = nth(&inner_append, 1).unwrap();
+        let list_head: Id = first(&list_call).try_into().unwrap();
+        assert_eq!(
+            bindings.resolve_sym(&list_head),
+            Some(Symbol::new("list")),
+            "Unquoted element should be wrapped in 'list'"
+        );
+    }
+
+    #[test]
+    fn test_expand_quasiquote_with_unquote_splicing() {
+        let mut bindings = Bindings::new();
+        let mut env = HashMap::<Symbol, Transformer>::new();
+        let result =
+            expand_source("(lambda (xs) `(1 ,@xs))", &mut bindings, &mut env).unwrap();
+        // Body: (append (quote (1)) (append (append xs) (quote ())))
+        let body = nth(&result, 2).unwrap();
+        let inner_append = nth(&body, 2).unwrap();
+        // The splice call should be (append xs) — append wrapping the spliced var
+        let splice_call = nth(&inner_append, 1).unwrap();
+        let splice_head: Id = first(&splice_call).try_into().unwrap();
+        assert_eq!(
+            bindings.resolve_sym(&splice_head),
+            Some(Symbol::new("append")),
+            "Spliced element should be wrapped in 'append'"
+        );
+    }
+
+    #[test]
+    fn test_expand_quasiquote_unquote_resolves_to_lambda_param() {
+        let mut bindings = Bindings::new();
+        let mut env = HashMap::<Symbol, Transformer>::new();
+        let result =
+            expand_source("(lambda (x) `(,x))", &mut bindings, &mut env).unwrap();
+        // lambda param
+        let param = first(&nth(&result, 1).unwrap());
+        let param_id: Id = param.try_into().unwrap();
+        let param_sym = bindings.resolve_sym(&param_id).unwrap();
+        // body is (append (list x) (quote ()))
+        let body = nth(&result, 2).unwrap();
+        let list_call = nth(&body, 1).unwrap();
+        let x_ref: Id = nth(&list_call, 1).unwrap().try_into().unwrap();
+        let x_sym = bindings.resolve_sym(&x_ref).unwrap();
+        assert_eq!(
+            param_sym, x_sym,
+            "Unquoted x should resolve to the lambda parameter"
+        );
+    }
+
+    #[test]
+    fn test_expand_quasiquote_nested_preserves_inner() {
+        let mut bindings = Bindings::new();
+        let mut env = HashMap::<Symbol, Transformer>::new();
+        // `(1 `(2 3)) — no unquotes, just nested quasiquote
+        let result = expand_source("`(1 `(2 3))", &mut bindings, &mut env).unwrap();
+        let output = format!("{result}");
+        assert!(
+            output.contains("(quote quasiquote)"),
+            "Nested quasiquote should keep inner quasiquote as data: got {output}"
+        );
+    }
+
+    #[test]
+    fn test_expand_unquote_outside_quasiquote_errors() {
+        let mut bindings = Bindings::new();
+        let mut env = HashMap::<Symbol, Transformer>::new();
+        let result = expand_source(",x", &mut bindings, &mut env);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_expand_unquote_splicing_outside_quasiquote_errors() {
+        let mut bindings = Bindings::new();
+        let mut env = HashMap::<Symbol, Transformer>::new();
+        let result = expand_source(",@x", &mut bindings, &mut env);
+        assert!(result.is_err());
+    }
 }

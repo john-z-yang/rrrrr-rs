@@ -1011,3 +1011,168 @@ fn test_expand_define_syntax_with_ellipsis() {
         SExpr::Num(Num(3.0), span).without_spans()
     );
 }
+
+// --- Quasiquote tests ---
+
+#[test]
+fn test_quasiquote_constant_list() {
+    let result = expand_source("`(1 2 3)").unwrap();
+    assert_eq!(
+        format!("{result}"),
+        "(append (quote (1)) (append (quote (2)) (append (quote (3)) (quote ()))))"
+    );
+}
+
+#[test]
+fn test_quasiquote_empty_list() {
+    let result = expand_source("`()").unwrap();
+    assert_eq!(format!("{result}"), "(quote ())");
+}
+
+#[test]
+fn test_quasiquote_atom_number() {
+    let result = expand_source("`42").unwrap();
+    assert_eq!(format!("{result}"), "(quote 42)");
+}
+
+#[test]
+fn test_quasiquote_atom_symbol() {
+    let result = expand_source("`hello").unwrap();
+    assert_eq!(format!("{result}"), "(quote hello)");
+}
+
+#[test]
+fn test_quasiquote_with_unquote() {
+    let result = expand_source("(lambda (x) `(1 ,x 3))").unwrap();
+    assert_eq!(
+        format!("{result}"),
+        "(lambda (x) (append (quote (1)) (append (list x) (append (quote (3)) (quote ())))))"
+    );
+}
+
+#[test]
+fn test_quasiquote_unquote_first_position() {
+    let result = expand_source("(lambda (x) `(,x 2 3))").unwrap();
+    assert_eq!(
+        format!("{result}"),
+        "(lambda (x) (append (list x) (append (quote (2)) (append (quote (3)) (quote ())))))"
+    );
+}
+
+#[test]
+fn test_quasiquote_multiple_unquotes() {
+    let result = expand_source("(lambda (a b) `(,a ,b))").unwrap();
+    assert_eq!(
+        format!("{result}"),
+        "(lambda (a b) (append (list a) (append (list b) (quote ()))))"
+    );
+}
+
+#[test]
+fn test_quasiquote_unquote_splicing() {
+    let result = expand_source("(lambda (xs) `(1 ,@xs 5))").unwrap();
+    assert_eq!(
+        format!("{result}"),
+        "(lambda (xs) (append (quote (1)) (append (append xs) (append (quote (5)) (quote ())))))"
+    );
+}
+
+#[test]
+fn test_quasiquote_unquote_splicing_first_position() {
+    let result = expand_source("(lambda (xs) `(,@xs 3))").unwrap();
+    assert_eq!(
+        format!("{result}"),
+        "(lambda (xs) (append (append xs) (append (quote (3)) (quote ()))))"
+    );
+}
+
+#[test]
+fn test_quasiquote_unquote_splicing_only_element() {
+    let result = expand_source("(lambda (xs) `(,@xs))").unwrap();
+    assert_eq!(
+        format!("{result}"),
+        "(lambda (xs) (append (append xs) (quote ())))"
+    );
+}
+
+#[test]
+fn test_quasiquote_mixed_unquote_and_splicing() {
+    let result = expand_source("(lambda (x ys) `(,x ,@ys 4))").unwrap();
+    assert_eq!(
+        format!("{result}"),
+        "(lambda (x ys) (append (list x) (append (append ys) (append (quote (4)) (quote ())))))"
+    );
+}
+
+#[test]
+fn test_quasiquote_nested_list_with_unquote() {
+    let result = expand_source("(lambda (x) `((,x 2) 3))").unwrap();
+    assert_eq!(
+        format!("{result}"),
+        "(lambda (x) (append (list (append (list x) (append (quote (2)) (quote ())))) (append (quote (3)) (quote ()))))"
+    );
+}
+
+#[test]
+fn test_quasiquote_mixed_types() {
+    let result = expand_source(r#"`(#t "hello" 42)"#).unwrap();
+    assert_eq!(
+        format!("{result}"),
+        r#"(append (quote (#t)) (append (quote ("hello")) (append (quote (42)) (quote ()))))"#
+    );
+}
+
+#[test]
+fn test_quasiquote_nested_preserves_inner_quasiquote() {
+    let result = expand_source("(lambda (x) `(a `(b ,,x)))").unwrap();
+    // The inner quasiquote stays as syntax; only the outer ,x is expanded
+    let output = format!("{result}");
+    assert!(output.contains("(quote quasiquote)"), "Nested quasiquote should preserve inner quasiquote keyword");
+    assert!(output.contains("(quote unquote)"), "Nested quasiquote should preserve inner unquote keyword");
+}
+
+#[test]
+fn test_quasiquote_in_macro_template() {
+    let result = expand_source(
+        r#"
+        (letrec-syntax ((make-pair (syntax-rules ()
+                                     ((_ a b) `(,a ,b)))))
+          (make-pair 1 2))
+        "#,
+    )
+    .unwrap();
+    assert_eq!(
+        format!("{result}"),
+        "(append (list 1) (append (list 2) (quote ())))"
+    );
+}
+
+// --- Quasiquote error tests ---
+
+#[test]
+fn test_unquote_outside_quasiquote_is_error() {
+    let result = expand_source(",x");
+    assert!(
+        matches!(
+            &result,
+            Err(CompilationError { reason, .. })
+                if reason == "Invalid 'unquote' form: not in 'quasiquote'"
+        ),
+        "Expected unquote outside quasiquote to be an error, got: {:?}",
+        result
+    );
+}
+
+#[test]
+fn test_unquote_splicing_outside_quasiquote_is_error() {
+    let result = expand_source(",@x");
+    assert!(
+        matches!(
+            &result,
+            Err(CompilationError { reason, .. })
+                if reason == "Invalid 'unquote-splicing' form: not in 'quasiquote'"
+        ),
+        "Expected unquote-splicing outside quasiquote to be an error, got: {:?}",
+        result
+    );
+}
