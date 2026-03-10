@@ -130,6 +130,19 @@ macro_rules! match_sexpr {
             None => match_sexpr!(@arms $targ, $($rest)*)
         }
     }};
+
+    // Bare pattern arm followed by more arms
+    (@arms $targ:ident, $pat:pat => $handler:block, $($rest:tt)*) => {{
+        let mut result = None;
+        #[allow(irrefutable_let_patterns)]
+        if let $pat = $targ {
+            result = Some($handler);
+        }
+        match result {
+            Some(val) => val,
+            None => match_sexpr!(@arms $targ, $($rest)*)
+        }
+    }};
 }
 
 #[macro_export]

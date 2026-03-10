@@ -682,6 +682,16 @@ fn expand_quasiquote_args_list(
             }
         },
 
+        SExpr::Vector(vector, span) => {
+            Ok(make_sexpr!(
+                SExpr::Id(Id::new("list", [Bindings::CORE_SCOPE]), sexpr.get_span()),
+                (
+                    SExpr::Id(Id::new("list->vector", [Bindings::CORE_SCOPE]), sexpr.get_span()),
+                    expand_quasiquote_args(&vector.clone().into_cons_list(*span), bindings, depth)?,
+                ),
+            ))
+        },
+
         _ => {
             Ok(make_sexpr!(
                 SExpr::Id(Id::new("quote", [Bindings::CORE_SCOPE]), sexpr.get_span()),
@@ -744,6 +754,13 @@ fn expand_quasiquote_args(sexpr: &SExpr, bindings: &mut Bindings, depth: u32) ->
                     expand_quasiquote_args(cdr, bindings, depth)?,
                 ))
             }
+        },
+
+        SExpr::Vector(vector, span) => {
+            Ok(make_sexpr!(
+                SExpr::Id(Id::new("list->vector", [Bindings::CORE_SCOPE]), sexpr.get_span()),
+                expand_quasiquote_args(&vector.clone().into_cons_list(*span), bindings, depth)?,
+            ))
         },
 
         _ => {
@@ -1701,8 +1718,7 @@ mod tests {
     fn test_expand_quasiquote_with_unquote() {
         let mut bindings = Bindings::new();
         let mut env = HashMap::<Symbol, Transformer>::new();
-        let result =
-            expand_source("(lambda (x) `(1 ,x))", &mut bindings, &mut env).unwrap();
+        let result = expand_source("(lambda (x) `(1 ,x))", &mut bindings, &mut env).unwrap();
         // Focus on the body: (append (quote (1)) (append (list x) (quote ())))
         let body = nth(&result, 2).unwrap();
         // The body head should be `append`
@@ -1734,8 +1750,7 @@ mod tests {
     fn test_expand_quasiquote_with_unquote_splicing() {
         let mut bindings = Bindings::new();
         let mut env = HashMap::<Symbol, Transformer>::new();
-        let result =
-            expand_source("(lambda (xs) `(1 ,@xs))", &mut bindings, &mut env).unwrap();
+        let result = expand_source("(lambda (xs) `(1 ,@xs))", &mut bindings, &mut env).unwrap();
         // Body: (append (quote (1)) (append (append xs) (quote ())))
         let body = nth(&result, 2).unwrap();
         let inner_append = nth(&body, 2).unwrap();
@@ -1753,8 +1768,7 @@ mod tests {
     fn test_expand_quasiquote_unquote_resolves_to_lambda_param() {
         let mut bindings = Bindings::new();
         let mut env = HashMap::<Symbol, Transformer>::new();
-        let result =
-            expand_source("(lambda (x) `(,x))", &mut bindings, &mut env).unwrap();
+        let result = expand_source("(lambda (x) `(,x))", &mut bindings, &mut env).unwrap();
         // lambda param
         let param = first(&nth(&result, 1).unwrap());
         let param_id: Id = param.try_into().unwrap();

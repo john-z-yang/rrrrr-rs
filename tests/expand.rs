@@ -1147,6 +1147,113 @@ fn test_quasiquote_in_macro_template() {
     );
 }
 
+// --- Vector quasiquote tests ---
+
+#[test]
+fn test_quasiquote_constant_vector() {
+    let result = expand_source("`#(1 2 3)").unwrap();
+    assert_eq!(
+        format!("{result}"),
+        "(list->vector (append (quote (1)) (append (quote (2)) (append (quote (3)) (quote ())))))"
+    );
+}
+
+#[test]
+fn test_quasiquote_empty_vector() {
+    let result = expand_source("`#()").unwrap();
+    assert_eq!(format!("{result}"), "(list->vector (quote ()))");
+}
+
+#[test]
+fn test_quasiquote_vector_mixed_types() {
+    let result = expand_source(r#"`#(#t "hello" 42)"#).unwrap();
+    assert_eq!(
+        format!("{result}"),
+        r#"(list->vector (append (quote (#t)) (append (quote ("hello")) (append (quote (42)) (quote ())))))"#
+    );
+}
+
+#[test]
+fn test_quasiquote_vector_with_unquote() {
+    let result = expand_source("(lambda (x) `#(1 ,x 3))").unwrap();
+    assert_eq!(
+        format!("{result}"),
+        "(lambda (x) (list->vector (append (quote (1)) (append (list x) (append (quote (3)) (quote ()))))))"
+    );
+}
+
+#[test]
+fn test_quasiquote_vector_multiple_unquotes() {
+    let result = expand_source("(lambda (x y) `#(,x ,y))").unwrap();
+    assert_eq!(
+        format!("{result}"),
+        "(lambda (x y) (list->vector (append (list x) (append (list y) (quote ())))))"
+    );
+}
+
+#[test]
+fn test_quasiquote_vector_with_unquote_splicing() {
+    let result = expand_source("(lambda (xs) `#(1 ,@xs 4))").unwrap();
+    assert_eq!(
+        format!("{result}"),
+        "(lambda (xs) (list->vector (append (quote (1)) (append (append xs) (append (quote (4)) (quote ()))))))"
+    );
+}
+
+#[test]
+fn test_quasiquote_vector_unquote_only_element() {
+    let result = expand_source("(lambda (x) `#(,x))").unwrap();
+    assert_eq!(
+        format!("{result}"),
+        "(lambda (x) (list->vector (append (list x) (quote ()))))"
+    );
+}
+
+#[test]
+fn test_quasiquote_vector_splice_only_element() {
+    let result = expand_source("(lambda (xs) `#(,@xs))").unwrap();
+    assert_eq!(
+        format!("{result}"),
+        "(lambda (xs) (list->vector (append (append xs) (quote ()))))"
+    );
+}
+
+#[test]
+fn test_quasiquote_vector_mixed_unquote_and_splicing() {
+    let result = expand_source("(lambda (x ys) `#(,x ,@ys 4))").unwrap();
+    assert_eq!(
+        format!("{result}"),
+        "(lambda (x ys) (list->vector (append (list x) (append (append ys) (append (quote (4)) (quote ()))))))"
+    );
+}
+
+#[test]
+fn test_quasiquote_vector_nested_in_list() {
+    let result = expand_source("(lambda (x) `(a #(1 ,x 3) b))").unwrap();
+    assert_eq!(
+        format!("{result}"),
+        "(lambda (x) (append (quote (a)) (append (list (list->vector (append (quote (1)) (append (list x) (append (quote (3)) (quote ())))))) (append (quote (b)) (quote ())))))"
+    );
+}
+
+#[test]
+fn test_quasiquote_vector_with_splicing_nested_in_list() {
+    let result = expand_source("(lambda (xs) `(a #(1 ,@xs 4) b))").unwrap();
+    assert_eq!(
+        format!("{result}"),
+        "(lambda (xs) (append (quote (a)) (append (list (list->vector (append (quote (1)) (append (append xs) (append (quote (4)) (quote ())))))) (append (quote (b)) (quote ())))))"
+    );
+}
+
+#[test]
+fn test_quasiquote_vector_nested_in_vector() {
+    let result = expand_source("(lambda (x) `#(#(1 ,x) 3))").unwrap();
+    assert_eq!(
+        format!("{result}"),
+        "(lambda (x) (list->vector (append (list (list->vector (append (quote (1)) (append (list x) (quote ()))))) (append (quote (3)) (quote ())))))"
+    );
+}
+
 // --- Quasiquote error tests ---
 
 #[test]

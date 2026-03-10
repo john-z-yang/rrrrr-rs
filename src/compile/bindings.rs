@@ -32,6 +32,7 @@ impl Bindings {
         "cons",
         "list",
         "append",
+        "list->vector",
         "first",
         "second",
         "rest",
