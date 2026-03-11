@@ -19,7 +19,6 @@ impl Bindings {
         "letrec-syntax",
         "syntax-rules",
         "quote",
-        "quote-syntax",
         "quasiquote",
         "unquote",
         "unquote-splicing",

@@ -121,7 +121,7 @@ fn expand_id_application(
     };
 
     match binding.0.as_str() {
-        "quote" | "quote-syntax" => Ok(sexpr.clone()),
+        "quote" => Ok(sexpr.clone()),
         "quasiquote" => expand_quasiquote(sexpr, bindings, env, ctx),
         "unquote" | "unquote-splicing" => Err(CompilationError {
             span: sexpr.get_span(),
