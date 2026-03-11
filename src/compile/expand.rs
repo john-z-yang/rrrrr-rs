@@ -41,25 +41,10 @@ pub(crate) fn expand(sexpr: &SExpr, bindings: &mut Bindings, env: &mut Env) -> R
 }
 
 #[derive(PartialEq, Clone, Copy, Eq, Hash, Debug)]
-enum ExecContext {
-    Immediate,
-    Delayed,
-}
-
-#[derive(PartialEq, Clone, Copy, Eq, Hash, Debug)]
 enum Context {
     TopLevel,
-    Expression(ExecContext),
-    Body(ExecContext),
-}
-
-impl Context {
-    fn exec_context(&self) -> ExecContext {
-        match self {
-            Context::TopLevel => ExecContext::Immediate,
-            Context::Expression(exec) | Context::Body(exec) => *exec,
-        }
-    }
+    Expression,
+    Body,
 }
 
 fn expand_sexpr(
@@ -75,18 +60,18 @@ fn expand_sexpr(
         });
     };
     if let SExpr::Id(..) = sexpr {
-        return expand_id(sexpr, bindings, ctx);
+        return expand_id(sexpr, bindings);
     }
     if_let_sexpr! {(SExpr::Id(..), ..) = sexpr =>
         return expand_id_application(sexpr, bindings, env, ctx);
     };
     if_let_sexpr! {(..) = sexpr =>
-        return expand_fn_application(sexpr, bindings, env, ctx.exec_context());
+        return expand_fn_application(sexpr, bindings, env);
     };
     Ok(sexpr.clone())
 }
 
-fn expand_id(sexpr: &SExpr, bindings: &mut Bindings, ctx: Context) -> Result<SExpr> {
+fn expand_id(sexpr: &SExpr, bindings: &mut Bindings) -> Result<SExpr> {
     let SExpr::Id(id, span) = sexpr else {
         unreachable!("expand_id expected an ID");
     };
@@ -97,12 +82,7 @@ fn expand_id(sexpr: &SExpr, bindings: &mut Bindings, ctx: Context) -> Result<SEx
                 reason: format!("Invalid '{}' form: not in parentheses", symbol),
             })
         }
-        Some(_) => Ok(sexpr.clone()),
-        None if ctx.exec_context() == ExecContext::Delayed => Ok(sexpr.clone()),
-        None => Err(CompilationError {
-            span: *span,
-            reason: format!("Unbound identifier: '{}'", id),
-        }),
+        _ => Ok(sexpr.clone()),
     }
 }
 
@@ -131,22 +111,15 @@ fn expand_id_application(
     ctx: Context,
 ) -> Result<SExpr> {
     let (id, binding) = match try_first(sexpr) {
-        Some(SExpr::Id(id, span)) => match bindings.resolve_sym(&id) {
+        Some(SExpr::Id(id, _)) => match bindings.resolve_sym(&id) {
             Some(binding) => (id, binding),
-            None if ctx.exec_context() == ExecContext::Delayed => {
-                return expand_fn_application(sexpr, bindings, env, ctx.exec_context());
-            }
             None => {
-                return Err(CompilationError {
-                    span,
-                    reason: format!("Unbound identifier: '{}'", id),
-                });
+                return expand_fn_application(sexpr, bindings, env);
             }
         },
         _ => unreachable!("expand_id_application expected first element to be an ID"),
     };
 
-    let exec_ctx = ctx.exec_context();
     match binding.0.as_str() {
         "quote" | "quote-syntax" => Ok(sexpr.clone()),
         "quasiquote" => expand_quasiquote(sexpr, bindings, env, ctx),
@@ -154,14 +127,14 @@ fn expand_id_application(
             span: sexpr.get_span(),
             reason: format!("Invalid '{}' form: not in 'quasiquote'", binding),
         }),
-        "let-syntax" => expand_let_syntax(sexpr, bindings, env, exec_ctx),
-        "letrec-syntax" => expand_letrec_syntax(sexpr, bindings, env, exec_ctx),
+        "let-syntax" => expand_let_syntax(sexpr, bindings, env),
+        "letrec-syntax" => expand_letrec_syntax(sexpr, bindings, env),
         "lambda" => expand_lambda(sexpr, bindings, env),
         "define" => expand_define(sexpr, bindings, env, ctx),
         "define-syntax" => expand_define_syntax(sexpr, bindings, env, ctx),
-        "set!" => expand_set(sexpr, bindings, env, exec_ctx),
+        "set!" => expand_set(sexpr, bindings, env),
         "begin" => expand_begin(sexpr, bindings, env, ctx),
-        "if" => expand_if(sexpr, bindings, env, exec_ctx),
+        "if" => expand_if(sexpr, bindings, env),
         _ => {
             if let Some(transformer) = env.get(&binding) {
                 expand_sexpr(
@@ -171,46 +144,36 @@ fn expand_id_application(
                     ctx,
                 )
             } else {
-                expand_fn_application(sexpr, bindings, env, exec_ctx)
+                expand_fn_application(sexpr, bindings, env)
             }
         }
     }
 }
 
-fn expand_fn_application(
-    sexpr: &SExpr,
-    bindings: &mut Bindings,
-    env: &mut Env,
-    exec_ctx: ExecContext,
-) -> Result<SExpr> {
+fn expand_fn_application(sexpr: &SExpr, bindings: &mut Bindings, env: &mut Env) -> Result<SExpr> {
     try_map(sexpr, |sub_sexpr| {
-        expand_sexpr(sub_sexpr, bindings, env, Context::Expression(exec_ctx))
+        expand_sexpr(sub_sexpr, bindings, env, Context::Expression)
     })
 }
 
-fn expand_if(
-    sexpr: &SExpr,
-    bindings: &mut Bindings,
-    env: &mut Env,
-    exec_ctx: ExecContext,
-) -> Result<SExpr> {
+fn expand_if(sexpr: &SExpr, bindings: &mut Bindings, env: &mut Env) -> Result<SExpr> {
     match_sexpr!(
         sexpr;
 
         (iif, check, consequent, alternate) => {
             Ok(template_sexpr!((
                 iif.clone(),
-                expand_sexpr(&check.clone(), bindings, env, Context::Expression(exec_ctx))?,
-                expand_sexpr(&consequent.clone(), bindings, env, Context::Expression(exec_ctx))?,
-                expand_sexpr(&alternate.clone(), bindings, env, Context::Expression(exec_ctx))?,
+                expand_sexpr(&check.clone(), bindings, env, Context::Expression)?,
+                expand_sexpr(&consequent.clone(), bindings, env, Context::Expression)?,
+                expand_sexpr(&alternate.clone(), bindings, env, Context::Expression)?,
             ) => sexpr).unwrap())
         },
 
         (iif, check, consequent) => {
             Ok(template_sexpr!((
                 iif.clone(),
-                expand_sexpr(&check.clone(), bindings, env, Context::Expression(exec_ctx))?,
-                expand_sexpr(&consequent.clone(), bindings, env, Context::Expression(exec_ctx))?,
+                expand_sexpr(&check.clone(), bindings, env, Context::Expression)?,
+                expand_sexpr(&consequent.clone(), bindings, env, Context::Expression)?,
             ) => sexpr).unwrap())
         },
 
@@ -241,43 +204,25 @@ fn expand_begin(
             reason: "Invalid 'begin' form: expected at least one expression".to_owned(),
         });
     }
-    Ok(
-        SExpr::cons(
-            first(sexpr),
-            try_map(&rest(sexpr), |sub_sexpr| {
-                expand_sexpr(sub_sexpr, bindings, env, ctx)
-            })?,
-        )
-        .update_span(sexpr.get_span()),
+    Ok(SExpr::cons(
+        first(sexpr),
+        try_map(&rest(sexpr), |sub_sexpr| {
+            expand_sexpr(sub_sexpr, bindings, env, ctx)
+        })?,
     )
+    .update_span(sexpr.get_span()))
 }
 
-fn expand_set(
-    sexpr: &SExpr,
-    bindings: &mut Bindings,
-    env: &mut Env,
-    exec_ctx: ExecContext,
-) -> Result<SExpr> {
-    if_let_sexpr! {(set, var @ SExpr::Id(id, span), exp) = sexpr =>
-        let resolved = bindings.resolve_sym(id);
-        match (&resolved, exec_ctx) {
-            (None, ExecContext::Delayed) => {}
-            (None, ExecContext::Immediate) => {
+fn expand_set(sexpr: &SExpr, bindings: &mut Bindings, env: &mut Env) -> Result<SExpr> {
+    if_let_sexpr! {(set, var @ SExpr::Id(id, _), exp) = sexpr =>
+        if let Some(resolved) = bindings.resolve_sym(id)
+            && (Bindings::CORE_FORMS.contains(&resolved.0.as_str()) || Bindings::CORE_PRIMITIVES.contains(&resolved.0.as_str())) {
                 return Err(CompilationError {
-                    span: *span,
-                    reason: format!("Unbound identifier: '{}'", id),
+                    span: sexpr.get_span(),
+                    reason: format!("Cannot mutate core forms/primatives '{}'", id),
                 })
             }
-            (Some(resolved), _)  => {
-                if Bindings::CORE_FORMS.contains(&resolved.0.as_str()) || Bindings::CORE_PRIMITIVES.contains(&resolved.0.as_str()) {
-                    return Err(CompilationError {
-                        span: sexpr.get_span(),
-                        reason: format!("Cannot mutate core form/primatives '{}'", id),
-                    })
-                }
-            }
-        }
-        let exp = expand_sexpr(exp, bindings, env, Context::Expression(exec_ctx))?;
+        let exp = expand_sexpr(exp, bindings, env, Context::Expression)?;
         return Ok(template_sexpr!((set.clone(), var.clone(), exp) => sexpr).unwrap());
     }
     Err(CompilationError {
@@ -293,7 +238,7 @@ fn expand_define(
     ctx: Context,
 ) -> Result<SExpr> {
     if_let_sexpr! {(define, var @ SExpr::Id(id, _), exp) = sexpr =>
-        if matches!(ctx, Context::Expression(_)) {
+        if matches!(ctx, Context::Expression) {
             return Err(CompilationError {
                 span: sexpr.get_span(),
                 reason: "'define' is not allowed in an expression context".to_owned(),
@@ -303,7 +248,7 @@ fn expand_define(
             let binding = bindings.gen_sym(id);
             bindings.add_binding(id, &binding);
         }
-        let exp = expand_sexpr(exp, bindings, env, Context::Expression(ctx.exec_context()))?;
+        let exp = expand_sexpr(exp, bindings, env, Context::Expression)?;
         return Ok(template_sexpr!((define.clone(), var.clone(), exp) => sexpr).unwrap());
     }
     Err(CompilationError {
@@ -407,7 +352,7 @@ fn expand_lambda(sexpr: &SExpr, bindings: &mut Bindings, env: &mut Env) -> Resul
                 }
             };
 
-            let body = expand_body(&body.add_scope(scope_id), bindings, env, ExecContext::Delayed)?;
+            let body = expand_body(&body.add_scope(scope_id), bindings, env)?;
             Ok(template_sexpr!((lambda.clone(), args, ..body) => sexpr).unwrap())
         },
 
@@ -426,7 +371,7 @@ fn expand_lambda(sexpr: &SExpr, bindings: &mut Bindings, env: &mut Env) -> Resul
             let binding = bindings.gen_sym(id);
             bindings.add_binding(id, &binding);
 
-            let body = expand_body(&body.add_scope(scope_id), bindings, env, ExecContext::Delayed)?;
+            let body = expand_body(&body.add_scope(scope_id), bindings, env)?;
             Ok(template_sexpr!((lambda.clone(), arg, ..body) => sexpr).unwrap())
         },
 
@@ -439,12 +384,7 @@ fn expand_lambda(sexpr: &SExpr, bindings: &mut Bindings, env: &mut Env) -> Resul
     }
 }
 
-fn expand_body(
-    body: &SExpr,
-    bindings: &mut Bindings,
-    env: &mut Env,
-    exec_ctx: ExecContext,
-) -> Result<SExpr> {
+fn expand_body(body: &SExpr, bindings: &mut Bindings, env: &mut Env) -> Result<SExpr> {
     let body = body.add_scope(bindings.new_scope_id());
     let (body, phase) = normalize_body(&body, bindings, env, NormalizationPhase::Define)?;
     if phase == NormalizationPhase::Define {
@@ -455,7 +395,7 @@ fn expand_body(
     }
 
     try_map(&body, |sexpr| {
-        expand_sexpr(sexpr, bindings, env, Context::Body(exec_ctx))
+        expand_sexpr(sexpr, bindings, env, Context::Body)
     })
 }
 
@@ -586,33 +526,21 @@ impl fmt::Display for SyntaxBindingForm {
     }
 }
 
-fn expand_let_syntax(
-    sexpr: &SExpr,
-    bindings: &mut Bindings,
-    env: &mut Env,
-    exec_ctx: ExecContext,
-) -> Result<SExpr> {
+fn expand_let_syntax(sexpr: &SExpr, bindings: &mut Bindings, env: &mut Env) -> Result<SExpr> {
     expand_syntax_binding(
         sexpr,
         bindings,
         &mut env.clone(),
         SyntaxBindingForm::LetSyntax,
-        exec_ctx,
     )
 }
 
-fn expand_letrec_syntax(
-    sexpr: &SExpr,
-    bindings: &mut Bindings,
-    env: &mut Env,
-    exec_ctx: ExecContext,
-) -> Result<SExpr> {
+fn expand_letrec_syntax(sexpr: &SExpr, bindings: &mut Bindings, env: &mut Env) -> Result<SExpr> {
     expand_syntax_binding(
         sexpr,
         bindings,
         &mut env.clone(),
         SyntaxBindingForm::LetrecSyntax,
-        exec_ctx,
     )
 }
 
@@ -621,7 +549,6 @@ fn expand_syntax_binding(
     bindings: &mut Bindings,
     env: &mut Env,
     form: SyntaxBindingForm,
-    exec_ctx: ExecContext,
 ) -> Result<SExpr> {
     if_let_sexpr! {(_, (binding_pairs @ ..), body @ ..) = sexpr =>
         if !is_proper_list(binding_pairs) {
@@ -674,7 +601,7 @@ fn expand_syntax_binding(
             })
         })?;
 
-        let body = expand_body(&body.add_scope(scope_id), bindings, env, exec_ctx).map(|body| {
+        let body = expand_body(&body.add_scope(scope_id), bindings, env).map(|body| {
             if len(&body) == 1 {
                 first(&body)
             } else {
