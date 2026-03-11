@@ -222,6 +222,13 @@ fn test_expand_begin_improper_list_reports_error_span() {
 }
 
 #[test]
+fn test_expand_begin_preserves_outer_form_span() {
+    let result = expand_source("(begin 1 2)").unwrap();
+
+    assert_eq!(result.get_span(), Span { lo: 0, hi: 11 });
+}
+
+#[test]
 fn test_shadowed_syntax_rules_is_rejected() {
     let result = expand_source(
         r#"
@@ -1170,8 +1177,14 @@ fn test_quasiquote_nested_preserves_inner_quasiquote() {
     let result = expand_source("(lambda (x) `(a `(b ,,x)))").unwrap();
     // The inner quasiquote stays as syntax; only the outer ,x is expanded
     let output = format!("{result}");
-    assert!(output.contains("(quote quasiquote)"), "Nested quasiquote should preserve inner quasiquote keyword");
-    assert!(output.contains("(quote unquote)"), "Nested quasiquote should preserve inner unquote keyword");
+    assert!(
+        output.contains("(quote quasiquote)"),
+        "Nested quasiquote should preserve inner quasiquote keyword"
+    );
+    assert!(
+        output.contains("(quote unquote)"),
+        "Nested quasiquote should preserve inner unquote keyword"
+    );
 }
 
 #[test]

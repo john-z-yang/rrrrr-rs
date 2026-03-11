@@ -14,7 +14,7 @@ pub(crate) struct Bindings {
 impl Bindings {
     pub(crate) const CORE_SCOPE: ScopeId = 0;
 
-    pub(crate) const CORE_BINDINGS: &[&str] = &[
+    pub(crate) const CORE_FORMS: &[&str] = &[
         "let-syntax",
         "letrec-syntax",
         "syntax-rules",
@@ -29,14 +29,9 @@ impl Bindings {
         "define-syntax",
         "set!",
         "begin",
-        "cons",
-        "list",
-        "append",
-        "list->vector",
-        "first",
-        "second",
-        "rest",
     ];
+
+    pub(crate) const CORE_PRIMITIVES: &[&str] = &["cons", "list", "append", "list->vector"];
 
     pub(crate) fn new() -> Self {
         let mut bindings = Bindings {
@@ -44,7 +39,10 @@ impl Bindings {
             scope_counter: Self::CORE_SCOPE,
             gen_sym_counter: 0,
         };
-        for symbol in Self::CORE_BINDINGS {
+        for symbol in Self::CORE_FORMS {
+            bindings.add_binding(&Id::new(symbol, [Self::CORE_SCOPE]), &Symbol::new(symbol))
+        }
+        for symbol in Self::CORE_PRIMITIVES {
             bindings.add_binding(&Id::new(symbol, [Self::CORE_SCOPE]), &Symbol::new(symbol))
         }
         bindings
@@ -170,7 +168,7 @@ mod tests {
     #[test]
     fn test_resolve_with_core_bindings() {
         let bindings = Bindings::new();
-        for core_binding in Bindings::CORE_BINDINGS {
+        for core_binding in Bindings::CORE_PRIMITIVES {
             assert_eq!(
                 bindings.resolve_sym(&Id::new(core_binding, [Bindings::CORE_SCOPE])),
                 Some(Symbol::new(core_binding))

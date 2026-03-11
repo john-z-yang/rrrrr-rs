@@ -91,6 +91,12 @@ fn expand_id(sexpr: &SExpr, bindings: &mut Bindings, ctx: Context) -> Result<SEx
         unreachable!("expand_id expected an ID");
     };
     match bindings.resolve_sym(id) {
+        Some(symbol) if Bindings::CORE_FORMS.contains(&symbol.0.as_str()) => {
+            Err(CompilationError {
+                span: *span,
+                reason: format!("Invalid '{}' form: not in parentheses", symbol),
+            })
+        }
         Some(_) => Ok(sexpr.clone()),
         None if ctx.exec_context() == ExecContext::Delayed => Ok(sexpr.clone()),
         None => Err(CompilationError {
@@ -155,6 +161,7 @@ fn expand_id_application(
         "define-syntax" => expand_define_syntax(sexpr, bindings, env, ctx),
         "set!" => expand_set(sexpr, bindings, env, exec_ctx),
         "begin" => expand_begin(sexpr, bindings, env, ctx),
+        "if" => expand_if(sexpr, bindings, env, exec_ctx),
         _ => {
             if let Some(transformer) = env.get(&binding) {
                 expand_sexpr(
@@ -181,6 +188,41 @@ fn expand_fn_application(
     })
 }
 
+fn expand_if(
+    sexpr: &SExpr,
+    bindings: &mut Bindings,
+    env: &mut Env,
+    exec_ctx: ExecContext,
+) -> Result<SExpr> {
+    match_sexpr!(
+        sexpr;
+
+        (iif, check, consequent, alternate) => {
+            Ok(template_sexpr!((
+                iif.clone(),
+                expand_sexpr(&check.clone(), bindings, env, Context::Expression(exec_ctx))?,
+                expand_sexpr(&consequent.clone(), bindings, env, Context::Expression(exec_ctx))?,
+                expand_sexpr(&alternate.clone(), bindings, env, Context::Expression(exec_ctx))?,
+            ) => sexpr).unwrap())
+        },
+
+        (iif, check, consequent) => {
+            Ok(template_sexpr!((
+                iif.clone(),
+                expand_sexpr(&check.clone(), bindings, env, Context::Expression(exec_ctx))?,
+                expand_sexpr(&consequent.clone(), bindings, env, Context::Expression(exec_ctx))?,
+            ) => sexpr).unwrap())
+        },
+
+        _ => {
+            Err(CompilationError {
+                span: sexpr.get_span(),
+                reason: "Invalid 'if' form: expected (if <test> <consequent> <alternate>) or (if <test> <consequent>)".to_owned(),
+            })
+        },
+    )
+}
+
 fn expand_begin(
     sexpr: &SExpr,
     bindings: &mut Bindings,
@@ -199,9 +241,15 @@ fn expand_begin(
             reason: "Invalid 'begin' form: expected at least one expression".to_owned(),
         });
     }
-    try_map(sexpr, |sub_sexpr| {
-        expand_sexpr(sub_sexpr, bindings, env, ctx)
-    })
+    Ok(
+        SExpr::cons(
+            first(sexpr),
+            try_map(&rest(sexpr), |sub_sexpr| {
+                expand_sexpr(sub_sexpr, bindings, env, ctx)
+            })?,
+        )
+        .update_span(sexpr.get_span()),
+    )
 }
 
 fn expand_set(
@@ -221,10 +269,10 @@ fn expand_set(
                 })
             }
             (Some(resolved), _)  => {
-                if Bindings::CORE_BINDINGS.contains(&resolved.0.as_str()) {
+                if Bindings::CORE_FORMS.contains(&resolved.0.as_str()) || Bindings::CORE_PRIMITIVES.contains(&resolved.0.as_str()) {
                     return Err(CompilationError {
                         span: sexpr.get_span(),
-                        reason: format!("Cannot mutate core binding '{}'", id),
+                        reason: format!("Cannot mutate core form/primatives '{}'", id),
                     })
                 }
             }
