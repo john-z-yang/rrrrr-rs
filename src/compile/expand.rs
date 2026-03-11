@@ -157,7 +157,7 @@ fn expand_fn_application(sexpr: &SExpr, bindings: &mut Bindings, env: &mut Env) 
 }
 
 fn expand_if(sexpr: &SExpr, bindings: &mut Bindings, env: &mut Env) -> Result<SExpr> {
-    match_sexpr!(
+    match_sexpr! {
         sexpr;
 
         (iif, check, consequent, alternate) => {
@@ -183,7 +183,7 @@ fn expand_if(sexpr: &SExpr, bindings: &mut Bindings, env: &mut Env) -> Result<SE
                 reason: "Invalid 'if' form: expected (if <test> <consequent> <alternate>) or (if <test> <consequent>)".to_owned(),
             })
         },
-    )
+    }
 }
 
 fn expand_begin(
@@ -237,24 +237,48 @@ fn expand_define(
     env: &mut Env,
     ctx: Context,
 ) -> Result<SExpr> {
-    if_let_sexpr! {(define, var @ SExpr::Id(id, _), exp) = sexpr =>
-        if matches!(ctx, Context::Expression) {
-            return Err(CompilationError {
+    match_sexpr!(
+        sexpr;
+
+        (define, var @ SExpr::Id(id, _), exp) => {
+            if matches!(ctx, Context::Expression) {
+                return Err(CompilationError {
+                    span: sexpr.get_span(),
+                    reason: "'define' is not allowed in an expression context".to_owned(),
+                });
+            }
+            if ctx == Context::TopLevel {
+                let binding = bindings.gen_sym(id);
+                bindings.add_binding(id, &binding);
+            }
+            let exp = expand_sexpr(exp, bindings, env, Context::Expression)?;
+            Ok(template_sexpr!((define.clone(), var.clone(), exp) => sexpr).unwrap())
+        },
+
+        (define, (func_name @ SExpr::Id(..), args @ ..), body @ ..) => {
+            expand_sexpr(
+                &make_sexpr!(
+                    define.clone(),
+                    func_name.clone(),
+                    (
+                        SExpr::Id(Id::new("lambda", [Bindings::CORE_SCOPE]), sexpr.get_span()),
+                        (*args).clone(),
+                        ..(*body).clone(),
+                    )
+                ),
+                bindings,
+                env,
+                ctx
+            )
+        },
+
+        _ => {
+            Err(CompilationError {
                 span: sexpr.get_span(),
-                reason: "'define' is not allowed in an expression context".to_owned(),
-            });
-        }
-        if ctx == Context::TopLevel {
-            let binding = bindings.gen_sym(id);
-            bindings.add_binding(id, &binding);
-        }
-        let exp = expand_sexpr(exp, bindings, env, Context::Expression)?;
-        return Ok(template_sexpr!((define.clone(), var.clone(), exp) => sexpr).unwrap());
-    }
-    Err(CompilationError {
-        span: sexpr.get_span(),
-        reason: "Invalid 'define' form".to_owned(),
-    })
+                reason: "Invalid 'define' form".to_owned(),
+            })
+        },
+    )
 }
 
 fn expand_define_syntax(
@@ -490,22 +514,41 @@ fn normalize_body(
 }
 
 fn collect_define(sexpr: &SExpr, bindings: &mut Bindings) -> Result<()> {
-    if_let_sexpr! {(_, var @ SExpr::Id(id, span), _) = sexpr =>
-        let resolved = bindings.resolve_scopes(id);
-        if let Some(resolved) = resolved && resolved == id.scopes {
+    let (id, span) = match_sexpr! {
+        sexpr;
+
+        (_, SExpr::Id(id, span), _) => {
+            (id, span)
+        },
+
+        (_, (SExpr::Id(id, span), _args @ ..), _) => {
+            (id, span)
+        },
+
+        _ => {
             return Err(CompilationError {
-                span: *span,
-                reason: format!("Duplicate definition: '{}' is already bound in this scope", var),
+                span: sexpr.get_span(),
+                reason: "Invalid 'define' form".to_owned(),
             })
-        }
-        let binding = bindings.gen_sym(id);
-        bindings.add_binding(id, &binding);
-        return Ok(());
+        },
+    };
+
+    let resolved = bindings.resolve_scopes(id);
+    if let Some(resolved) = resolved
+        && resolved == id.scopes
+    {
+        return Err(CompilationError {
+            span: *span,
+            reason: format!(
+                "Duplicate definition: '{}' is already bound in this scope",
+                id
+            ),
+        });
     }
-    Err(CompilationError {
-        span: sexpr.get_span(),
-        reason: "Invalid 'define' form".to_owned(),
-    })
+    let binding = bindings.gen_sym(id);
+    bindings.add_binding(id, &binding);
+
+    Ok(())
 }
 
 enum SyntaxBindingForm {

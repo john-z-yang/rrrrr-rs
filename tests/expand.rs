@@ -1319,3 +1319,80 @@ fn test_unquote_splicing_outside_quasiquote_is_error() {
         result
     );
 }
+
+// --- Define function shorthand ---
+
+#[test]
+fn test_expand_define_function_shorthand() {
+    let mut session = Session::new();
+    session_expand(&mut session, "(define (foo x) x)").unwrap();
+    // Binding for foo should persist
+    assert!(session_expand(&mut session, "foo").is_ok());
+}
+
+#[test]
+fn test_expand_define_function_shorthand_dotted_pair() {
+    let mut session = Session::new();
+    session_expand(&mut session, "(define (foo . x) x)").unwrap();
+    assert!(session_expand(&mut session, "foo").is_ok());
+}
+
+#[test]
+fn test_expand_define_function_shorthand_no_args() {
+    let mut session = Session::new();
+    session_expand(&mut session, "(define (foo) 1)").unwrap();
+    assert!(session_expand(&mut session, "foo").is_ok());
+}
+
+#[test]
+fn test_expand_define_function_shorthand_expands_to_lambda() {
+    let result = expand_source("(define (foo x) x)").unwrap();
+    // Expanded form: (define foo (lambda (x) x))
+    let lambda_expr = nth(&result, 2).unwrap();
+    let SExpr::Id(lambda_id, _) = first(&lambda_expr) else {
+        panic!("Expected lambda identifier in expanded form");
+    };
+    assert_eq!(lambda_id.symbol, Symbol::new("lambda"));
+}
+
+#[test]
+fn test_expand_define_function_shorthand_non_id_errors() {
+    assert!(expand_source("(define (42 x) x)").is_err());
+}
+
+#[test]
+fn test_expand_define_function_shorthand_in_expression_context_errors() {
+    assert!(matches!(
+        expand_source("(define x (define (foo) 1))"),
+        Err(CompilationError { reason, .. })
+            if reason == "'define' is not allowed in an expression context"
+    ));
+}
+
+#[test]
+fn test_expand_define_function_shorthand_duplicate_errors() {
+    assert!(expand_source("(lambda () (define (foo x) x) (define (foo y) y) (foo 1))").is_err());
+}
+
+#[test]
+fn test_expand_lambda_internal_define_function_shorthand() {
+    let (session, result) = expand_with_session("(lambda () (define (foo x) x) (foo 1))");
+    let result = result.unwrap();
+
+    // Position 2 is the define form, position 1 within it is the defined var
+    let defined_var = nth(&nth(&result, 2).unwrap(), 1).unwrap();
+    // Position 3 is the body expression (foo 1), position 0 is the function ref
+    let body_ref = first(&nth(&result, 3).unwrap());
+
+    let SExpr::Id(defined_var, _) = defined_var else {
+        panic!("Expected define variable to be an identifier");
+    };
+    let SExpr::Id(body_ref, _) = body_ref else {
+        panic!("Expected body function reference to be an identifier");
+    };
+    assert_eq!(
+        session.resolve_sym(&defined_var).unwrap(),
+        session.resolve_sym(&body_ref).unwrap(),
+        "Expected body reference to resolve to function shorthand define"
+    );
+}

@@ -43,20 +43,7 @@ macro_rules! if_let_sexpr {
         }
     };
 
-    // Handles nested lists i.e. (('a, 'b, 'c))
-    (
-        (($($inner:tt)*) $(, $($rest:tt)*)?) = $targ:expr => $($handler:tt)*
-    ) => {
-        if let $crate::compile::sexpr::SExpr::Cons(cons, _) = $targ {
-            if_let_sexpr! {($($inner)*) = cons.car.as_ref() => {
-                if_let_sexpr! {($($($rest)*)?) = cons.cdr.as_ref() =>
-                    $($handler)*
-                }
-            }}
-        };
-    };
-
-    // Matches any list
+    // Any list
     (
         (..) = $targ:expr => $($handler:tt)*
     ) => {
@@ -67,7 +54,7 @@ macro_rules! if_let_sexpr {
         };
     };
 
-    // Matches any list, assign the list to an identifier
+    // Any list, assign the list to an identifier
     (
         ($id:ident @ ..) = $targ:expr => $($handler:tt)*
     ) => {
@@ -80,18 +67,48 @@ macro_rules! if_let_sexpr {
         }
     };
 
-    // Wildcard pattern `_` for first element in a list
+
+    // Nested list with tail capture i.e. ((a, b), rest @ ..)
     (
-        (_ $(, $($rest:tt)*)?) = $targ:expr => $($handler:tt)*
+        (($($inner:tt)*), $id:ident @ ..) = $targ:expr => $($handler:tt)*
     ) => {
         if let $crate::compile::sexpr::SExpr::Cons(cons, _) = $targ {
-            if_let_sexpr! {($($($rest)*)?) = cons.cdr.as_ref() =>
-                $($handler)*
+            if_let_sexpr! {($($inner)*) = cons.car.as_ref() => {
+                if_let_sexpr! {@tail_pos ($id @ ..) = cons.cdr.as_ref() =>
+                    $($handler)*
+                }
+            }}
+        };
+    };
+
+    // Nested list i.e. ((a, b), c, d)
+    (
+        (($($inner:tt)*) $(, $($rest:tt)*)?) = $targ:expr => $($handler:tt)*
+    ) => {
+        if let $crate::compile::sexpr::SExpr::Cons(cons, _) = $targ {
+            if_let_sexpr! {($($inner)*) = cons.car.as_ref() => {
+                if_let_sexpr! {($($($rest)*)?) = cons.cdr.as_ref() =>
+                    $($handler)*
+                }
+            }}
+        };
+    };
+
+    // Structural pattern with tail capture i.e. (a, rest @ ..)
+    (
+        ($pat:pat, $id:ident @ ..) = $targ:expr => $($handler:tt)*
+    ) => {
+        if let $crate::compile::sexpr::SExpr::Cons(cons, _) = $targ {
+            #[allow(irrefutable_let_patterns)]
+            if let $pat = cons.car.as_ref() {
+                if_let_sexpr! {@tail_pos ($id @ ..) = cons.cdr.as_ref() =>
+                    $($handler)*
+                }
             }
         };
     };
 
-    // Match a structural pattern for first element in a list i.e. `(Symbol(var_name), 'b, 'c)`
+    // Structural pattern i.e. (a, b, c)
     (
         ($pat:pat $(, $($rest:tt)*)?) = $targ:expr => $($handler:tt)*
     ) => {
@@ -103,6 +120,15 @@ macro_rules! if_let_sexpr {
                 }
             }
         };
+    };
+
+    // Internal rule: we came from (<some pattern>, $id:ident @ ..) and we just matched the
+    // previous car. Now $id:ident @ .. should match anything
+    (
+        @tail_pos ($id:ident @ ..) = $targ:expr => $($handler:tt)*
+    ) => {
+        let $id = &$targ;
+        $($handler)*
     };
 }
 
