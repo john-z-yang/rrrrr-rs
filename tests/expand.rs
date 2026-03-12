@@ -1408,7 +1408,7 @@ fn test_expand_macro_expansion_depth_limit() {
   (foo))
 "),
         Err(CompilationError { reason, .. })
-            if reason == "Macro expansion depth limit exceeded (512) while expanding 'foo'"
+            if reason == "Macro expansion depth limit exceeded (1024) while expanding 'foo'"
     ));
 }
 
@@ -1425,7 +1425,7 @@ fn test_expand_macro_expansion_mutual_depth_limit() {
   (foo))
 "),
         Err(CompilationError { reason, .. })
-            if reason == "Macro expansion depth limit exceeded (512) while expanding 'bar'"
+            if reason == "Macro expansion depth limit exceeded (1024) while expanding 'bar'"
     ));
 }
 
@@ -1451,6 +1451,6 @@ fn test_expand_macro_expansion_depth_limit_via_body() {
     assert!(matches!(
         result,
         Err(CompilationError { reason, .. })
-            if reason == "Macro expansion depth limit exceeded (512) while expanding 'loop'"
+            if reason == "Macro expansion depth limit exceeded (1024) while expanding 'loop'"
     ));
 }
