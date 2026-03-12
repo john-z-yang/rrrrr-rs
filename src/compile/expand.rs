@@ -25,6 +25,8 @@ use crate::{
 
 type Env = HashMap<Symbol, Arc<Transformer>>;
 
+const MAX_MACRO_DEPTH: u16 = 1024;
+
 pub fn introduce(sexpr: &SExpr) -> SExpr {
     sexpr.add_scope(Bindings::CORE_SCOPE)
 }
@@ -32,7 +34,7 @@ pub fn introduce(sexpr: &SExpr) -> SExpr {
 pub(crate) fn expand(sexpr: &SExpr, bindings: &mut Bindings, env: &mut Env) -> Result<SExpr> {
     let mut bindings_snapshot = bindings.clone();
     let mut env_snapshot = env.clone();
-    let result = expand_sexpr(sexpr, bindings, env, Context::TopLevel);
+    let result = expand_sexpr(sexpr, bindings, env, Context::new(SyntaxContext::TopLevel));
     if result.is_err() {
         mem::swap(&mut bindings_snapshot, bindings);
         mem::swap(&mut env_snapshot, env);
@@ -41,7 +43,30 @@ pub(crate) fn expand(sexpr: &SExpr, bindings: &mut Bindings, env: &mut Env) -> R
 }
 
 #[derive(PartialEq, Clone, Copy, Eq, Hash, Debug)]
-enum Context {
+struct Context {
+    syntax_ctx: SyntaxContext,
+    depth: u16,
+}
+
+impl Context {
+    fn new(syntax_ctx: SyntaxContext) -> Self {
+        Self {
+            syntax_ctx,
+            depth: 0,
+        }
+    }
+
+    fn with_syntax_ctx(self, syntax_ctx: SyntaxContext) -> Self {
+        Self { syntax_ctx, ..self }
+    }
+
+    fn increment_depth(&mut self) {
+        self.depth += 1;
+    }
+}
+
+#[derive(PartialEq, Clone, Copy, Eq, Hash, Debug)]
+enum SyntaxContext {
     TopLevel,
     Expression,
     Body,
@@ -66,7 +91,7 @@ fn expand_sexpr(
         return expand_id_application(sexpr, bindings, env, ctx);
     };
     if_let_sexpr! {(..) = sexpr =>
-        return expand_fn_application(sexpr, bindings, env);
+        return expand_fn_application(sexpr, bindings, env, ctx);
     };
     Ok(sexpr.clone())
 }
@@ -91,7 +116,17 @@ fn apply_transformer(
     transformer: &Transformer,
     name: &Id,
     bindings: &mut Bindings,
+    ctx: &mut Context,
 ) -> Result<SExpr> {
+    ctx.increment_depth();
+    if ctx.depth >= MAX_MACRO_DEPTH {
+        return Err(CompilationError {
+            span: sexpr.get_span(),
+            reason: format!(
+                "Macro expansion depth limit exceeded ({MAX_MACRO_DEPTH}) while expanding '{name}'"
+            ),
+        });
+    }
     let scope_id = bindings.new_scope_id();
     let scoped = sexpr.add_scope(scope_id);
     let transformed =
@@ -108,13 +143,13 @@ fn expand_id_application(
     sexpr: &SExpr,
     bindings: &mut Bindings,
     env: &mut Env,
-    ctx: Context,
+    mut ctx: Context,
 ) -> Result<SExpr> {
     let (id, binding) = match try_first(sexpr) {
         Some(SExpr::Id(id, _)) => match bindings.resolve_sym(&id) {
             Some(binding) => (id, binding),
             None => {
-                return expand_fn_application(sexpr, bindings, env);
+                return expand_fn_application(sexpr, bindings, env, ctx);
             }
         },
         _ => unreachable!("expand_id_application expected first element to be an ID"),
@@ -127,53 +162,64 @@ fn expand_id_application(
             span: sexpr.get_span(),
             reason: format!("Invalid '{}' form: not in 'quasiquote'", binding),
         }),
-        "let-syntax" => expand_let_syntax(sexpr, bindings, env),
-        "letrec-syntax" => expand_letrec_syntax(sexpr, bindings, env),
-        "lambda" => expand_lambda(sexpr, bindings, env),
+        "let-syntax" => expand_let_syntax(sexpr, bindings, env, ctx),
+        "letrec-syntax" => expand_letrec_syntax(sexpr, bindings, env, ctx),
+        "lambda" => expand_lambda(sexpr, bindings, env, ctx),
         "define" => expand_define(sexpr, bindings, env, ctx),
         "define-syntax" => expand_define_syntax(sexpr, bindings, env, ctx),
-        "set!" => expand_set(sexpr, bindings, env),
+        "set!" => expand_set(sexpr, bindings, env, ctx),
         "begin" => expand_begin(sexpr, bindings, env, ctx),
-        "if" => expand_if(sexpr, bindings, env),
+        "if" => expand_if(sexpr, bindings, env, ctx),
         _ => {
             if let Some(transformer) = env.get(&binding) {
                 expand_sexpr(
-                    &apply_transformer(sexpr, transformer, &id, bindings)?,
+                    &apply_transformer(sexpr, transformer, &id, bindings, &mut ctx)?,
                     bindings,
                     env,
                     ctx,
                 )
             } else {
-                expand_fn_application(sexpr, bindings, env)
+                expand_fn_application(sexpr, bindings, env, ctx)
             }
         }
     }
 }
 
-fn expand_fn_application(sexpr: &SExpr, bindings: &mut Bindings, env: &mut Env) -> Result<SExpr> {
+fn expand_fn_application(
+    sexpr: &SExpr,
+    bindings: &mut Bindings,
+    env: &mut Env,
+    ctx: Context,
+) -> Result<SExpr> {
     try_map(sexpr, |sub_sexpr| {
-        expand_sexpr(sub_sexpr, bindings, env, Context::Expression)
+        expand_sexpr(
+            sub_sexpr,
+            bindings,
+            env,
+            ctx.with_syntax_ctx(SyntaxContext::Expression),
+        )
     })
 }
 
-fn expand_if(sexpr: &SExpr, bindings: &mut Bindings, env: &mut Env) -> Result<SExpr> {
+fn expand_if(sexpr: &SExpr, bindings: &mut Bindings, env: &mut Env, ctx: Context) -> Result<SExpr> {
+    let expr_ctx = ctx.with_syntax_ctx(SyntaxContext::Expression);
     match_sexpr! {
         sexpr;
 
         (iif, check, consequent, alternate) => {
             Ok(template_sexpr!((
                 iif.clone(),
-                expand_sexpr(&check.clone(), bindings, env, Context::Expression)?,
-                expand_sexpr(&consequent.clone(), bindings, env, Context::Expression)?,
-                expand_sexpr(&alternate.clone(), bindings, env, Context::Expression)?,
+                expand_sexpr(&check.clone(), bindings, env, expr_ctx)?,
+                expand_sexpr(&consequent.clone(), bindings, env, expr_ctx)?,
+                expand_sexpr(&alternate.clone(), bindings, env, expr_ctx)?,
             ) => sexpr).unwrap())
         },
 
         (iif, check, consequent) => {
             Ok(template_sexpr!((
                 iif.clone(),
-                expand_sexpr(&check.clone(), bindings, env, Context::Expression)?,
-                expand_sexpr(&consequent.clone(), bindings, env, Context::Expression)?,
+                expand_sexpr(&check.clone(), bindings, env, expr_ctx)?,
+                expand_sexpr(&consequent.clone(), bindings, env, expr_ctx)?,
             ) => sexpr).unwrap())
         },
 
@@ -213,7 +259,12 @@ fn expand_begin(
     .update_span(sexpr.get_span()))
 }
 
-fn expand_set(sexpr: &SExpr, bindings: &mut Bindings, env: &mut Env) -> Result<SExpr> {
+fn expand_set(
+    sexpr: &SExpr,
+    bindings: &mut Bindings,
+    env: &mut Env,
+    ctx: Context,
+) -> Result<SExpr> {
     if_let_sexpr! {(set, var @ SExpr::Id(id, _), exp) = sexpr =>
         if let Some(resolved) = bindings.resolve_sym(id)
             && (Bindings::CORE_FORMS.contains(&resolved.0.as_str()) || Bindings::CORE_PRIMITIVES.contains(&resolved.0.as_str())) {
@@ -222,7 +273,7 @@ fn expand_set(sexpr: &SExpr, bindings: &mut Bindings, env: &mut Env) -> Result<S
                     reason: format!("Cannot mutate core forms/primatives '{}'", id),
                 })
             }
-        let exp = expand_sexpr(exp, bindings, env, Context::Expression)?;
+        let exp = expand_sexpr(exp, bindings, env, ctx.with_syntax_ctx(SyntaxContext::Expression))?;
         return Ok(template_sexpr!((set.clone(), var.clone(), exp) => sexpr).unwrap());
     }
     Err(CompilationError {
@@ -241,17 +292,17 @@ fn expand_define(
         sexpr;
 
         (define, var @ SExpr::Id(id, _), exp) => {
-            if matches!(ctx, Context::Expression) {
+            if matches!(ctx.syntax_ctx, SyntaxContext::Expression) {
                 return Err(CompilationError {
                     span: sexpr.get_span(),
                     reason: "'define' is not allowed in an expression context".to_owned(),
                 });
             }
-            if ctx == Context::TopLevel {
+            if ctx.syntax_ctx == SyntaxContext::TopLevel {
                 let binding = bindings.gen_sym(id);
                 bindings.add_binding(id, &binding);
             }
-            let exp = expand_sexpr(exp, bindings, env, Context::Expression)?;
+            let exp = expand_sexpr(exp, bindings, env, ctx.with_syntax_ctx(SyntaxContext::Expression))?;
             Ok(template_sexpr!((define.clone(), var.clone(), exp) => sexpr).unwrap())
         },
 
@@ -288,7 +339,7 @@ fn expand_define_syntax(
     ctx: Context,
 ) -> Result<SExpr> {
     if_let_sexpr! {(_, SExpr::Id(id, _), transformer_spec) = sexpr =>
-        if ctx != Context::TopLevel {
+        if ctx.syntax_ctx != SyntaxContext::TopLevel {
             return Err(CompilationError {
                 span: sexpr.get_span(),
                 reason: "'define-syntax' is only allowed in the top level context".to_owned(),
@@ -317,7 +368,12 @@ fn expand_define_syntax(
     })
 }
 
-fn expand_lambda(sexpr: &SExpr, bindings: &mut Bindings, env: &mut Env) -> Result<SExpr> {
+fn expand_lambda(
+    sexpr: &SExpr,
+    bindings: &mut Bindings,
+    env: &mut Env,
+    ctx: Context,
+) -> Result<SExpr> {
     match_sexpr! {
         sexpr;
 
@@ -376,7 +432,7 @@ fn expand_lambda(sexpr: &SExpr, bindings: &mut Bindings, env: &mut Env) -> Resul
                 }
             };
 
-            let body = expand_body(&body.add_scope(scope_id), bindings, env)?;
+            let body = expand_body(&body.add_scope(scope_id), bindings, env, ctx)?;
             Ok(template_sexpr!((lambda.clone(), args, ..body) => sexpr).unwrap())
         },
 
@@ -395,7 +451,7 @@ fn expand_lambda(sexpr: &SExpr, bindings: &mut Bindings, env: &mut Env) -> Resul
             let binding = bindings.gen_sym(id);
             bindings.add_binding(id, &binding);
 
-            let body = expand_body(&body.add_scope(scope_id), bindings, env)?;
+            let body = expand_body(&body.add_scope(scope_id), bindings, env, ctx)?;
             Ok(template_sexpr!((lambda.clone(), arg, ..body) => sexpr).unwrap())
         },
 
@@ -408,9 +464,14 @@ fn expand_lambda(sexpr: &SExpr, bindings: &mut Bindings, env: &mut Env) -> Resul
     }
 }
 
-fn expand_body(body: &SExpr, bindings: &mut Bindings, env: &mut Env) -> Result<SExpr> {
+fn expand_body(
+    body: &SExpr,
+    bindings: &mut Bindings,
+    env: &mut Env,
+    mut ctx: Context,
+) -> Result<SExpr> {
     let body = body.add_scope(bindings.new_scope_id());
-    let (body, phase) = normalize_body(&body, bindings, env, NormalizationPhase::Define)?;
+    let (body, phase) = normalize_body(&body, bindings, env, NormalizationPhase::Define, &mut ctx)?;
     if phase == NormalizationPhase::Define {
         return Err(CompilationError {
             span: body.get_span(),
@@ -419,7 +480,12 @@ fn expand_body(body: &SExpr, bindings: &mut Bindings, env: &mut Env) -> Result<S
     }
 
     try_map(&body, |sexpr| {
-        expand_sexpr(sexpr, bindings, env, Context::Body)
+        expand_sexpr(
+            sexpr,
+            bindings,
+            env,
+            ctx.with_syntax_ctx(SyntaxContext::Body),
+        )
     })
 }
 
@@ -439,6 +505,7 @@ fn partial_expand_body(
     form: &SExpr,
     bindings: &mut Bindings,
     env: &Env,
+    ctx: &mut Context,
 ) -> Result<(SExpr, BodyFormKind)> {
     let mut form = form.clone();
     loop {
@@ -455,7 +522,7 @@ fn partial_expand_body(
                 let Some(transformer) = env.get(&binding) else {
                     return Ok((form, BodyFormKind::Other));
                 };
-                form = apply_transformer(&form, transformer, &id, bindings)?;
+                form = apply_transformer(&form, transformer, &id, bindings, ctx)?;
             }
         }
     }
@@ -466,12 +533,13 @@ fn normalize_body(
     bindings: &mut Bindings,
     env: &Env,
     phase: NormalizationPhase,
+    ctx: &mut Context,
 ) -> Result<(SExpr, NormalizationPhase)> {
     let SExpr::Cons(cons, span) = body else {
         return Ok((body.clone(), phase));
     };
 
-    let (expanded_car, kind) = partial_expand_body(&cons.car, bindings, env)?;
+    let (expanded_car, kind) = partial_expand_body(&cons.car, bindings, env, ctx)?;
 
     match kind {
         BodyFormKind::Define => {
@@ -483,7 +551,7 @@ fn normalize_body(
             }
             collect_define(&expanded_car, bindings)?;
             let (cdr, next_phase) =
-                normalize_body(&cons.cdr, bindings, env, NormalizationPhase::Define)?;
+                normalize_body(&cons.cdr, bindings, env, NormalizationPhase::Define, ctx)?;
             Ok((SExpr::Cons(Cons::new(expanded_car, cdr), *span), next_phase))
         }
         BodyFormKind::Begin => {
@@ -499,12 +567,14 @@ fn normalize_body(
                     reason: "Invalid 'begin' form: expected at least one expression".to_owned(),
                 });
             }
-            let (head, next_phase) = normalize_body(&rest(&expanded_car), bindings, env, phase)?;
-            let (remaining, next_phase) = normalize_body(&cons.cdr, bindings, env, next_phase)?;
+            let (head, next_phase) =
+                normalize_body(&rest(&expanded_car), bindings, env, phase, ctx)?;
+            let (remaining, next_phase) =
+                normalize_body(&cons.cdr, bindings, env, next_phase, ctx)?;
             Ok((append(&head, &remaining), next_phase))
         }
         BodyFormKind::Other => {
-            let (cdr, _) = normalize_body(&cons.cdr, bindings, env, NormalizationPhase::Body)?;
+            let (cdr, _) = normalize_body(&cons.cdr, bindings, env, NormalizationPhase::Body, ctx)?;
             Ok((
                 SExpr::Cons(Cons::new(expanded_car, cdr), *span),
                 NormalizationPhase::Body,
@@ -569,21 +639,33 @@ impl fmt::Display for SyntaxBindingForm {
     }
 }
 
-fn expand_let_syntax(sexpr: &SExpr, bindings: &mut Bindings, env: &mut Env) -> Result<SExpr> {
+fn expand_let_syntax(
+    sexpr: &SExpr,
+    bindings: &mut Bindings,
+    env: &mut Env,
+    ctx: Context,
+) -> Result<SExpr> {
     expand_syntax_binding(
         sexpr,
         bindings,
         &mut env.clone(),
         SyntaxBindingForm::LetSyntax,
+        ctx,
     )
 }
 
-fn expand_letrec_syntax(sexpr: &SExpr, bindings: &mut Bindings, env: &mut Env) -> Result<SExpr> {
+fn expand_letrec_syntax(
+    sexpr: &SExpr,
+    bindings: &mut Bindings,
+    env: &mut Env,
+    ctx: Context,
+) -> Result<SExpr> {
     expand_syntax_binding(
         sexpr,
         bindings,
         &mut env.clone(),
         SyntaxBindingForm::LetrecSyntax,
+        ctx,
     )
 }
 
@@ -592,6 +674,7 @@ fn expand_syntax_binding(
     bindings: &mut Bindings,
     env: &mut Env,
     form: SyntaxBindingForm,
+    ctx: Context,
 ) -> Result<SExpr> {
     if_let_sexpr! {(_, (binding_pairs @ ..), body @ ..) = sexpr =>
         if !is_proper_list(binding_pairs) {
@@ -644,7 +727,7 @@ fn expand_syntax_binding(
             })
         })?;
 
-        let body = expand_body(&body.add_scope(scope_id), bindings, env).map(|body| {
+        let body = expand_body(&body.add_scope(scope_id), bindings, env, ctx).map(|body| {
             if len(&body) == 1 {
                 first(&body)
             } else {

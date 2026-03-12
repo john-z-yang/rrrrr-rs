@@ -1396,3 +1396,61 @@ fn test_expand_lambda_internal_define_function_shorthand() {
         "Expected body reference to resolve to function shorthand define"
     );
 }
+
+#[test]
+fn test_expand_macro_expansion_depth_limit() {
+    assert!(matches!(
+        expand_source(
+"
+(letrec-syntax
+    ((foo (syntax-rules ()
+            ((_) (foo)))))
+  (foo))
+"),
+        Err(CompilationError { reason, .. })
+            if reason == "Macro expansion depth limit exceeded (512) while expanding 'foo'"
+    ));
+}
+
+#[test]
+fn test_expand_macro_expansion_mutual_depth_limit() {
+    assert!(matches!(
+        expand_source(
+"
+(letrec-syntax
+    ((foo (syntax-rules ()
+            ((_) (bar))))
+     (bar (syntax-rules ()
+            ((_) (foo)))))
+  (foo))
+"),
+        Err(CompilationError { reason, .. })
+            if reason == "Macro expansion depth limit exceeded (512) while expanding 'bar'"
+    ));
+}
+
+#[test]
+fn test_expand_macro_expansion_depth_limit_via_body() {
+    // Each depth level adds many Rust frames (lambda wrapping), so use a larger stack.
+    let result = std::thread::Builder::new()
+        .stack_size(32 * 1024 * 1024)
+        .spawn(|| {
+            expand_source(
+                "
+(letrec-syntax
+    ((loop (syntax-rules ()
+             ((_) ((lambda () (loop)))))))
+  (loop))
+",
+            )
+        })
+        .unwrap()
+        .join()
+        .unwrap();
+
+    assert!(matches!(
+        result,
+        Err(CompilationError { reason, .. })
+            if reason == "Macro expansion depth limit exceeded (512) while expanding 'loop'"
+    ));
+}
