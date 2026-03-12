@@ -1,7 +1,7 @@
 use std::{
     collections::{HashMap, HashSet},
     fmt, mem,
-    sync::Arc,
+    rc::Rc,
 };
 
 use super::{
@@ -23,7 +23,7 @@ use crate::{
     if_let_sexpr, make_sexpr, match_sexpr, template_sexpr,
 };
 
-type Env = HashMap<Symbol, Arc<Transformer>>;
+type Env = HashMap<Symbol, Rc<Transformer>>;
 
 const MAX_MACRO_DEPTH: u16 = 1024;
 
@@ -358,7 +358,7 @@ fn expand_define_syntax(
         let transformer = Transformer::new(transformer_spec)?;
         let binding = bindings.gen_sym(id);
         bindings.add_binding(id, &binding);
-        env.insert(binding.clone(), Arc::new(transformer));
+        env.insert(binding.clone(), Rc::new(transformer));
 
         return Ok(sexpr.clone());
     }
@@ -718,7 +718,7 @@ fn expand_syntax_binding(
                     });
                 }
                 let transformer = Transformer::new(transformer_spec)?;
-                env.insert(binding.clone(), Arc::new(transformer));
+                env.insert(binding.clone(), Rc::new(transformer));
                 return Ok(());
             }
             Err(CompilationError {
@@ -930,7 +930,7 @@ mod tests {
     fn expand_source(
         source: &str,
         bindings: &mut Bindings,
-        env: &mut HashMap<Symbol, Arc<Transformer>>,
+        env: &mut HashMap<Symbol, Rc<Transformer>>,
     ) -> Result<SExpr> {
         let expr = parse(&tokenize(source).unwrap()).unwrap();
         expand(&introduce(&expr), bindings, env)
@@ -956,7 +956,7 @@ mod tests {
     #[test]
     fn test_expand_lambda() {
         let mut bindings = Bindings::new();
-        let mut env = HashMap::<Symbol, Arc<Transformer>>::new();
+        let mut env = HashMap::<Symbol, Rc<Transformer>>::new();
         let lambda_expr = parse(&tokenize("(lambda (x y) (cons x y))").unwrap()).unwrap();
         let result = expand(&introduce(&lambda_expr), &mut bindings, &mut env).unwrap();
         let span = Span { lo: 0, hi: 0 };
@@ -978,7 +978,7 @@ mod tests {
     #[test]
     fn test_expand_maintains_span() {
         let mut bindings = Bindings::new();
-        let mut env = HashMap::<Symbol, Arc<Transformer>>::new();
+        let mut env = HashMap::<Symbol, Rc<Transformer>>::new();
         let src = "
         (lambda
           (x y)
@@ -1011,7 +1011,7 @@ mod tests {
     #[test]
     fn test_expand_lambda_recursive() {
         let mut bindings = Bindings::new();
-        let mut env = HashMap::<Symbol, Arc<Transformer>>::new();
+        let mut env = HashMap::<Symbol, Rc<Transformer>>::new();
         let lambda_expr = parse(
             &tokenize(
                 r#"
@@ -1049,7 +1049,7 @@ mod tests {
     #[test]
     fn test_expand_lambda_dotted_params() {
         let mut bindings = Bindings::new();
-        let mut env = HashMap::<Symbol, Arc<Transformer>>::new();
+        let mut env = HashMap::<Symbol, Rc<Transformer>>::new();
         let lambda_expr = parse(&tokenize("(lambda (x y . z) (cons x z))").unwrap()).unwrap();
         let result = expand(&introduce(&lambda_expr), &mut bindings, &mut env).unwrap();
         let span = Span { lo: 0, hi: 0 };
@@ -1072,7 +1072,7 @@ mod tests {
     #[test]
     fn test_expand_lambda_symbol_param() {
         let mut bindings = Bindings::new();
-        let mut env = HashMap::<Symbol, Arc<Transformer>>::new();
+        let mut env = HashMap::<Symbol, Rc<Transformer>>::new();
         let lambda_expr = parse(&tokenize("(lambda x (cons x x))").unwrap()).unwrap();
         let result = expand(&introduce(&lambda_expr), &mut bindings, &mut env).unwrap();
         let span = Span { lo: 0, hi: 0 };
@@ -1091,7 +1091,7 @@ mod tests {
     #[test]
     fn test_expand_atoms() {
         let mut bindings = Bindings::new();
-        let mut env = HashMap::<Symbol, Arc<Transformer>>::new();
+        let mut env = HashMap::<Symbol, Rc<Transformer>>::new();
         let sexpr = parse(
             &tokenize(
                 r#"
@@ -1137,7 +1137,7 @@ mod tests {
             bindings
                 .resolve_sym(&Id::new("and", [Bindings::CORE_SCOPE]))
                 .unwrap(),
-            Arc::new(transformer),
+            Rc::new(transformer),
         )]);
 
         let sexpr = parse(&tokenize("(and)").unwrap()).unwrap();
@@ -1173,7 +1173,7 @@ mod tests {
             bindings
                 .resolve_sym(&Id::new("and", [Bindings::CORE_SCOPE]))
                 .unwrap(),
-            Arc::new(transformer),
+            Rc::new(transformer),
         )]);
 
         let sexpr = introduce(&parse(&tokenize("(and list)").unwrap()).unwrap());
@@ -1209,7 +1209,7 @@ mod tests {
             bindings
                 .resolve_sym(&Id::new("and", [Bindings::CORE_SCOPE]))
                 .unwrap(),
-            Arc::new(transformer),
+            Rc::new(transformer),
         )]);
 
         let sexpr = parse(&tokenize("(and list list)").unwrap()).unwrap();
@@ -1251,7 +1251,7 @@ mod tests {
             bindings
                 .resolve_sym(&Id::new("and", [Bindings::CORE_SCOPE]))
                 .unwrap(),
-            Arc::new(transformer),
+            Rc::new(transformer),
         )]);
 
         let sexpr = parse(&tokenize("(and #t #t #t #t)").unwrap()).unwrap();
@@ -1315,7 +1315,7 @@ mod tests {
             bindings
                 .resolve_sym(&Id::new("my-macro", [Bindings::CORE_SCOPE]))
                 .unwrap(),
-            Arc::new(transformer),
+            Rc::new(transformer),
         )]);
 
         let sexpr = parse(&tokenize("(my-macro x)").unwrap()).unwrap();
@@ -1375,7 +1375,7 @@ mod tests {
             bindings
                 .resolve_sym(&Id::new("my-or", [Bindings::CORE_SCOPE]))
                 .unwrap(),
-            Arc::new(transformer),
+            Rc::new(transformer),
         )]);
 
         let sexpr = parse(&tokenize("((lambda (temp) (my-or #f temp)) #t)").unwrap()).unwrap();
@@ -1458,7 +1458,7 @@ mod tests {
     #[test]
     fn test_expand_let_syntax_via_or_macro() {
         let mut bindings = Bindings::new();
-        let mut env = HashMap::<Symbol, Arc<Transformer>>::new();
+        let mut env = HashMap::<Symbol, Rc<Transformer>>::new();
         let let_syntax_expr = &parse(
             &tokenize(
                 r#"
@@ -1558,7 +1558,7 @@ mod tests {
     #[test]
     fn test_expand_let_syntax_has_body_ctx() {
         let mut bindings = Bindings::new();
-        let mut env = HashMap::<Symbol, Arc<Transformer>>::new();
+        let mut env = HashMap::<Symbol, Rc<Transformer>>::new();
         let let_syntax_expr = &parse(
             &tokenize(
                 r#"
@@ -1583,7 +1583,7 @@ mod tests {
     #[test]
     fn test_expand_let_syntax_multiple_body_exprs_recursive_defn() {
         let mut bindings = Bindings::new();
-        let mut env = HashMap::<Symbol, Arc<Transformer>>::new();
+        let mut env = HashMap::<Symbol, Rc<Transformer>>::new();
         let let_syntax_expr = &parse(
             &tokenize(
                 r#"
@@ -1630,7 +1630,7 @@ mod tests {
     #[test]
     fn test_expand_let_syntax_multiple_body_exprs_() {
         let mut bindings = Bindings::new();
-        let mut env = HashMap::<Symbol, Arc<Transformer>>::new();
+        let mut env = HashMap::<Symbol, Rc<Transformer>>::new();
         let let_syntax_expr = &parse(
             &tokenize(
                 r#"
@@ -1659,7 +1659,7 @@ mod tests {
     #[test]
     fn test_expand_letrec_syntax_cleans_env_after_success() {
         let mut bindings = Bindings::new();
-        let mut env = HashMap::<Symbol, Arc<Transformer>>::new();
+        let mut env = HashMap::<Symbol, Rc<Transformer>>::new();
         let expr = parse(
             &tokenize(
                 r#"
@@ -1686,7 +1686,7 @@ mod tests {
     #[test]
     fn test_expand_letrec_syntax_cleans_env_on_transformer_spec_error() {
         let mut bindings = Bindings::new();
-        let mut env = HashMap::<Symbol, Arc<Transformer>>::new();
+        let mut env = HashMap::<Symbol, Rc<Transformer>>::new();
         let expr = parse(
             &tokenize(
                 r#"
@@ -1714,7 +1714,7 @@ mod tests {
     #[test]
     fn test_let_syntax_cleans_env_after_success() {
         let mut bindings = Bindings::new();
-        let mut env = HashMap::<Symbol, Arc<Transformer>>::new();
+        let mut env = HashMap::<Symbol, Rc<Transformer>>::new();
         let expr = parse(
             &tokenize(
                 r#"
@@ -1738,7 +1738,7 @@ mod tests {
     #[test]
     fn test_let_syntax_cleans_env_on_transformer_spec_error() {
         let mut bindings = Bindings::new();
-        let mut env = HashMap::<Symbol, Arc<Transformer>>::new();
+        let mut env = HashMap::<Symbol, Rc<Transformer>>::new();
         let expr = parse(
             &tokenize(
                 r#"
@@ -1766,7 +1766,7 @@ mod tests {
     #[test]
     fn test_expand_failed_expansion_does_not_affect_bindings_or_env() {
         let mut bindings = Bindings::new();
-        let mut env = HashMap::<Symbol, Arc<Transformer>>::new();
+        let mut env = HashMap::<Symbol, Rc<Transformer>>::new();
 
         // A begin with a define followed by an invalid form.
         // The define will mutate bindings before the error is hit.
@@ -1783,7 +1783,7 @@ mod tests {
     #[test]
     fn test_expand_failed_define_syntax_does_not_persist_transformer() {
         let mut bindings = Bindings::new();
-        let mut env = HashMap::<Symbol, Arc<Transformer>>::new();
+        let mut env = HashMap::<Symbol, Rc<Transformer>>::new();
 
         // define-syntax followed by a use of the macro in a begin that also has an error
         let result = expand_source(
@@ -1807,7 +1807,7 @@ mod tests {
     #[test]
     fn test_expand_quasiquote_atom() {
         let mut bindings = Bindings::new();
-        let mut env = HashMap::<Symbol, Arc<Transformer>>::new();
+        let mut env = HashMap::<Symbol, Rc<Transformer>>::new();
         let result = expand_source("`42", &mut bindings, &mut env).unwrap();
         let span = Span { lo: 0, hi: 0 };
         let expected = make_sexpr!(
@@ -1820,7 +1820,7 @@ mod tests {
     #[test]
     fn test_expand_quasiquote_empty_list() {
         let mut bindings = Bindings::new();
-        let mut env = HashMap::<Symbol, Arc<Transformer>>::new();
+        let mut env = HashMap::<Symbol, Rc<Transformer>>::new();
         let result = expand_source("`()", &mut bindings, &mut env).unwrap();
         let span = Span { lo: 0, hi: 0 };
         let expected = make_sexpr!(
@@ -1833,7 +1833,7 @@ mod tests {
     #[test]
     fn test_expand_quasiquote_constant_list() {
         let mut bindings = Bindings::new();
-        let mut env = HashMap::<Symbol, Arc<Transformer>>::new();
+        let mut env = HashMap::<Symbol, Rc<Transformer>>::new();
         let result = expand_source("`(1 2)", &mut bindings, &mut env).unwrap();
         let span = Span { lo: 0, hi: 0 };
         // `(1 2) => (append (quote (1)) (append (quote (2)) (quote ())))
@@ -1862,7 +1862,7 @@ mod tests {
     #[test]
     fn test_expand_quasiquote_with_unquote() {
         let mut bindings = Bindings::new();
-        let mut env = HashMap::<Symbol, Arc<Transformer>>::new();
+        let mut env = HashMap::<Symbol, Rc<Transformer>>::new();
         let result = expand_source("(lambda (x) `(1 ,x))", &mut bindings, &mut env).unwrap();
         // Focus on the body: (append (quote (1)) (append (list x) (quote ())))
         let body = nth(&result, 2).unwrap();
@@ -1894,7 +1894,7 @@ mod tests {
     #[test]
     fn test_expand_quasiquote_with_unquote_splicing() {
         let mut bindings = Bindings::new();
-        let mut env = HashMap::<Symbol, Arc<Transformer>>::new();
+        let mut env = HashMap::<Symbol, Rc<Transformer>>::new();
         let result = expand_source("(lambda (xs) `(1 ,@xs))", &mut bindings, &mut env).unwrap();
         // Body: (append (quote (1)) (append (append xs) (quote ())))
         let body = nth(&result, 2).unwrap();
@@ -1912,7 +1912,7 @@ mod tests {
     #[test]
     fn test_expand_quasiquote_unquote_resolves_to_lambda_param() {
         let mut bindings = Bindings::new();
-        let mut env = HashMap::<Symbol, Arc<Transformer>>::new();
+        let mut env = HashMap::<Symbol, Rc<Transformer>>::new();
         let result = expand_source("(lambda (x) `(,x))", &mut bindings, &mut env).unwrap();
         // lambda param
         let param = first(&nth(&result, 1).unwrap());
@@ -1932,7 +1932,7 @@ mod tests {
     #[test]
     fn test_expand_quasiquote_nested_preserves_inner() {
         let mut bindings = Bindings::new();
-        let mut env = HashMap::<Symbol, Arc<Transformer>>::new();
+        let mut env = HashMap::<Symbol, Rc<Transformer>>::new();
         // `(1 `(2 3)) — no unquotes, just nested quasiquote
         let result = expand_source("`(1 `(2 3))", &mut bindings, &mut env).unwrap();
         let output = format!("{result}");
@@ -1945,7 +1945,7 @@ mod tests {
     #[test]
     fn test_expand_unquote_outside_quasiquote_errors() {
         let mut bindings = Bindings::new();
-        let mut env = HashMap::<Symbol, Arc<Transformer>>::new();
+        let mut env = HashMap::<Symbol, Rc<Transformer>>::new();
         let result = expand_source(",x", &mut bindings, &mut env);
         assert!(result.is_err());
     }
@@ -1953,7 +1953,7 @@ mod tests {
     #[test]
     fn test_expand_unquote_splicing_outside_quasiquote_errors() {
         let mut bindings = Bindings::new();
-        let mut env = HashMap::<Symbol, Arc<Transformer>>::new();
+        let mut env = HashMap::<Symbol, Rc<Transformer>>::new();
         let result = expand_source(",@x", &mut bindings, &mut env);
         assert!(result.is_err());
     }

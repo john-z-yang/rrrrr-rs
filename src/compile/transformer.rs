@@ -1,5 +1,5 @@
 use std::collections::{HashMap, HashSet};
-use std::sync::Arc;
+use std::rc::Rc;
 
 use crate::compile::bindings::Bindings;
 
@@ -19,7 +19,7 @@ pub(crate) struct Transformer {
 struct SyntaxRule {
     pattern: SExpr,
     template: SExpr,
-    literals: Arc<HashSet<Symbol>>,
+    literals: Rc<HashSet<Symbol>>,
 }
 
 #[derive(Debug, Clone)]
@@ -349,7 +349,7 @@ fn render_templates(templates: &SExpr, captures: &HashMap<Symbol, CapturedSExpr>
 }
 
 impl SyntaxRule {
-    fn new(pattern: SExpr, template: SExpr, literals: Arc<HashSet<Symbol>>) -> Result<Self> {
+    fn new(pattern: SExpr, template: SExpr, literals: Rc<HashSet<Symbol>>) -> Result<Self> {
         let mut symbols_seen = HashSet::new();
         validate_pattern(&pattern, &literals, &mut symbols_seen)?;
         Ok(SyntaxRule {
@@ -425,7 +425,7 @@ impl Transformer {
                 Ok(())
             })?;
 
-            let literals = Arc::new(literals);
+            let literals = Rc::new(literals);
             let mut syntax_rules = Vec::<SyntaxRule>::new();
             try_for_each(rules, |rule_pair| {
                 if_let_sexpr! {(pattern, template) = rule_pair =>
@@ -447,7 +447,7 @@ impl Transformer {
                     syntax_rules.push(SyntaxRule::new(
                         pattern.cdr.as_ref().clone(),
                         template.clone(),
-                        Arc::clone(&literals),
+                        Rc::clone(&literals),
                     )?);
                     return Ok(());
                 }
@@ -529,7 +529,7 @@ mod tests {
         let rule = SyntaxRule::new(
             p(pattern),
             nil(),
-            Arc::new(literals.iter().map(|s| Symbol::new(s)).collect()),
+            Rc::new(literals.iter().map(|s| Symbol::new(s)).collect()),
         )
         .expect("invalid pattern in test");
         rule.match_pattern(&p(target), &Bindings::new())
@@ -761,7 +761,7 @@ mod tests {
     // --- render tests ---
 
     fn assert_renders_to(pattern: &str, template: &str, target: &str, expected: &str) {
-        let rule = SyntaxRule::new(p(pattern), p(template), Arc::new(HashSet::new()))
+        let rule = SyntaxRule::new(p(pattern), p(template), Rc::new(HashSet::new()))
             .expect("invalid pattern in test");
         let captures = rule
             .match_pattern(&p(target), &Bindings::new())
@@ -912,14 +912,14 @@ mod tests {
     }
 
     fn make_rule(pattern: &str) -> Result<SyntaxRule> {
-        SyntaxRule::new(p(pattern), nil(), Arc::new(HashSet::new()))
+        SyntaxRule::new(p(pattern), nil(), Rc::new(HashSet::new()))
     }
 
     fn make_rule_with_literals(pattern: &str, literals: &[&str]) -> Result<SyntaxRule> {
         SyntaxRule::new(
             p(pattern),
             nil(),
-            Arc::new(literals.iter().map(|s| Symbol::new(s)).collect()),
+            Rc::new(literals.iter().map(|s| Symbol::new(s)).collect()),
         )
     }
 
