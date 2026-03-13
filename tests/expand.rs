@@ -13,7 +13,7 @@ fn expand_source(source: &str) -> Result<SExpr<Id>> {
     let tokens = session.tokenize(source)?;
     let parsed = session.parse(&tokens)?;
     let introduced = session.introduce(parsed);
-    session.expand(&introduced)
+    session.expand(introduced)
 }
 
 fn expand_with_session(source: &str) -> (Session, Result<SExpr<Id>>) {
@@ -22,7 +22,7 @@ fn expand_with_session(source: &str) -> (Session, Result<SExpr<Id>>) {
         let tokens = session.tokenize(source)?;
         let parsed = session.parse(&tokens)?;
         let introduced = session.introduce(parsed);
-        session.expand(&introduced)
+        session.expand(introduced)
     })();
     (session, result)
 }
@@ -31,7 +31,7 @@ fn session_expand(session: &mut Session, source: &str) -> Result<SExpr<Id>> {
     let tokens = session.tokenize(source)?;
     let parsed = session.parse(&tokens)?;
     let introduced = session.introduce(parsed);
-    session.expand(&introduced)
+    session.expand(introduced)
 }
 
 fn assert_generated_define_is_referenced(source: &str, expand_message: &str) {
@@ -520,7 +520,7 @@ fn test_expand_top_level_begin_define_persists_binding_for_following_expand() {
     let tokens = session.tokenize("(begin (define x 1) x)").unwrap();
     let parsed = session.parse(&tokens).unwrap();
     let introduced = session.introduce(parsed);
-    let first_result = session.expand(&introduced);
+    let first_result = session.expand(introduced);
     assert!(
         first_result.is_ok(),
         "Expected top-level begin with define to expand successfully"
@@ -529,7 +529,7 @@ fn test_expand_top_level_begin_define_persists_binding_for_following_expand() {
     let tokens = session.tokenize("x").unwrap();
     let parsed = session.parse(&tokens).unwrap();
     let introduced = session.introduce(parsed);
-    let second_result = session.expand(&introduced);
+    let second_result = session.expand(introduced);
     assert!(
         second_result.is_ok(),
         "Expected identifier defined inside top-level begin to remain bound for later expansion"
@@ -543,13 +543,13 @@ fn test_expand_successful_expansion_persists_bindings() {
     let tokens = session.tokenize("(define x 1)").unwrap();
     let parsed = session.parse(&tokens).unwrap();
     let introduced = session.introduce(parsed);
-    let result = session.expand(&introduced);
+    let result = session.expand(introduced);
     assert!(result.is_ok());
 
     let tokens = session.tokenize("x").unwrap();
     let parsed = session.parse(&tokens).unwrap();
     let introduced = session.introduce(parsed);
-    let result = session.expand(&introduced);
+    let result = session.expand(introduced);
     assert!(result.is_ok());
 }
 
@@ -568,7 +568,7 @@ fn test_expand_define_syntax_basic() {
         .unwrap();
     let parsed = session.parse(&tokens).unwrap();
     let introduced = session.introduce(parsed);
-    let result = session.expand(&introduced);
+    let result = session.expand(introduced);
     assert!(
         result.is_ok(),
         "Expected define-syntax to expand, got: {:?}",
@@ -578,7 +578,7 @@ fn test_expand_define_syntax_basic() {
     let tokens = session.tokenize("(one)").unwrap();
     let parsed = session.parse(&tokens).unwrap();
     let introduced = session.introduce(parsed);
-    let result = session.expand(&introduced).unwrap();
+    let result = session.expand(introduced).unwrap();
     assert_eq!(
         result.without_spans(),
         SExpr::Num(Num(1.0), result.get_span()).without_spans()
@@ -600,7 +600,7 @@ fn test_expand_define_syntax_multiple_definitions() {
         .unwrap();
     let parsed = session.parse(&tokens).unwrap();
     let introduced = session.introduce(parsed);
-    session.expand(&introduced).unwrap();
+    session.expand(introduced).unwrap();
 
     let tokens = session
         .tokenize(
@@ -613,12 +613,12 @@ fn test_expand_define_syntax_multiple_definitions() {
         .unwrap();
     let parsed = session.parse(&tokens).unwrap();
     let introduced = session.introduce(parsed);
-    session.expand(&introduced).unwrap();
+    session.expand(introduced).unwrap();
 
     let tokens = session.tokenize("(list (one) (two))").unwrap();
     let parsed = session.parse(&tokens).unwrap();
     let introduced = session.introduce(parsed);
-    let result = session.expand(&introduced).unwrap();
+    let result = session.expand(introduced).unwrap();
 
     let span = Span { lo: 0, hi: 0 };
     let args = rest(&result);

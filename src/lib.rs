@@ -40,7 +40,7 @@ impl Session {
         compile::expand::introduce(form)
     }
 
-    pub fn expand(&mut self, form: &SExpr<Id>) -> Result<SExpr<Id>> {
+    pub fn expand(&mut self, form: SExpr<Id>) -> Result<SExpr<Id>> {
         compile::expand::expand(form, &mut self.bindings, &mut self.env)
     }
 
