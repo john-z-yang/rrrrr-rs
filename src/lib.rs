@@ -13,14 +13,14 @@ use compile::{
 #[derive(Debug, Clone)]
 pub struct Session {
     bindings: Bindings,
-    env: HashMap<Symbol, Rc<Transformer>>,
+    expander_env: HashMap<Symbol, Rc<Transformer>>,
 }
 
 impl Session {
     pub fn new() -> Self {
         Self {
             bindings: Bindings::new(),
-            env: HashMap::new(),
+            expander_env: HashMap::new(),
         }
     }
 
@@ -41,7 +41,7 @@ impl Session {
     }
 
     pub fn expand(&mut self, form: SExpr<Id>) -> Result<SExpr<Id>> {
-        compile::expand::expand(form, &mut self.bindings, &mut self.env)
+        compile::expand::expand(form, &mut self.bindings, &mut self.expander_env)
     }
 
     pub fn resolve_sym(&self, id: &Id) -> Option<Symbol> {
