@@ -28,8 +28,8 @@ type Env = HashMap<Symbol, Rc<Transformer>>;
 const MAX_MACRO_DEPTH: u16 = 1024;
 
 pub fn introduce(sexpr: SExpr<Symbol>) -> SExpr<Id> {
-    sexpr.map_var(&|symbol, _span| Id {
-        symbol: symbol.clone(),
+    sexpr.map_var(&|symbol, _| Id {
+        symbol,
         scopes: std::collections::BTreeSet::from([Bindings::CORE_SCOPE]),
     })
 }
@@ -100,7 +100,7 @@ fn expand_sexpr(
     if_let_sexpr! {(..) = sexpr =>
         return expand_fn_application(sexpr, bindings, env, ctx);
     };
-    Ok(sexpr.clone())
+    Ok(sexpr)
 }
 
 fn expand_id(sexpr: SExpr<Id>, bindings: &mut Bindings) -> Result<SExpr<Id>> {
@@ -163,7 +163,7 @@ fn expand_id_application(
     };
 
     match binding.0.as_str() {
-        "quote" => Ok(sexpr.clone()),
+        "quote" => Ok(sexpr),
         "quasiquote" => expand_quasiquote(sexpr, bindings, env, ctx),
         "unquote" | "unquote-splicing" => Err(CompilationError {
             span: sexpr.get_span(),
@@ -200,7 +200,7 @@ fn expand_fn_application(
 ) -> Result<SExpr<Id>> {
     try_map(sexpr, |sub_sexpr| {
         expand_sexpr(
-            sub_sexpr.clone(),
+            sub_sexpr,
             bindings,
             env,
             ctx.with_syntax_ctx(SyntaxContext::Expression),
@@ -265,7 +265,7 @@ fn expand_begin(
     let mut res = SExpr::cons(
         first(&sexpr),
         try_map(rest(&sexpr), |sub_sexpr| {
-            expand_sexpr(sub_sexpr.clone(), bindings, env, ctx)
+            expand_sexpr(sub_sexpr, bindings, env, ctx)
         })?,
     );
     res.update_span(sexpr.get_span());
@@ -371,9 +371,9 @@ fn expand_define_syntax(
         let transformer = Transformer::new(transformer_spec)?;
         let binding = bindings.gen_sym(id);
         bindings.add_binding(id, &binding);
-        env.insert(binding.clone(), Rc::new(transformer));
+        env.insert(binding, Rc::new(transformer));
 
-        return Ok(sexpr.clone());
+        return Ok(sexpr);
     }
     Err(CompilationError {
         span: sexpr.get_span(),
@@ -398,7 +398,7 @@ fn expand_lambda(
                 });
             }
             let scope_id = bindings.new_scope_id();
-            let args = args.add_scope(scope_id);
+            let args = args.clone().add_scope(scope_id);
             let mut seen = HashSet::new();
 
             try_for_each(&args, |arg| {
@@ -445,7 +445,7 @@ fn expand_lambda(
                 }
             };
 
-            let body = expand_body(&body.add_scope(scope_id), bindings, env, ctx)?;
+            let body = expand_body(body.clone().add_scope(scope_id), bindings, env, ctx)?;
             Ok(template_sexpr!((lambda.clone(), args, ..body) => &sexpr).unwrap())
         },
 
@@ -457,14 +457,14 @@ fn expand_lambda(
                 });
             }
             let scope_id = bindings.new_scope_id();
-            let arg = arg.add_scope(scope_id);
+            let arg = arg.clone().add_scope(scope_id);
             let SExpr::Var(id, _) = &arg else {
                 unreachable!("arg is already a SExpr::Var(..)")
             };
             let binding = bindings.gen_sym(id);
             bindings.add_binding(id, &binding);
 
-            let body = expand_body(&body.add_scope(scope_id), bindings, env, ctx)?;
+            let body = expand_body(body.clone().add_scope(scope_id), bindings, env, ctx)?;
             Ok(template_sexpr!((lambda.clone(), arg, ..body) => &sexpr).unwrap())
         },
 
@@ -478,13 +478,13 @@ fn expand_lambda(
 }
 
 fn expand_body(
-    body: &SExpr<Id>,
+    body: SExpr<Id>,
     bindings: &mut Bindings,
     env: &mut Env,
     mut ctx: Context,
 ) -> Result<SExpr<Id>> {
     let body = body.add_scope(bindings.new_scope_id());
-    let (body, phase) = normalize_body(&body, bindings, env, NormalizationPhase::Define, &mut ctx)?;
+    let (body, phase) = normalize_body(body, bindings, env, NormalizationPhase::Define, &mut ctx)?;
     if phase == NormalizationPhase::Define {
         return Err(CompilationError {
             span: body.get_span(),
@@ -494,7 +494,7 @@ fn expand_body(
 
     try_map(body, |sexpr| {
         expand_sexpr(
-            sexpr.clone(),
+            sexpr,
             bindings,
             env,
             ctx.with_syntax_ctx(SyntaxContext::Body),
@@ -515,12 +515,12 @@ enum BodyFormKind {
 }
 
 fn partial_expand_body(
-    form: &SExpr<Id>,
+    form: SExpr<Id>,
     bindings: &mut Bindings,
     env: &Env,
     ctx: &mut Context,
 ) -> Result<(SExpr<Id>, BodyFormKind)> {
-    let mut form: SExpr<Id> = form.clone();
+    let mut form: SExpr<Id> = form;
     loop {
         let Some(SExpr::Var(id, _)) = try_first(&form) else {
             return Ok((form, BodyFormKind::Other));
@@ -542,17 +542,17 @@ fn partial_expand_body(
 }
 
 fn normalize_body(
-    body: &SExpr<Id>,
+    body: SExpr<Id>,
     bindings: &mut Bindings,
     env: &Env,
     phase: NormalizationPhase,
     ctx: &mut Context,
 ) -> Result<(SExpr<Id>, NormalizationPhase)> {
     let SExpr::Cons(cons, span) = body else {
-        return Ok((body.clone(), phase));
+        return Ok((body, phase));
     };
 
-    let (expanded_car, kind) = partial_expand_body(&cons.car, bindings, env, ctx)?;
+    let (expanded_car, kind) = partial_expand_body(*cons.car, bindings, env, ctx)?;
 
     match kind {
         BodyFormKind::Define => {
@@ -564,8 +564,8 @@ fn normalize_body(
             }
             collect_define(&expanded_car, bindings)?;
             let (cdr, next_phase) =
-                normalize_body(&cons.cdr, bindings, env, NormalizationPhase::Define, ctx)?;
-            Ok((SExpr::Cons(Cons::new(expanded_car, cdr), *span), next_phase))
+                normalize_body(*cons.cdr, bindings, env, NormalizationPhase::Define, ctx)?;
+            Ok((SExpr::Cons(Cons::new(expanded_car, cdr), span), next_phase))
         }
         BodyFormKind::Begin => {
             if !is_proper_list(&expanded_car) {
@@ -581,15 +581,15 @@ fn normalize_body(
                 });
             }
             let (head, next_phase) =
-                normalize_body(&rest(&expanded_car), bindings, env, phase, ctx)?;
+                normalize_body(rest(&expanded_car), bindings, env, phase, ctx)?;
             let (remaining, next_phase) =
-                normalize_body(&cons.cdr, bindings, env, next_phase, ctx)?;
-            Ok((append(&head, &remaining), next_phase))
+                normalize_body(*cons.cdr, bindings, env, next_phase, ctx)?;
+            Ok((append(head, remaining), next_phase))
         }
         BodyFormKind::Other => {
-            let (cdr, _) = normalize_body(&cons.cdr, bindings, env, NormalizationPhase::Body, ctx)?;
+            let (cdr, _) = normalize_body(*cons.cdr, bindings, env, NormalizationPhase::Body, ctx)?;
             Ok((
-                SExpr::Cons(Cons::new(expanded_car, cdr), *span),
+                SExpr::Cons(Cons::new(expanded_car, cdr), span),
                 NormalizationPhase::Body,
             ))
         }
@@ -715,7 +715,7 @@ fn expand_syntax_binding(
                 let id = id.add_scope(scope_id);
                 let transformer_spec = match form {
                     SyntaxBindingForm::LetSyntax => transformer_spec,
-                    SyntaxBindingForm::LetrecSyntax => &transformer_spec.add_scope(scope_id)
+                    SyntaxBindingForm::LetrecSyntax => &transformer_spec.clone().add_scope(scope_id)
                 };
 
                 let binding = bindings.gen_sym(&id);
@@ -731,7 +731,7 @@ fn expand_syntax_binding(
                     });
                 }
                 let transformer = Transformer::new(transformer_spec)?;
-                env.insert(binding.clone(), Rc::new(transformer));
+                env.insert(binding, Rc::new(transformer));
                 return Ok(());
             }
             Err(CompilationError {
@@ -740,7 +740,7 @@ fn expand_syntax_binding(
             })
         })?;
 
-        let body = expand_body(&body.add_scope(scope_id), bindings, env, ctx).map(|body| {
+        let body = expand_body(body.clone().add_scope(scope_id), bindings, env, ctx).map(|body| {
             if len(&body) == 1 {
                 first(&body)
             } else {
@@ -850,9 +850,7 @@ fn expand_quasiquote_args_list(
         _ => {
             Ok(make_sexpr!(
                 SExpr::Var(Id::new("quote", [Bindings::CORE_SCOPE]), sexpr.get_span()),
-                (
-                    sexpr.clone(),
-                ),
+                (sexpr),
             ))
         },
     }
@@ -925,7 +923,7 @@ fn expand_quasiquote_args(
         _ => {
             Ok(make_sexpr!(
                 SExpr::Var(Id::new("quote", [Bindings::CORE_SCOPE]), sexpr.get_span()),
-                sexpr.clone(),
+                sexpr,
             ))
         },
     }

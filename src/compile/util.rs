@@ -59,10 +59,10 @@ macro_rules! if_let_sexpr {
         ($id:ident @ ..) = $targ:expr => $($handler:tt)*
     ) => {
         if let $crate::compile::sexpr::SExpr::Cons(_, _) = $targ {
-            let $id = &$targ;
+            let $id = $targ;
             $($handler)*
         } else if let $crate::compile::sexpr::SExpr::Nil(_) = $targ {
-            let $id = &$targ;
+            let $id = $targ;
             $($handler)*
         }
     };
@@ -295,11 +295,11 @@ pub fn is_proper_list<T: Clone>(sexpr: &SExpr<T>) -> bool {
     try_dotted_tail(sexpr).is_some_and(|tail| matches!(tail, SExpr::Nil(_)))
 }
 
-pub fn append<T: Clone>(head: &SExpr<T>, tail: &SExpr<T>) -> SExpr<T> {
+pub fn append<T: Clone>(head: SExpr<T>, tail: SExpr<T>) -> SExpr<T> {
     match head {
         SExpr::Nil(_) => tail.clone(),
         SExpr::Cons(cons, span) => {
-            SExpr::Cons(Cons::new(*cons.car.clone(), append(&cons.cdr, tail)), *span)
+            SExpr::Cons(Cons::new(*cons.car.clone(), append(*cons.cdr, tail)), span)
         }
         _ => unreachable!("append expected a proper list"),
     }

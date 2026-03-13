@@ -62,10 +62,10 @@ impl<T> SExpr<T> {
                 SExpr::Cons(Cons::new(cons.car.map_var(f), cons.cdr.map_var(f)), span)
             }
             SExpr::Nil(span) => SExpr::Nil(span),
-            SExpr::Bool(bool, span) => SExpr::Bool(bool.clone(), span),
-            SExpr::Num(num, span) => SExpr::Num(num.clone(), span),
-            SExpr::Char(char, span) => SExpr::Char(char.clone(), span),
-            SExpr::Str(str, span) => SExpr::Str(str.clone(), span),
+            SExpr::Bool(bool, span) => SExpr::Bool(bool, span),
+            SExpr::Num(num, span) => SExpr::Num(num, span),
+            SExpr::Char(char, span) => SExpr::Char(char, span),
+            SExpr::Str(str, span) => SExpr::Str(str, span),
             SExpr::Vector(vector, span) => SExpr::Vector(
                 Vector(vector.0.into_iter().map(|sexpr| sexpr.map_var(f)).collect()),
                 span,
@@ -75,31 +75,31 @@ impl<T> SExpr<T> {
 }
 
 impl SExpr<Id> {
-    fn adjust_scope<F>(&self, op: &F) -> Self
+    fn adjust_scope<F>(self, op: &F) -> Self
     where
         F: Fn(&Scopes) -> Scopes,
     {
         match self {
-            Self::Var(id, span) => Self::Var(id.adjust_scope(op), *span),
+            Self::Var(id, span) => Self::Var(id.adjust_scope(op), span),
             Self::Cons(cons, span) => Self::Cons(
                 Cons::new(cons.car.adjust_scope(op), cons.cdr.adjust_scope(op)),
-                *span,
+                span,
             ),
             Self::Vector(vector, span) => Self::Vector(
                 Vector(
                     vector
                         .0
-                        .iter()
+                        .into_iter()
                         .map(|sexpr| sexpr.adjust_scope(op))
                         .collect(),
                 ),
-                *span,
+                span,
             ),
-            _ => self.clone(),
+            _ => self,
         }
     }
 
-    pub fn add_scope(&self, scope: ScopeId) -> Self {
+    pub fn add_scope(self, scope: ScopeId) -> Self {
         let op = |scopes: &Scopes| {
             let mut scopes = scopes.clone();
             scopes.insert(scope);
@@ -108,7 +108,7 @@ impl SExpr<Id> {
         self.adjust_scope(&op)
     }
 
-    pub fn flip_scope(&self, scope: ScopeId) -> Self {
+    pub fn flip_scope(self, scope: ScopeId) -> Self {
         let op = |scopes: &Scopes| {
             let mut scopes = scopes.clone();
             if scopes.contains(&scope) {
