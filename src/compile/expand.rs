@@ -765,11 +765,12 @@ fn expand_quasiquote(
     env: &mut Env,
     ctx: Context,
 ) -> Result<SExpr<Id>> {
-    if_let_sexpr! {(_, args) = &sexpr => {
-        return expand_sexpr(expand_quasiquote_args(args.clone(), bindings, 0)?, bindings, env, ctx);
+    let span = sexpr.get_span();
+    if_let_sexpr! {(_, args) = sexpr => {
+        return expand_sexpr(expand_quasiquote_args(args, bindings, 0)?, bindings, env, ctx);
     }};
     Err(CompilationError {
-        span: sexpr.get_span(),
+        span,
         reason: "Invalid 'quasiquote': expected a single argument".to_owned(),
     })
 }

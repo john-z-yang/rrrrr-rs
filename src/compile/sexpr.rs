@@ -308,6 +308,18 @@ impl<T> Cons<T> {
     }
 }
 
+impl<T> From<Cons<T>> for (SExpr<T>, SExpr<T>) {
+    fn from(value: Cons<T>) -> Self {
+        (*value.car, *value.cdr)
+    }
+}
+
+impl<'a, T> From<&'a Cons<T>> for (&'a SExpr<T>, &'a SExpr<T>) {
+    fn from(value: &'a Cons<T>) -> Self {
+        (value.car.as_ref(), value.cdr.as_ref())
+    }
+}
+
 impl<T: fmt::Display> Cons<T> {
     fn fmt_disp(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "{}", self.car)?;

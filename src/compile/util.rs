@@ -73,8 +73,9 @@ macro_rules! if_let_sexpr {
         (($($inner:tt)*), $id:ident @ ..) = $targ:expr => $($handler:tt)*
     ) => {
         if let $crate::compile::sexpr::SExpr::Cons(cons, _) = $targ {
-            if_let_sexpr! {($($inner)*) = cons.car.as_ref() => {
-                if_let_sexpr! {@tail_pos ($id @ ..) = cons.cdr.as_ref() =>
+            let (car, cdr) = cons.into();
+            if_let_sexpr! {($($inner)*) = car => {
+                if_let_sexpr! {@tail_pos ($id @ ..) = cdr =>
                     $($handler)*
                 }
             }}
@@ -86,8 +87,9 @@ macro_rules! if_let_sexpr {
         (($($inner:tt)*) $(, $($rest:tt)*)?) = $targ:expr => $($handler:tt)*
     ) => {
         if let $crate::compile::sexpr::SExpr::Cons(cons, _) = $targ {
-            if_let_sexpr! {($($inner)*) = cons.car.as_ref() => {
-                if_let_sexpr! {($($($rest)*)?) = cons.cdr.as_ref() =>
+            let (car, cdr) = cons.into();
+            if_let_sexpr! {($($inner)*) = car => {
+                if_let_sexpr! {($($($rest)*)?) = cdr =>
                     $($handler)*
                 }
             }}
@@ -99,9 +101,10 @@ macro_rules! if_let_sexpr {
         ($pat:pat, $id:ident @ ..) = $targ:expr => $($handler:tt)*
     ) => {
         if let $crate::compile::sexpr::SExpr::Cons(cons, _) = $targ {
+            let (car, cdr) = cons.into();
             #[allow(irrefutable_let_patterns)]
-            if let $pat = cons.car.as_ref() {
-                if_let_sexpr! {@tail_pos ($id @ ..) = cons.cdr.as_ref() =>
+            if let $pat = car {
+                if_let_sexpr! {@tail_pos ($id @ ..) = cdr =>
                     $($handler)*
                 }
             }
@@ -113,9 +116,10 @@ macro_rules! if_let_sexpr {
         ($pat:pat $(, $($rest:tt)*)?) = $targ:expr => $($handler:tt)*
     ) => {
         if let $crate::compile::sexpr::SExpr::Cons(cons, _) = $targ {
+            let (car, cdr) = cons.into();
             #[allow(irrefutable_let_patterns)]
-            if let $pat = cons.car.as_ref() {
-                if_let_sexpr! {($($($rest)*)?) = cons.cdr.as_ref() =>
+            if let $pat = car {
+                if_let_sexpr! {($($($rest)*)?) = cdr =>
                     $($handler)*
                 }
             }
@@ -189,14 +193,15 @@ macro_rules! template_sexpr {
         (($($inner:tt)*) $(, $($rest:tt)*)?) => $targ:ident
     ) => {
         if let $crate::compile::sexpr::SExpr::Cons(cons, span) = $targ {
-            if let Some(car) = template_sexpr!(($($inner)*) => cons.car.as_ref()) {
-                if let Some(cdr) = template_sexpr!(($($($rest)*)?) => cons.cdr.as_ref()) {
+            let (car, cdr) = cons.into();
+            if let Some(car) = template_sexpr!(($($inner)*) => car) {
+                if let Some(cdr) = template_sexpr!(($($($rest)*)?) => cdr) {
                     Some($crate::compile::sexpr::SExpr::Cons(
                         $crate::compile::sexpr::Cons::new(
                             car,
                             cdr,
                         ),
-                        *span
+                        span.clone()
                     ))
                 } else {
                     None
@@ -221,13 +226,14 @@ macro_rules! template_sexpr {
         ($first:expr $(, $($rest:tt)*)?) => $targ:expr
     ) => {
         if let $crate::compile::sexpr::SExpr::Cons(cons, span) = $targ {
-            if let Some(rest) = template_sexpr!(($($($rest)*)?) => cons.cdr.as_ref()) {
+            let (_, cdr) = cons.into();
+            if let Some(rest) = template_sexpr!(($($($rest)*)?) => cdr) {
                 Some($crate::compile::sexpr::SExpr::Cons(
                     $crate::compile::sexpr::Cons::new(
                         $first,
                         rest,
                     ),
-                    *span,
+                    span.clone(),
                 ))
             } else {
                 None
