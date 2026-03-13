@@ -76,7 +76,6 @@ const BENCH_SRC: &str = r#"
   (ping (* * * * * * * * * * * * * * * *))))"#;
 
 fn bench_config() -> Criterion {
-    // Set measurement time to 30 seconds (default is usually 5s)
     Criterion::default().measurement_time(Duration::from_mins(1))
 }
 
