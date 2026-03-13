@@ -7,3 +7,11 @@ edition = "2024"
 
 [dependencies]
 rustyline = "17.0.2"
+
+
+[dev-dependencies]
+criterion = "0.8.2"
+
+[[bench]]
+name = "tokenize_parse_expand"
+harness = false
