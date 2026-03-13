@@ -2,35 +2,35 @@ use rrrrr_rs::{
     Session,
     compile::{
         compilation_error::{CompilationError, Result},
-        sexpr::{Num, SExpr, Symbol},
+        sexpr::{Id, Num, SExpr, Symbol},
         span::Span,
         util::{first, nth, rest},
     },
 };
 
-fn expand_source(source: &str) -> Result<SExpr> {
+fn expand_source(source: &str) -> Result<SExpr<Id>> {
     let mut session = Session::new();
     let tokens = session.tokenize(source)?;
     let parsed = session.parse(&tokens)?;
-    let introduced = session.introduce(&parsed);
+    let introduced = session.introduce(parsed);
     session.expand(&introduced)
 }
 
-fn expand_with_session(source: &str) -> (Session, Result<SExpr>) {
+fn expand_with_session(source: &str) -> (Session, Result<SExpr<Id>>) {
     let mut session = Session::new();
     let result = (|| {
         let tokens = session.tokenize(source)?;
         let parsed = session.parse(&tokens)?;
-        let introduced = session.introduce(&parsed);
+        let introduced = session.introduce(parsed);
         session.expand(&introduced)
     })();
     (session, result)
 }
 
-fn session_expand(session: &mut Session, source: &str) -> Result<SExpr> {
+fn session_expand(session: &mut Session, source: &str) -> Result<SExpr<Id>> {
     let tokens = session.tokenize(source)?;
     let parsed = session.parse(&tokens)?;
-    let introduced = session.introduce(&parsed);
+    let introduced = session.introduce(parsed);
     session.expand(&introduced)
 }
 
@@ -40,10 +40,10 @@ fn assert_generated_define_is_referenced(source: &str, expand_message: &str) {
     let result = result.unwrap();
     let defined_var = nth(&nth(&result, 2).unwrap(), 1).unwrap();
     let body_ref = nth(&result, 3).unwrap();
-    let SExpr::Id(defined_var, _) = defined_var else {
+    let SExpr::Var(defined_var, _) = defined_var else {
         panic!("Expected define variable to be an identifier");
     };
-    let SExpr::Id(body_ref, _) = body_ref else {
+    let SExpr::Var(body_ref, _) = body_ref else {
         panic!("Expected body reference to be an identifier");
     };
     assert_eq!(
@@ -519,7 +519,7 @@ fn test_expand_top_level_begin_define_persists_binding_for_following_expand() {
 
     let tokens = session.tokenize("(begin (define x 1) x)").unwrap();
     let parsed = session.parse(&tokens).unwrap();
-    let introduced = session.introduce(&parsed);
+    let introduced = session.introduce(parsed);
     let first_result = session.expand(&introduced);
     assert!(
         first_result.is_ok(),
@@ -528,7 +528,7 @@ fn test_expand_top_level_begin_define_persists_binding_for_following_expand() {
 
     let tokens = session.tokenize("x").unwrap();
     let parsed = session.parse(&tokens).unwrap();
-    let introduced = session.introduce(&parsed);
+    let introduced = session.introduce(parsed);
     let second_result = session.expand(&introduced);
     assert!(
         second_result.is_ok(),
@@ -542,13 +542,13 @@ fn test_expand_successful_expansion_persists_bindings() {
 
     let tokens = session.tokenize("(define x 1)").unwrap();
     let parsed = session.parse(&tokens).unwrap();
-    let introduced = session.introduce(&parsed);
+    let introduced = session.introduce(parsed);
     let result = session.expand(&introduced);
     assert!(result.is_ok());
 
     let tokens = session.tokenize("x").unwrap();
     let parsed = session.parse(&tokens).unwrap();
-    let introduced = session.introduce(&parsed);
+    let introduced = session.introduce(parsed);
     let result = session.expand(&introduced);
     assert!(result.is_ok());
 }
@@ -567,7 +567,7 @@ fn test_expand_define_syntax_basic() {
         )
         .unwrap();
     let parsed = session.parse(&tokens).unwrap();
-    let introduced = session.introduce(&parsed);
+    let introduced = session.introduce(parsed);
     let result = session.expand(&introduced);
     assert!(
         result.is_ok(),
@@ -577,7 +577,7 @@ fn test_expand_define_syntax_basic() {
 
     let tokens = session.tokenize("(one)").unwrap();
     let parsed = session.parse(&tokens).unwrap();
-    let introduced = session.introduce(&parsed);
+    let introduced = session.introduce(parsed);
     let result = session.expand(&introduced).unwrap();
     assert_eq!(
         result.without_spans(),
@@ -599,7 +599,7 @@ fn test_expand_define_syntax_multiple_definitions() {
         )
         .unwrap();
     let parsed = session.parse(&tokens).unwrap();
-    let introduced = session.introduce(&parsed);
+    let introduced = session.introduce(parsed);
     session.expand(&introduced).unwrap();
 
     let tokens = session
@@ -612,12 +612,12 @@ fn test_expand_define_syntax_multiple_definitions() {
         )
         .unwrap();
     let parsed = session.parse(&tokens).unwrap();
-    let introduced = session.introduce(&parsed);
+    let introduced = session.introduce(parsed);
     session.expand(&introduced).unwrap();
 
     let tokens = session.tokenize("(list (one) (two))").unwrap();
     let parsed = session.parse(&tokens).unwrap();
-    let introduced = session.introduce(&parsed);
+    let introduced = session.introduce(parsed);
     let result = session.expand(&introduced).unwrap();
 
     let span = Span { lo: 0, hi: 0 };
@@ -727,10 +727,10 @@ fn test_expand_lambda_internal_define_inside_begin() {
         "Expected begin to be spliced into lambda body"
     );
 
-    let SExpr::Id(defined_var, _) = defined_var else {
+    let SExpr::Var(defined_var, _) = defined_var else {
         panic!("Expected define variable to be an identifier");
     };
-    let SExpr::Id(last_body_expr, _) = last_body_expr else {
+    let SExpr::Var(last_body_expr, _) = last_body_expr else {
         panic!("Expected final body expression to be an identifier");
     };
     assert_eq!(
@@ -754,10 +754,10 @@ fn test_expand_lambda_shadowed_begin_is_not_spliced() {
         "Expected shadowed begin call to remain as a single body form"
     );
 
-    let SExpr::Id(defined_var, _) = defined_var else {
+    let SExpr::Var(defined_var, _) = defined_var else {
         panic!("Expected define variable to be an identifier");
     };
-    let SExpr::Id(begin_head, _) = begin_head else {
+    let SExpr::Var(begin_head, _) = begin_head else {
         panic!("Expected begin call head to be an identifier");
     };
     assert_eq!(
@@ -781,10 +781,10 @@ fn test_expand_lambda_begin_binding_defined_inside_spliced_begin_shadows_nested_
         "Expected begin wrapper to splice and keep nested begin call as a single form"
     );
 
-    let SExpr::Id(define_begin_var, _) = define_begin_var else {
+    let SExpr::Var(define_begin_var, _) = define_begin_var else {
         panic!("Expected define variable to be an identifier");
     };
-    let SExpr::Id(nested_begin_head, _) = nested_begin_head else {
+    let SExpr::Var(nested_begin_head, _) = nested_begin_head else {
         panic!("Expected nested begin call head to be an identifier");
     };
     let define_sym = session.resolve_sym(&define_begin_var).unwrap();
@@ -814,10 +814,10 @@ fn test_expand_lambda_begin_binding_defined_in_begin_group_shadows_following_beg
         "Expected following begin to remain a call form after begin is rebound"
     );
 
-    let SExpr::Id(define_begin_var, _) = define_begin_var else {
+    let SExpr::Var(define_begin_var, _) = define_begin_var else {
         panic!("Expected define variable to be an identifier");
     };
-    let SExpr::Id(following_begin_head, _) = following_begin_head else {
+    let SExpr::Var(following_begin_head, _) = following_begin_head else {
         panic!("Expected begin call head to be an identifier");
     };
     let define_sym = session.resolve_sym(&define_begin_var).unwrap();
@@ -848,13 +848,13 @@ fn test_expand_lambda_rebound_begin_reference_and_call_share_local_binding() {
         "Expected body to contain define, begin reference, and begin call"
     );
 
-    let SExpr::Id(define_begin_var, _) = define_begin_var else {
+    let SExpr::Var(define_begin_var, _) = define_begin_var else {
         panic!("Expected define variable to be an identifier");
     };
-    let SExpr::Id(begin_reference, _) = begin_reference else {
+    let SExpr::Var(begin_reference, _) = begin_reference else {
         panic!("Expected begin reference to be an identifier");
     };
-    let SExpr::Id(begin_call_head, _) = begin_call_head else {
+    let SExpr::Var(begin_call_head, _) = begin_call_head else {
         panic!("Expected begin call head to be an identifier");
     };
     let define_sym = session.resolve_sym(&define_begin_var).unwrap();
@@ -891,10 +891,10 @@ fn test_expand_lambda_define_after_spliced_begin_is_collected() {
         "Expected exactly 3 body forms after expansion"
     );
 
-    let SExpr::Id(defined_var_y, _) = defined_var_y else {
+    let SExpr::Var(defined_var_y, _) = defined_var_y else {
         panic!("Expected second define variable to be an identifier");
     };
-    let SExpr::Id(final_expr, _) = final_expr else {
+    let SExpr::Var(final_expr, _) = final_expr else {
         panic!("Expected final body expression to be an identifier");
     };
     assert_eq!(
@@ -921,10 +921,10 @@ fn test_expand_lambda_multiple_begin_define_groups_stay_in_define_phase() {
         "Expected exactly 3 body forms after expansion"
     );
 
-    let SExpr::Id(defined_var_y, _) = defined_var_y else {
+    let SExpr::Var(defined_var_y, _) = defined_var_y else {
         panic!("Expected second define variable to be an identifier");
     };
-    let SExpr::Id(final_expr, _) = final_expr else {
+    let SExpr::Var(final_expr, _) = final_expr else {
         panic!("Expected final body expression to be an identifier");
     };
     assert_eq!(
@@ -995,7 +995,7 @@ fn test_expand_define_syntax_with_pattern_variable() {
 
     let list_id = first(&result);
     assert!(
-        matches!(&list_id, SExpr::Id(id, _) if session.resolve_sym(id) == Some(Symbol::new("list")))
+        matches!(&list_id, SExpr::Var(id, _) if session.resolve_sym(id) == Some(Symbol::new("list")))
     );
     assert_eq!(
         nth(&result, 1).unwrap().without_spans(),
@@ -1026,7 +1026,7 @@ fn test_expand_define_syntax_with_ellipsis() {
 
     let list_id = first(&result);
     assert!(
-        matches!(&list_id, SExpr::Id(id, _) if session.resolve_sym(id) == Some(Symbol::new("list")))
+        matches!(&list_id, SExpr::Var(id, _) if session.resolve_sym(id) == Some(Symbol::new("list")))
     );
     assert_eq!(
         nth(&result, 1).unwrap().without_spans(),
@@ -1349,7 +1349,7 @@ fn test_expand_define_function_shorthand_expands_to_lambda() {
     let result = expand_source("(define (foo x) x)").unwrap();
     // Expanded form: (define foo (lambda (x) x))
     let lambda_expr = nth(&result, 2).unwrap();
-    let SExpr::Id(lambda_id, _) = first(&lambda_expr) else {
+    let SExpr::Var(lambda_id, _) = first(&lambda_expr) else {
         panic!("Expected lambda identifier in expanded form");
     };
     assert_eq!(lambda_id.symbol, Symbol::new("lambda"));
@@ -1384,10 +1384,10 @@ fn test_expand_lambda_internal_define_function_shorthand() {
     // Position 3 is the body expression (foo 1), position 0 is the function ref
     let body_ref = first(&nth(&result, 3).unwrap());
 
-    let SExpr::Id(defined_var, _) = defined_var else {
+    let SExpr::Var(defined_var, _) = defined_var else {
         panic!("Expected define variable to be an identifier");
     };
-    let SExpr::Id(body_ref, _) = body_ref else {
+    let SExpr::Var(body_ref, _) = body_ref else {
         panic!("Expected body function reference to be an identifier");
     };
     assert_eq!(

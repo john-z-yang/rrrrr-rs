@@ -85,7 +85,7 @@ pub fn criterion_benchmark(c: &mut Criterion) {
             let mut session = Session::new();
             let tokens = session.tokenize(BENCH_SRC).unwrap();
             let parsed = session.parse(&tokens).unwrap();
-            let introduced = session.introduce(&parsed);
+            let introduced = session.introduce(parsed);
             session.expand(&introduced).unwrap()
         })
     });

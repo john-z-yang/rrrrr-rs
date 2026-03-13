@@ -17,24 +17,24 @@ pub(crate) struct Transformer {
 
 #[derive(Debug, Clone)]
 struct SyntaxRule {
-    pattern: SExpr,
-    template: SExpr,
+    pattern: SExpr<Id>,
+    template: SExpr<Id>,
     literals: Rc<HashSet<Symbol>>,
 }
 
 #[derive(Debug, Clone)]
 enum CapturedSExpr {
-    One(SExpr),
+    One(SExpr<Id>),
     Many(Vec<CapturedSExpr>),
 }
 
 fn collect_capture_variables(
-    sexpr: &SExpr,
+    sexpr: &SExpr<Id>,
     literals: &HashSet<Symbol>,
     vars: &mut HashSet<Symbol>,
 ) {
     match sexpr {
-        SExpr::Id(Id { symbol, .. }, _)
+        SExpr::Var(Id { symbol, .. }, _)
             if symbol.0 != "..." && symbol.0 != "_" && !literals.contains(symbol) =>
         {
             vars.insert(symbol.clone());
@@ -52,13 +52,13 @@ fn collect_capture_variables(
     }
 }
 
-fn consume_ellipsis(cdr: &SExpr) -> (usize, &SExpr) {
+fn consume_ellipsis(cdr: &SExpr<Id>) -> (usize, &SExpr<Id>) {
     let mut count = 0;
     let mut cur = cdr;
     while let SExpr::Cons(cons, _) = cur {
         if matches!(
             &*cons.car,
-            SExpr::Id(Id { symbol, .. }, _) if symbol.0 == "..."
+            SExpr::Var(Id { symbol, .. }, _) if symbol.0 == "..."
         ) {
             count += 1;
             cur = &cons.cdr;
@@ -70,12 +70,12 @@ fn consume_ellipsis(cdr: &SExpr) -> (usize, &SExpr) {
 }
 
 fn validate_pattern(
-    pattern: &SExpr,
+    pattern: &SExpr<Id>,
     literals: &HashSet<Symbol>,
     symbols_seen: &mut HashSet<Symbol>,
 ) -> Result<()> {
     match pattern {
-        SExpr::Id(Id { symbol, .. }, span) => {
+        SExpr::Var(Id { symbol, .. }, span) => {
             if symbol.0 == "..." {
                 return Err(CompilationError {
                     span: *span,
@@ -133,8 +133,8 @@ fn validate_pattern(
 }
 
 fn match_repetition(
-    repeated_pattern: &SExpr,
-    target: &SExpr,
+    repeated_pattern: &SExpr<Id>,
+    target: &SExpr<Id>,
     literals: &HashSet<Symbol>,
     bindings: &Bindings,
     captures: &mut HashMap<Symbol, CapturedSExpr>,
@@ -167,8 +167,8 @@ fn match_repetition(
 }
 
 fn match_subpatterns(
-    patterns: &SExpr,
-    target: &SExpr,
+    patterns: &SExpr<Id>,
+    target: &SExpr<Id>,
     literals: &HashSet<Symbol>,
     bindings: &Bindings,
     captures: &mut HashMap<Symbol, CapturedSExpr>,
@@ -201,15 +201,15 @@ fn match_subpatterns(
 }
 
 fn match_subpattern(
-    pattern: &SExpr,
-    target: &SExpr,
+    pattern: &SExpr<Id>,
+    target: &SExpr<Id>,
     literals: &HashSet<Symbol>,
     bindings: &Bindings,
     captures: &mut HashMap<Symbol, CapturedSExpr>,
 ) -> Option<()> {
     match (pattern, target) {
-        (SExpr::Id(pat_id, _), _) if literals.contains(&pat_id.symbol) => {
-            let SExpr::Id(tgt_id, _) = target else {
+        (SExpr::Var(pat_id, _), _) if literals.contains(&pat_id.symbol) => {
+            let SExpr::Var(tgt_id, _) = target else {
                 return None;
             };
             match (bindings.resolve(pat_id), bindings.resolve(tgt_id)) {
@@ -220,8 +220,8 @@ fn match_subpattern(
                 _ => None,
             }
         }
-        (SExpr::Id(Id { symbol, .. }, _), _) if symbol.0 == "_" => Some(()),
-        (SExpr::Id(Id { symbol, .. }, _), _) => {
+        (SExpr::Var(Id { symbol, .. }, _), _) if symbol.0 == "_" => Some(()),
+        (SExpr::Var(Id { symbol, .. }, _), _) => {
             captures.insert(symbol.clone(), CapturedSExpr::One(target.clone()));
             Some(())
         }
@@ -241,10 +241,10 @@ fn match_subpattern(
 }
 
 fn render_template_repetition(
-    template: &SExpr,
+    template: &SExpr<Id>,
     level: usize,
     captures: &HashMap<Symbol, CapturedSExpr>,
-) -> Result<Vec<SExpr>> {
+) -> Result<Vec<SExpr<Id>>> {
     if level == 0 {
         return Ok(vec![render_template(template, captures)?]);
     }
@@ -297,9 +297,12 @@ fn render_template_repetition(
     })
 }
 
-fn render_template(template: &SExpr, captures: &HashMap<Symbol, CapturedSExpr>) -> Result<SExpr> {
+fn render_template(
+    template: &SExpr<Id>,
+    captures: &HashMap<Symbol, CapturedSExpr>,
+) -> Result<SExpr<Id>> {
     match template {
-        SExpr::Id(Id { symbol, .. }, span) => match captures.get(symbol) {
+        SExpr::Var(Id { symbol, .. }, span) => match captures.get(symbol) {
             Some(CapturedSExpr::One(sexpr)) => Ok(sexpr.clone()),
             Some(CapturedSExpr::Many(_)) => Err(CompilationError {
                 span: *span,
@@ -324,7 +327,10 @@ fn render_template(template: &SExpr, captures: &HashMap<Symbol, CapturedSExpr>) 
     }
 }
 
-fn render_templates(templates: &SExpr, captures: &HashMap<Symbol, CapturedSExpr>) -> Result<SExpr> {
+fn render_templates(
+    templates: &SExpr<Id>,
+    captures: &HashMap<Symbol, CapturedSExpr>,
+) -> Result<SExpr<Id>> {
     match templates {
         SExpr::Cons(cons, _) => {
             let (level, rest) = consume_ellipsis(&cons.cdr);
@@ -349,7 +355,7 @@ fn render_templates(templates: &SExpr, captures: &HashMap<Symbol, CapturedSExpr>
 }
 
 impl SyntaxRule {
-    fn new(pattern: SExpr, template: SExpr, literals: Rc<HashSet<Symbol>>) -> Result<Self> {
+    fn new(pattern: SExpr<Id>, template: SExpr<Id>, literals: Rc<HashSet<Symbol>>) -> Result<Self> {
         let mut symbols_seen = HashSet::new();
         validate_pattern(&pattern, &literals, &mut symbols_seen)?;
         Ok(SyntaxRule {
@@ -361,7 +367,7 @@ impl SyntaxRule {
 
     fn match_pattern(
         &self,
-        target: &SExpr,
+        target: &SExpr<Id>,
         bindings: &Bindings,
     ) -> Option<HashMap<Symbol, CapturedSExpr>> {
         let mut captures = HashMap::new();
@@ -375,13 +381,13 @@ impl SyntaxRule {
         Some(captures)
     }
 
-    fn render_template(&self, captures: &HashMap<Symbol, CapturedSExpr>) -> Result<SExpr> {
+    fn render_template(&self, captures: &HashMap<Symbol, CapturedSExpr>) -> Result<SExpr<Id>> {
         render_template(&self.template, captures)
     }
 }
 
 impl Transformer {
-    pub(crate) fn new(spec: &SExpr) -> Result<Self> {
+    pub(crate) fn new(spec: &SExpr<Id>) -> Result<Self> {
         if_let_sexpr! {(_, (literals_list @ ..), rules @ ..) = spec =>
             let mut literals = HashSet::<Symbol>::new();
             if len(rules) == 0 {
@@ -403,7 +409,7 @@ impl Transformer {
                 });
             }
             try_for_each(literals_list, |literal| {
-                let SExpr::Id(Id { symbol, scopes: _ }, _) = literal else {
+                let SExpr::Var(Id { symbol, scopes: _ }, _) = literal else {
                     return Err(CompilationError {
                         span: literal.get_span(),
                         reason: format!(
@@ -435,7 +441,7 @@ impl Transformer {
                             reason: "'syntax-rules' pattern must be a list".to_owned(),
                         });
                     };
-                    if !matches!(pattern.car.as_ref(), SExpr::Id(..)) {
+                    if !matches!(pattern.car.as_ref(), SExpr::Var(..)) {
                         return Err(CompilationError {
                             span: pattern.car.get_span(),
                             reason: format!(
@@ -467,9 +473,9 @@ impl Transformer {
 
     pub(crate) fn transform(
         &self,
-        application: &SExpr,
+        application: &SExpr<Id>,
         bindings: &Bindings,
-    ) -> Option<Result<SExpr>> {
+    ) -> Option<Result<SExpr<Id>>> {
         let SExpr::Cons(app_cons, _) = application else {
             return None;
         };
@@ -505,8 +511,8 @@ mod tests {
         }
     }
 
-    fn p(src: &str) -> SExpr {
-        parse(&tokenize(src).unwrap()).unwrap()
+    fn p(src: &str) -> SExpr<Id> {
+        introduce(parse(&tokenize(src).unwrap()).unwrap())
     }
 
     fn one(src: &str) -> CapturedSExpr {
@@ -907,7 +913,7 @@ mod tests {
 
     // --- validation tests (SyntaxRule::new) ---
 
-    fn nil() -> SExpr {
+    fn nil() -> SExpr<Id> {
         SExpr::Nil(Span { lo: 0, hi: 0 })
     }
 
@@ -1087,13 +1093,13 @@ mod tests {
     // --- Transformer tests ---
 
     fn make_transformer(src: &str) -> Transformer {
-        Transformer::new(&introduce(&parse(&tokenize(src).unwrap()).unwrap())).unwrap()
+        Transformer::new(&introduce(parse(&tokenize(src).unwrap()).unwrap())).unwrap()
     }
 
-    fn transform(transformer: &Transformer, src: &str) -> SExpr {
+    fn transform(transformer: &Transformer, src: &str) -> SExpr<Id> {
         transformer
             .transform(
-                &introduce(&parse(&tokenize(src).unwrap()).unwrap()),
+                &introduce(parse(&tokenize(src).unwrap()).unwrap()),
                 &Bindings::new(),
             )
             .unwrap()
@@ -1109,7 +1115,7 @@ mod tests {
         let result = transform(&t, "(and)");
         assert_eq!(
             result.without_spans(),
-            introduce(&parse(&tokenize("#f").unwrap()).unwrap()).without_spans()
+            introduce(parse(&tokenize("#f").unwrap()).unwrap()).without_spans()
         );
     }
 
@@ -1122,7 +1128,7 @@ mod tests {
         let result = transform(&t, "(mac x)");
         assert_eq!(
             result.without_spans(),
-            introduce(&parse(&tokenize("x").unwrap()).unwrap()).without_spans()
+            introduce(parse(&tokenize("x").unwrap()).unwrap()).without_spans()
         );
     }
 
@@ -1134,15 +1140,15 @@ mod tests {
         );
         assert_eq!(
             transform(&t, "(and a b)").without_spans(),
-            introduce(&parse(&tokenize("(if a (and b) #f)").unwrap()).unwrap()).without_spans()
+            introduce(parse(&tokenize("(if a (and b) #f)").unwrap()).unwrap()).without_spans()
         );
         assert_eq!(
             transform(&t, "(and a b c)").without_spans(),
-            introduce(&parse(&tokenize("(if a (and b c) #f)").unwrap()).unwrap()).without_spans()
+            introduce(parse(&tokenize("(if a (and b c) #f)").unwrap()).unwrap()).without_spans()
         );
         assert_eq!(
             transform(&t, "(and a b c d)").without_spans(),
-            introduce(&parse(&tokenize("(if a (and b c d) #f)").unwrap()).unwrap()).without_spans()
+            introduce(parse(&tokenize("(if a (and b c d) #f)").unwrap()).unwrap()).without_spans()
         );
     }
 
@@ -1156,19 +1162,19 @@ mod tests {
         );
         assert_eq!(
             transform(&t, "(and)").without_spans(),
-            introduce(&parse(&tokenize("#f").unwrap()).unwrap()).without_spans()
+            introduce(parse(&tokenize("#f").unwrap()).unwrap()).without_spans()
         );
         assert_eq!(
             transform(&t, "(and x)").without_spans(),
-            introduce(&parse(&tokenize("x").unwrap()).unwrap()).without_spans()
+            introduce(parse(&tokenize("x").unwrap()).unwrap()).without_spans()
         );
         assert_eq!(
             transform(&t, "(and a b)").without_spans(),
-            introduce(&parse(&tokenize("(if a (and b) #f)").unwrap()).unwrap()).without_spans()
+            introduce(parse(&tokenize("(if a (and b) #f)").unwrap()).unwrap()).without_spans()
         );
         assert_eq!(
             transform(&t, "(and a b c d)").without_spans(),
-            introduce(&parse(&tokenize("(if a (and b c d) #f)").unwrap()).unwrap()).without_spans()
+            introduce(parse(&tokenize("(if a (and b c d) #f)").unwrap()).unwrap()).without_spans()
         );
     }
 
@@ -1182,7 +1188,7 @@ mod tests {
         // Even though pattern says "foo", application uses "bar"
         assert_eq!(
             transform(&t, "(bar x)").without_spans(),
-            introduce(&parse(&tokenize("x").unwrap()).unwrap()).without_spans()
+            introduce(parse(&tokenize("x").unwrap()).unwrap()).without_spans()
         );
     }
 
@@ -1195,7 +1201,7 @@ mod tests {
         );
         assert!(
             t.transform(
-                &introduce(&parse(&tokenize("42").unwrap()).unwrap()),
+                &introduce(parse(&tokenize("42").unwrap()).unwrap()),
                 &Bindings::new(),
             )
             .is_none()
@@ -1211,7 +1217,7 @@ mod tests {
         );
         assert_eq!(
             transform(&t, "(mac)").without_spans(),
-            introduce(&parse(&tokenize("(begin)").unwrap()).unwrap()).without_spans()
+            introduce(parse(&tokenize("(begin)").unwrap()).unwrap()).without_spans()
         );
     }
 
@@ -1223,11 +1229,11 @@ mod tests {
         );
         assert_eq!(
             transform(&t, "(mac 1 2 3)").without_spans(),
-            introduce(&parse(&tokenize("#(1 2 3)").unwrap()).unwrap()).without_spans()
+            introduce(parse(&tokenize("#(1 2 3)").unwrap()).unwrap()).without_spans()
         );
         assert_eq!(
             transform(&t, "(mac)").without_spans(),
-            introduce(&parse(&tokenize("#()").unwrap()).unwrap()).without_spans()
+            introduce(parse(&tokenize("#()").unwrap()).unwrap()).without_spans()
         );
     }
 
@@ -1239,11 +1245,11 @@ mod tests {
         );
         assert_eq!(
             transform(&t, "(mac #(1 2 3))").without_spans(),
-            introduce(&parse(&tokenize("(1 2 3)").unwrap()).unwrap()).without_spans()
+            introduce(parse(&tokenize("(1 2 3)").unwrap()).unwrap()).without_spans()
         );
         assert!(
             t.transform(
-                &introduce(&parse(&tokenize("(mac (1 2 3))").unwrap()).unwrap()),
+                &introduce(parse(&tokenize("(mac (1 2 3))").unwrap()).unwrap()),
                 &Bindings::new(),
             )
             .is_none()
@@ -1258,7 +1264,7 @@ mod tests {
         );
         assert!(
             t.transform(
-                &introduce(&parse(&tokenize("(mac x)").unwrap()).unwrap()),
+                &introduce(parse(&tokenize("(mac x)").unwrap()).unwrap()),
                 &Bindings::new(),
             )
             .is_none()
@@ -1274,7 +1280,7 @@ mod tests {
         );
         assert_eq!(
             transform(&t, "(mac a)").without_spans(),
-            introduce(&parse(&tokenize("1").unwrap()).unwrap()).without_spans()
+            introduce(parse(&tokenize("1").unwrap()).unwrap()).without_spans()
         );
     }
 
@@ -1286,12 +1292,12 @@ mod tests {
         );
         assert_eq!(
             transform(&t, "(mac x => f)").without_spans(),
-            introduce(&parse(&tokenize("(f x)").unwrap()).unwrap()).without_spans()
+            introduce(parse(&tokenize("(f x)").unwrap()).unwrap()).without_spans()
         );
         // Non-matching: `=>` in literal position doesn't match different identifier
         assert!(
             t.transform(
-                &introduce(&parse(&tokenize("(mac x y f)").unwrap()).unwrap()),
+                &introduce(parse(&tokenize("(mac x y f)").unwrap()).unwrap()),
                 &Bindings::new(),
             )
             .is_none()
@@ -1306,14 +1312,14 @@ mod tests {
         );
         assert_eq!(
             transform(&t, "(mac 3)").without_spans(),
-            introduce(&parse(&tokenize("(1 2 . 3)").unwrap()).unwrap()).without_spans()
+            introduce(parse(&tokenize("(1 2 . 3)").unwrap()).unwrap()).without_spans()
         );
     }
 
     #[test]
     fn test_transformer_new_invalid_spec() {
         let result = Transformer::new(&introduce(
-            &parse(&tokenize("(syntax-rules)").unwrap()).unwrap(),
+            parse(&tokenize("(syntax-rules)").unwrap()).unwrap(),
         ));
         assert!(result.is_err());
     }
@@ -1321,7 +1327,7 @@ mod tests {
     #[test]
     fn test_transformer_new_non_proper_list_of_rules() {
         let result = Transformer::new(&introduce(
-            &parse(&tokenize("(syntax-rules (a b c) ((_ x) x) . 3)").unwrap()).unwrap(),
+            parse(&tokenize("(syntax-rules (a b c) ((_ x) x) . 3)").unwrap()).unwrap(),
         ));
         assert!(result.is_err());
         assert!(
@@ -1335,7 +1341,7 @@ mod tests {
     #[test]
     fn test_transformer_new_non_proper_list_of_literals() {
         let result = Transformer::new(&introduce(
-            &parse(&tokenize("(syntax-rules (a b . c) ((_ x) x))").unwrap()).unwrap(),
+            parse(&tokenize("(syntax-rules (a b . c) ((_ x) x))").unwrap()).unwrap(),
         ));
         assert!(result.is_err());
         assert!(
@@ -1349,7 +1355,7 @@ mod tests {
     #[test]
     fn test_transformer_new_pattern_without_symbol_start() {
         let result = Transformer::new(&introduce(
-            &parse(&tokenize("(syntax-rules (a b c) ((1 x) x))").unwrap()).unwrap(),
+            parse(&tokenize("(syntax-rules (a b c) ((1 x) x))").unwrap()).unwrap(),
         ));
         assert!(result.is_err());
         assert!(
@@ -1363,7 +1369,7 @@ mod tests {
     #[test]
     fn test_transformer_new_no_rules() {
         let result = Transformer::new(&introduce(
-            &parse(&tokenize("(syntax-rules (a b c) )").unwrap()).unwrap(),
+            parse(&tokenize("(syntax-rules (a b c) )").unwrap()).unwrap(),
         ));
         assert!(result.is_err());
         assert!(
@@ -1377,7 +1383,7 @@ mod tests {
     #[test]
     fn test_transformer_new_non_symbol_literal() {
         let result = Transformer::new(&introduce(
-            &parse(&tokenize("(syntax-rules (42) ((_ x) x))").unwrap()).unwrap(),
+            parse(&tokenize("(syntax-rules (42) ((_ x) x))").unwrap()).unwrap(),
         ));
         assert!(result.is_err());
         assert!(
@@ -1391,7 +1397,7 @@ mod tests {
     #[test]
     fn test_transformer_new_rejects_duplicate_pattern_var() {
         let result = Transformer::new(&introduce(
-            &parse(&tokenize("(syntax-rules () ((_ a a) a))").unwrap()).unwrap(),
+            parse(&tokenize("(syntax-rules () ((_ a a) a))").unwrap()).unwrap(),
         ));
         assert!(result.is_err());
         assert!(
@@ -1405,7 +1411,7 @@ mod tests {
     #[test]
     fn test_transformer_new_rejects_ellipsis_in_literals() {
         let result = Transformer::new(&introduce(
-            &parse(&tokenize("(syntax-rules (...) ((_ x) x))").unwrap()).unwrap(),
+            parse(&tokenize("(syntax-rules (...) ((_ x) x))").unwrap()).unwrap(),
         ));
         assert!(result.is_err());
         assert!(
@@ -1419,7 +1425,7 @@ mod tests {
     #[test]
     fn test_transformer_new_rejects_underscore_in_literals() {
         let result = Transformer::new(&introduce(
-            &parse(&tokenize("(syntax-rules (_) ((_ x) x))").unwrap()).unwrap(),
+            parse(&tokenize("(syntax-rules (_) ((_ x) x))").unwrap()).unwrap(),
         ));
         assert!(result.is_err());
         assert!(
@@ -1434,7 +1440,7 @@ mod tests {
     #[test]
     fn test_transformer_new_rejects_ellipsis_among_valid_literals() {
         let result = Transformer::new(&introduce(
-            &parse(&tokenize("(syntax-rules (=> ...) ((_ x) x))").unwrap()).unwrap(),
+            parse(&tokenize("(syntax-rules (=> ...) ((_ x) x))").unwrap()).unwrap(),
         ));
         assert!(result.is_err());
         assert!(
@@ -1449,7 +1455,7 @@ mod tests {
     #[test]
     fn test_transformer_new_rejects_underscore_among_valid_literals() {
         let result = Transformer::new(&introduce(
-            &parse(&tokenize("(syntax-rules (=> _) ((_ x) x))").unwrap()).unwrap(),
+            parse(&tokenize("(syntax-rules (=> _) ((_ x) x))").unwrap()).unwrap(),
         ));
         assert!(result.is_err());
         assert!(
@@ -1463,7 +1469,7 @@ mod tests {
     #[test]
     fn test_transformer_new_rejects_ellipsis_not_at_end() {
         let result = Transformer::new(&introduce(
-            &parse(&tokenize("(syntax-rules () ((_ a ... b) a))").unwrap()).unwrap(),
+            parse(&tokenize("(syntax-rules () ((_ a ... b) a))").unwrap()).unwrap(),
         ));
         assert!(result.is_err());
         assert!(

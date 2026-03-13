@@ -12,18 +12,18 @@ use rrrrr_rs::{
 fn test_add_scope() {
     let span = Span { lo: 0, hi: 1 };
     let list = make_sexpr!(
-        SExpr::Id(Id::new("a", [1]), span),
-        (SExpr::Id(Id::new("b", [1]), span)),
-        (SExpr::Id(Id::new("c", [0]), span)),
-        SExpr::Id(Id::new("d", [0, 1]), span),
+        SExpr::Var(Id::new("a", [1]), span),
+        (SExpr::Var(Id::new("b", [1]), span)),
+        (SExpr::Var(Id::new("c", [0]), span)),
+        SExpr::Var(Id::new("d", [0, 1]), span),
     );
     assert_eq!(
         list.add_scope(0).add_scope(2).without_spans(),
         make_sexpr!(
-            SExpr::Id(Id::new("a", [0, 1, 2]), span),
-            (SExpr::Id(Id::new("b", [0, 1, 2]), span)),
-            (SExpr::Id(Id::new("c", [0, 2]), span)),
-            SExpr::Id(Id::new("d", [0, 1, 2]), span),
+            SExpr::Var(Id::new("a", [0, 1, 2]), span),
+            (SExpr::Var(Id::new("b", [0, 1, 2]), span)),
+            (SExpr::Var(Id::new("c", [0, 2]), span)),
+            SExpr::Var(Id::new("d", [0, 1, 2]), span),
         )
         .without_spans()
     )
@@ -33,18 +33,18 @@ fn test_add_scope() {
 fn test_flip_scope() {
     let span = Span { lo: 0, hi: 1 };
     let list = make_sexpr!(
-        SExpr::Id(Id::new("a", [1]), span),
-        (SExpr::Id(Id::new("b", [1]), span)),
-        (SExpr::Id(Id::new("c", [0]), span)),
-        SExpr::Id(Id::new("d", [0, 1]), span),
+        SExpr::Var(Id::new("a", [1]), span),
+        (SExpr::Var(Id::new("b", [1]), span)),
+        (SExpr::Var(Id::new("c", [0]), span)),
+        SExpr::Var(Id::new("d", [0, 1]), span),
     );
     assert_eq!(
         list.flip_scope(0).without_spans(),
         make_sexpr!(
-            SExpr::Id(Id::new("a", [1, 0]), span),
-            (SExpr::Id(Id::new("b", [1, 0]), span)),
-            (SExpr::Id(Id::new("c", []), span)),
-            SExpr::Id(Id::new("d", [1]), span),
+            SExpr::Var(Id::new("a", [1, 0]), span),
+            (SExpr::Var(Id::new("b", [1, 0]), span)),
+            (SExpr::Var(Id::new("c", []), span)),
+            SExpr::Var(Id::new("d", [1]), span),
         )
         .without_spans()
     )
@@ -55,8 +55,8 @@ fn test_add_scope_vector() {
     let span = Span { lo: 0, hi: 1 };
     let vector = SExpr::Vector(
         Vector(vec![
-            SExpr::Id(Id::new("a", [1]), span),
-            SExpr::Id(Id::new("b", [0]), span),
+            SExpr::Var(Id::new("a", [1]), span),
+            SExpr::Var(Id::new("b", [0]), span),
             SExpr::Num(Num(42.0), span),
         ]),
         span,
@@ -65,8 +65,8 @@ fn test_add_scope_vector() {
         vector.add_scope(2).without_spans(),
         SExpr::Vector(
             Vector(vec![
-                SExpr::Id(Id::new("a", [1, 2]), span),
-                SExpr::Id(Id::new("b", [0, 2]), span),
+                SExpr::Var(Id::new("a", [1, 2]), span),
+                SExpr::Var(Id::new("b", [0, 2]), span),
                 SExpr::Num(Num(42.0), span),
             ]),
             span,
@@ -80,8 +80,8 @@ fn test_flip_scope_vector() {
     let span = Span { lo: 0, hi: 1 };
     let vector = SExpr::Vector(
         Vector(vec![
-            SExpr::Id(Id::new("a", [0, 1]), span),
-            SExpr::Id(Id::new("b", [1]), span),
+            SExpr::Var(Id::new("a", [0, 1]), span),
+            SExpr::Var(Id::new("b", [1]), span),
         ]),
         span,
     );
@@ -89,8 +89,8 @@ fn test_flip_scope_vector() {
         vector.flip_scope(1).without_spans(),
         SExpr::Vector(
             Vector(vec![
-                SExpr::Id(Id::new("a", [0]), span),
-                SExpr::Id(Id::new("b", []), span),
+                SExpr::Var(Id::new("a", [0]), span),
+                SExpr::Var(Id::new("b", []), span),
             ]),
             span,
         )
@@ -102,14 +102,14 @@ fn test_flip_scope_vector() {
 fn test_add_scope_nested_vector() {
     let span = Span { lo: 0, hi: 1 };
     let nested = make_sexpr!(
-        SExpr::Vector(Vector(vec![SExpr::Id(Id::new("x", [1]), span)]), span,),
-        SExpr::Id(Id::new("y", [1]), span),
+        SExpr::Vector(Vector(vec![SExpr::Var(Id::new("x", [1]), span)]), span,),
+        SExpr::Var(Id::new("y", [1]), span),
     );
     assert_eq!(
         nested.add_scope(2).without_spans(),
         make_sexpr!(
-            SExpr::Vector(Vector(vec![SExpr::Id(Id::new("x", [1, 2]), span)]), span,),
-            SExpr::Id(Id::new("y", [1, 2]), span),
+            SExpr::Vector(Vector(vec![SExpr::Var(Id::new("x", [1, 2]), span)]), span,),
+            SExpr::Var(Id::new("y", [1, 2]), span),
         )
         .without_spans()
     )
@@ -147,8 +147,8 @@ fn test_vector_to_cons_list() {
 
 #[test]
 fn test_eq_includes_spans() {
-    let left = SExpr::Num(Num(1.0), Span { lo: 0, hi: 1 });
-    let right = SExpr::Num(Num(1.0), Span { lo: 3, hi: 4 });
+    let left: SExpr<Id> = SExpr::Num(Num(1.0), Span { lo: 0, hi: 1 });
+    let right: SExpr<Id> = SExpr::Num(Num(1.0), Span { lo: 3, hi: 4 });
 
     assert_ne!(left, right);
     assert_eq!(left.without_spans(), right.without_spans());
@@ -159,7 +159,7 @@ fn test_debug_without_spans_omits_span_fields() {
     let sexpr = SExpr::cons(
         SExpr::Num(Num(1.0), Span { lo: 1, hi: 2 }),
         SExpr::Vector(
-            Vector(vec![SExpr::Id(Id::new("x", [1]), Span { lo: 3, hi: 4 })]),
+            Vector(vec![SExpr::Var(Id::new("x", [1]), Span { lo: 3, hi: 4 })]),
             Span { lo: 5, hi: 6 },
         ),
     );

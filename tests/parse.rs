@@ -2,7 +2,7 @@ use rrrrr_rs::compile::{
     compilation_error::CompilationError,
     lex::tokenize,
     parse::parse,
-    sexpr::{Cons, Id, Num, SExpr, Vector},
+    sexpr::{Cons, Num, SExpr, Symbol, Vector},
     span::Span,
     token::Token,
 };
@@ -21,7 +21,7 @@ fn test_parse_list_of_symbol() {
 
     let list = SExpr::Cons(
         Cons {
-            car: Box::new(SExpr::Id(Id::new("abc", []), Span { lo: 1, hi: 4 })),
+            car: Box::new(SExpr::Var(Symbol::new("abc"), Span { lo: 1, hi: 4 })),
             cdr: Box::new(SExpr::Nil(Span { lo: 4, hi: 5 })),
         },
         Span { lo: 0, hi: 5 },
@@ -36,7 +36,7 @@ fn test_parse_quote_datum() {
 
     let list = SExpr::Cons(
         Cons {
-            car: Box::new(SExpr::Id(Id::new("quote", []), Span { lo: 0, hi: 1 })),
+            car: Box::new(SExpr::Var(Symbol::new("quote"), Span { lo: 0, hi: 1 })),
             cdr: Box::new(SExpr::Cons(
                 Cons {
                     car: Box::new(SExpr::Nil(Span { lo: 1, hi: 3 })),
@@ -57,8 +57,8 @@ fn test_parse_unquote_splice_datum() {
 
     let list = SExpr::Cons(
         Cons {
-            car: Box::new(SExpr::Id(
-                Id::new("unquote-splicing", []),
+            car: Box::new(SExpr::Var(
+                Symbol::new("unquote-splicing"),
                 Span { lo: 0, hi: 2 },
             )),
             cdr: Box::new(SExpr::Cons(
@@ -81,8 +81,8 @@ fn test_parse_unquote_splice_unquote_splice_datum() {
 
     let inner_list = SExpr::Cons(
         Cons {
-            car: Box::new(SExpr::Id(
-                Id::new("unquote-splicing", []),
+            car: Box::new(SExpr::Var(
+                Symbol::new("unquote-splicing"),
                 Span { lo: 2, hi: 4 },
             )),
             cdr: Box::new(SExpr::Cons(
@@ -98,8 +98,8 @@ fn test_parse_unquote_splice_unquote_splice_datum() {
 
     let list = SExpr::Cons(
         Cons {
-            car: Box::new(SExpr::Id(
-                Id::new("unquote-splicing", []),
+            car: Box::new(SExpr::Var(
+                Symbol::new("unquote-splicing"),
                 Span { lo: 0, hi: 2 },
             )),
             cdr: Box::new(SExpr::Cons(
@@ -122,7 +122,7 @@ fn test_parse_unquote_splice_quote_datum() {
 
     let inner_list = SExpr::Cons(
         Cons {
-            car: Box::new(SExpr::Id(Id::new("quote", []), Span { lo: 2, hi: 3 })),
+            car: Box::new(SExpr::Var(Symbol::new("quote"), Span { lo: 2, hi: 3 })),
             cdr: Box::new(SExpr::Cons(
                 Cons {
                     car: Box::new(SExpr::Nil(Span { lo: 3, hi: 5 })),
@@ -136,8 +136,8 @@ fn test_parse_unquote_splice_quote_datum() {
 
     let list = SExpr::Cons(
         Cons {
-            car: Box::new(SExpr::Id(
-                Id::new("unquote-splicing", []),
+            car: Box::new(SExpr::Var(
+                Symbol::new("unquote-splicing"),
                 Span { lo: 0, hi: 2 },
             )),
             cdr: Box::new(SExpr::Cons(
@@ -160,8 +160,8 @@ fn test_parse_quote_unquote_splice_datum() {
 
     let inner_list = SExpr::Cons(
         Cons {
-            car: Box::new(SExpr::Id(
-                Id::new("unquote-splicing", []),
+            car: Box::new(SExpr::Var(
+                Symbol::new("unquote-splicing"),
                 Span { lo: 1, hi: 3 },
             )),
             cdr: Box::new(SExpr::Cons(
@@ -177,7 +177,7 @@ fn test_parse_quote_unquote_splice_datum() {
 
     let list = SExpr::Cons(
         Cons {
-            car: Box::new(SExpr::Id(Id::new("quote", []), Span { lo: 0, hi: 1 })),
+            car: Box::new(SExpr::Var(Symbol::new("quote"), Span { lo: 0, hi: 1 })),
             cdr: Box::new(SExpr::Cons(
                 Cons {
                     car: Box::new(inner_list),

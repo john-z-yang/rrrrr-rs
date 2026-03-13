@@ -2,7 +2,7 @@ use rrrrr_rs::{
     compile::{
         lex::tokenize,
         parse::parse,
-        sexpr::{Id, Num, SExpr, Symbol},
+        sexpr::{Num, SExpr, Symbol},
         span::Span,
     },
     if_let_sexpr, match_sexpr, template_sexpr,
@@ -14,7 +14,7 @@ fn test_multi_match_sexpr() {
     let list = parse(&tokenize("(1 2 3)").unwrap()).unwrap();
     let num = parse(&tokenize("42").unwrap()).unwrap();
 
-    let classify = |sexpr: &SExpr| -> &str {
+    let classify = |sexpr: &SExpr<Symbol>| -> &str {
         match_sexpr! {
             sexpr;
 
@@ -60,7 +60,7 @@ fn test_multi_match_sexpr_nested_list() {
     let nested = parse(&tokenize("((a b) c)").unwrap()).unwrap();
     let flat = parse(&tokenize("(a b c)").unwrap()).unwrap();
 
-    let classify = |sexpr: &SExpr| -> &str {
+    let classify = |sexpr: &SExpr<Symbol>| -> &str {
         match_sexpr! {
             sexpr;
 
@@ -76,7 +76,7 @@ fn test_multi_match_sexpr_nested_list() {
 
 #[test]
 fn test_multi_match_sexpr_with_try_operator() {
-    fn extract_second(sexpr: &SExpr) -> Result<&SExpr, &str> {
+    fn extract_second(sexpr: &SExpr<Symbol>) -> Result<&SExpr<Symbol>, &str> {
         match_sexpr! {
             sexpr;
 
@@ -176,7 +176,7 @@ fn test_if_let_sexpr_tail_capture_proper_list() {
     // (a, rest @ ..) on proper list (foo x y) — rest should be (x y)
     let sexpr = parse(&tokenize("(foo x y)").unwrap()).unwrap();
     let mut matched = false;
-    if_let_sexpr! {(SExpr::Id(..), rest @ ..) = &sexpr => {
+    if_let_sexpr! {(SExpr::Var(..), rest @ ..) = &sexpr => {
         matched = true;
         assert!(matches!(rest, SExpr::Cons(..)));
     }}
@@ -188,9 +188,9 @@ fn test_if_let_sexpr_tail_capture_dotted_pair() {
     // (a, rest @ ..) on dotted pair (foo . x) — rest should be the symbol x
     let sexpr = parse(&tokenize("(foo . x)").unwrap()).unwrap();
     let mut matched = false;
-    if_let_sexpr! {(SExpr::Id(..), rest @ ..) = &sexpr => {
+    if_let_sexpr! {(SExpr::Var(..), rest @ ..) = &sexpr => {
         matched = true;
-        assert!(matches!(rest, SExpr::Id(Id { symbol: Symbol(s), .. }, _) if s == "x"));
+        assert!(matches!(rest, SExpr::Var(Symbol(s), _) if s == "x"));
     }}
     assert!(matched);
 }
@@ -200,7 +200,7 @@ fn test_if_let_sexpr_tail_capture_nil() {
     // (a, rest @ ..) on single-element list (foo) — rest should be nil
     let sexpr = parse(&tokenize("(foo)").unwrap()).unwrap();
     let mut matched = false;
-    if_let_sexpr! {(SExpr::Id(..), rest @ ..) = &sexpr => {
+    if_let_sexpr! {(SExpr::Var(..), rest @ ..) = &sexpr => {
         matched = true;
         assert!(matches!(rest, SExpr::Nil(..)));
     }}
@@ -226,7 +226,7 @@ fn test_if_let_sexpr_nested_list_tail_capture_dotted() {
     let mut matched = false;
     if_let_sexpr! {((..), rest @ ..) = &sexpr => {
         matched = true;
-        assert!(matches!(rest, SExpr::Id(Id { symbol: Symbol(s), .. }, _) if s == "x"));
+        assert!(matches!(rest, SExpr::Var(Symbol(s), _) if s == "x"));
     }}
     assert!(matched);
 }
@@ -236,12 +236,12 @@ fn test_match_sexpr_tail_capture_dotted() {
     let proper = parse(&tokenize("(define (foo x y) body)").unwrap()).unwrap();
     let dotted = parse(&tokenize("(define (foo . x) body)").unwrap()).unwrap();
 
-    let extract_args = |sexpr: &SExpr| -> &str {
+    let extract_args = |sexpr: &SExpr<Symbol>| -> &str {
         match_sexpr! {
             sexpr;
 
-            (_, (SExpr::Id(..), args @ ..), _) => {
-                if matches!(args, SExpr::Id(..)) {
+            (_, (SExpr::Var(..), args @ ..), _) => {
+                if matches!(args, SExpr::Var(..)) {
                     "atom"
                 } else {
                     "list"

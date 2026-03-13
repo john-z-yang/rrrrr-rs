@@ -3,11 +3,11 @@ use std::{iter::Peekable, slice::Iter};
 use super::{compilation_error::CompilationError, sexpr::SExpr, token::Token};
 use crate::compile::{
     compilation_error::Result,
-    sexpr::{Id, Vector},
+    sexpr::{Symbol, Vector},
     span::Span,
 };
 
-pub fn parse(tokens: &[Token]) -> Result<SExpr> {
+pub fn parse(tokens: &[Token]) -> Result<SExpr<Symbol>> {
     Parser::new(tokens)?.parse()
 }
 
@@ -36,7 +36,7 @@ impl Parser<'_> {
         }
     }
 
-    fn parse(&mut self) -> Result<SExpr> {
+    fn parse(&mut self) -> Result<SExpr<Symbol>> {
         let res = self.parse_datum()?;
         match self.look_ahead() {
             Some(Token::EoF(_)) => Ok(res),
@@ -45,7 +45,7 @@ impl Parser<'_> {
         }
     }
 
-    fn parse_datum(&mut self) -> Result<SExpr> {
+    fn parse_datum(&mut self) -> Result<SExpr<Symbol>> {
         match self.look_ahead() {
             Some(
                 Token::Id(_, _)
@@ -67,7 +67,7 @@ impl Parser<'_> {
         }
     }
 
-    fn parse_atom(&mut self) -> SExpr {
+    fn parse_atom(&mut self) -> SExpr<Symbol> {
         assert!(
             matches!(
                 self.look_ahead(),
@@ -83,7 +83,7 @@ impl Parser<'_> {
         );
 
         match self.consume() {
-            Token::Id(symbol, span) => SExpr::Id(Id::new(&symbol.0, []), *span),
+            Token::Id(symbol, span) => SExpr::Var(symbol.clone(), *span),
             Token::Bool(bool, span) => SExpr::Bool(bool.clone(), *span),
             Token::Num(num, span) => SExpr::Num(num.clone(), *span),
             Token::Char(char, span) => SExpr::Char(char.clone(), *span),
@@ -92,14 +92,14 @@ impl Parser<'_> {
         }
     }
 
-    fn parse_compound(&mut self) -> Result<SExpr> {
+    fn parse_compound(&mut self) -> Result<SExpr<Symbol>> {
         match self.look_ahead() {
             Some(Token::HashLParen(_)) => self.parse_vector(),
             _ => self.parse_list(),
         }
     }
 
-    fn parse_list(&mut self) -> Result<SExpr> {
+    fn parse_list(&mut self) -> Result<SExpr<Symbol>> {
         if matches!(
             self.look_ahead(),
             Some(Token::Quote(_) | Token::QuasiQuote(_) | Token::Comma(_) | Token::CommaAt(_))
@@ -113,7 +113,7 @@ impl Parser<'_> {
         );
 
         let start = self.consume().get_span();
-        let mut elements: Vec<SExpr> = vec![];
+        let mut elements: Vec<SExpr<Symbol>> = vec![];
         while let Some(t) = self.look_ahead() {
             if matches!(t, Token::RParen(_))
                 || matches!(t, Token::Dot(_))
@@ -150,7 +150,7 @@ impl Parser<'_> {
         }
     }
 
-    fn parse_dot_notation(&mut self) -> Result<SExpr> {
+    fn parse_dot_notation(&mut self) -> Result<SExpr<Symbol>> {
         assert!(
             matches!(self.look_ahead(), Some(Token::Dot(_))),
             "parse_dot_notation expected the '.' token"
@@ -166,7 +166,7 @@ impl Parser<'_> {
         }
     }
 
-    fn parse_abbreviation(&mut self) -> Result<SExpr> {
+    fn parse_abbreviation(&mut self) -> Result<SExpr<Symbol>> {
         let elements = [self.parse_prefix(), self.parse_datum()?];
         Ok(Self::make_list(
             &elements,
@@ -175,7 +175,7 @@ impl Parser<'_> {
         ))
     }
 
-    fn parse_prefix(&mut self) -> SExpr {
+    fn parse_prefix(&mut self) -> SExpr<Symbol> {
         assert!(
             matches!(
                 self.look_ahead(),
@@ -185,21 +185,21 @@ impl Parser<'_> {
         );
 
         match self.consume() {
-            Token::Quote(span) => SExpr::Id(Id::new("quote", []), *span),
-            Token::QuasiQuote(span) => SExpr::Id(Id::new("quasiquote", []), *span),
-            Token::Comma(span) => SExpr::Id(Id::new("unquote", []), *span),
-            Token::CommaAt(span) => SExpr::Id(Id::new("unquote-splicing", []), *span),
+            Token::Quote(span) => SExpr::Var(Symbol::new("quote"), *span),
+            Token::QuasiQuote(span) => SExpr::Var(Symbol::new("quasiquote"), *span),
+            Token::Comma(span) => SExpr::Var(Symbol::new("unquote"), *span),
+            Token::CommaAt(span) => SExpr::Var(Symbol::new("unquote-splicing"), *span),
             _ => unreachable!("parse_abbreviation expected only tokens for abbreviated prefix"),
         }
     }
 
-    fn parse_vector(&mut self) -> Result<SExpr> {
+    fn parse_vector(&mut self) -> Result<SExpr<Symbol>> {
         assert!(
             matches!(self.look_ahead(), Some(Token::HashLParen(_))),
             "parse_vector expected the '#(' token"
         );
         let start = self.consume().get_span();
-        let mut elements: Vec<SExpr> = vec![];
+        let mut elements: Vec<SExpr<Symbol>> = vec![];
         while let Some(t) = self.look_ahead() {
             if matches!(t, Token::RParen(_)) || matches!(t, Token::EoF(_)) {
                 break;
@@ -216,15 +216,16 @@ impl Parser<'_> {
         }
     }
 
-    fn make_list(elements: &[SExpr], start: Span, end: Span) -> SExpr {
+    fn make_list(elements: &[SExpr<Symbol>], start: Span, end: Span) -> SExpr<Symbol> {
         let mut res = SExpr::Nil(end);
         for element in elements.iter().rev() {
             res = SExpr::cons(element.clone(), res);
         }
-        res.update_span(start.combine(res.get_span()))
+        res.update_span(start.combine(res.get_span()));
+        res
     }
 
-    fn make_improper_list(slice: &[SExpr], start: Span, end: Span) -> SExpr {
+    fn make_improper_list(slice: &[SExpr<Symbol>], start: Span, end: Span) -> SExpr<Symbol> {
         assert!(
             slice.len() >= 2,
             "improper list has to have more than 2 elements"
@@ -233,11 +234,12 @@ impl Parser<'_> {
         let cdr = iter.next().unwrap().clone();
         let car = iter.next().unwrap().clone();
         let mut res = SExpr::cons(car, cdr);
-        res = res.update_span(res.get_span().combine(end));
+        res.update_span(res.get_span().combine(end));
         for element in iter {
             res = SExpr::cons(element.clone(), res);
         }
-        res.update_span(start.combine(res.get_span()))
+        res.update_span(start.combine(res.get_span()));
+        res
     }
 
     fn look_ahead(&mut self) -> Option<Token> {

@@ -7,25 +7,25 @@ use super::{
 };
 
 #[derive(PartialEq, Clone, Debug)]
-pub enum SExpr {
-    Id(Id, Span),
-    Cons(Cons, Span),
+pub enum SExpr<T> {
+    Var(T, Span),
+    Cons(Cons<T>, Span),
     Nil(Span),
     Bool(Bool, Span),
     Num(Num, Span),
     Char(Char, Span),
     Str(Str, Span),
-    Vector(Vector, Span),
+    Vector(Vector<T>, Span),
 }
 
-impl SExpr {
-    pub fn without_spans(&self) -> SExprWithoutSpans<'_> {
+impl<T> SExpr<T> {
+    pub fn without_spans(&self) -> SExprWithoutSpans<'_, T> {
         SExprWithoutSpans(self)
     }
 
     pub fn get_span(&self) -> Span {
         *match self {
-            SExpr::Id(_, span) => span,
+            SExpr::Var(_, span) => span,
             SExpr::Cons(_, span) => span,
             SExpr::Nil(span) => span,
             SExpr::Bool(_, span) => span,
@@ -36,31 +36,51 @@ impl SExpr {
         }
     }
 
-    pub fn update_span(&self, span: Span) -> Self {
-        match self {
-            SExpr::Id(id, _) => SExpr::Id(id.clone(), span),
-            SExpr::Cons(cons, _) => SExpr::Cons(cons.clone(), span),
-            SExpr::Nil(_) => SExpr::Nil(span),
-            SExpr::Bool(bool, _) => SExpr::Bool(bool.clone(), span),
-            SExpr::Num(num, _) => SExpr::Num(num.clone(), span),
-            SExpr::Char(char, _) => SExpr::Char(char.clone(), span),
-            SExpr::Str(str, _) => SExpr::Str(str.clone(), span),
-            SExpr::Vector(vector, _) => SExpr::Vector(vector.clone(), span),
-        }
+    pub fn update_span(&mut self, span: Span) {
+        *match self {
+            SExpr::Var(_, span) => span,
+            SExpr::Cons(_, span) => span,
+            SExpr::Nil(span) => span,
+            SExpr::Bool(_, span) => span,
+            SExpr::Num(_, span) => span,
+            SExpr::Char(_, span) => span,
+            SExpr::Str(_, span) => span,
+            SExpr::Vector(_, span) => span,
+        } = span;
     }
 
-    pub fn cons(car: SExpr, cdr: SExpr) -> Self {
+    pub fn cons(car: SExpr<T>, cdr: SExpr<T>) -> Self {
         let start = car.get_span();
         let end = cdr.get_span();
         Self::Cons(Cons::new(car, cdr), start.combine(end))
     }
 
+    pub fn map_var<U>(self, f: &impl Fn(T, Span) -> U) -> SExpr<U> {
+        match self {
+            SExpr::Var(var, span) => SExpr::Var(f(var, span), span),
+            SExpr::Cons(cons, span) => {
+                SExpr::Cons(Cons::new(cons.car.map_var(f), cons.cdr.map_var(f)), span)
+            }
+            SExpr::Nil(span) => SExpr::Nil(span),
+            SExpr::Bool(bool, span) => SExpr::Bool(bool.clone(), span),
+            SExpr::Num(num, span) => SExpr::Num(num.clone(), span),
+            SExpr::Char(char, span) => SExpr::Char(char.clone(), span),
+            SExpr::Str(str, span) => SExpr::Str(str.clone(), span),
+            SExpr::Vector(vector, span) => SExpr::Vector(
+                Vector(vector.0.into_iter().map(|sexpr| sexpr.map_var(f)).collect()),
+                span,
+            ),
+        }
+    }
+}
+
+impl SExpr<Id> {
     fn adjust_scope<F>(&self, op: &F) -> Self
     where
         F: Fn(&Scopes) -> Scopes,
     {
         match self {
-            Self::Id(id, span) => Self::Id(id.adjust_scope(op), *span),
+            Self::Var(id, span) => Self::Var(id.adjust_scope(op), *span),
             Self::Cons(cons, span) => Self::Cons(
                 Cons::new(cons.car.adjust_scope(op), cons.cdr.adjust_scope(op)),
                 *span,
@@ -102,11 +122,11 @@ impl SExpr {
     }
 }
 
-impl fmt::Display for SExpr {
+impl<T: fmt::Display> fmt::Display for SExpr<T> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
-            SExpr::Id(id, _) => {
-                write!(f, "{}", id)
+            SExpr::Var(var, _) => {
+                write!(f, "{}", var)
             }
             SExpr::Cons(cons, _) => {
                 write!(f, "{}", cons)
@@ -134,13 +154,13 @@ impl fmt::Display for SExpr {
 }
 
 #[derive(Clone, Copy)]
-pub struct SExprWithoutSpans<'a>(&'a SExpr);
+pub struct SExprWithoutSpans<'a, T>(&'a SExpr<T>);
 
-impl PartialEq for SExprWithoutSpans<'_> {
+impl<T: PartialEq> PartialEq for SExprWithoutSpans<'_, T> {
     fn eq(&self, other: &Self) -> bool {
-        fn eq_sexpr_without_spans(left: &SExpr, right: &SExpr) -> bool {
+        fn eq_sexpr_without_spans<T: PartialEq>(left: &SExpr<T>, right: &SExpr<T>) -> bool {
             match (left, right) {
-                (SExpr::Id(id, _), SExpr::Id(other, _)) => id == other,
+                (SExpr::Var(var, _), SExpr::Var(other, _)) => var == other,
                 (SExpr::Cons(cons, _), SExpr::Cons(other, _)) => {
                     eq_sexpr_without_spans(&cons.car, &other.car)
                         && eq_sexpr_without_spans(&cons.cdr, &other.cdr)
@@ -166,10 +186,10 @@ impl PartialEq for SExprWithoutSpans<'_> {
     }
 }
 
-impl fmt::Debug for SExprWithoutSpans<'_> {
+impl<T: fmt::Debug> fmt::Debug for SExprWithoutSpans<'_, T> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self.0 {
-            SExpr::Id(id, _) => f.debug_tuple("Id").field(id).finish(),
+            SExpr::Var(var, _) => f.debug_tuple("Var").field(var).finish(),
             SExpr::Cons(cons, _) => f
                 .debug_tuple("Cons")
                 .field(&SExprWithoutSpans(cons.car.as_ref()))
@@ -233,10 +253,10 @@ impl fmt::Display for Id {
     }
 }
 
-impl TryFrom<SExpr> for Id {
+impl TryFrom<SExpr<Id>> for Id {
     type Error = ();
-    fn try_from(value: SExpr) -> Result<Self, Self::Error> {
-        if let SExpr::Id(id, _) = value {
+    fn try_from(value: SExpr<Id>) -> Result<Self, Self::Error> {
+        if let SExpr::Var(id, _) = value {
             Ok(id)
         } else {
             Err(())
@@ -260,20 +280,20 @@ impl fmt::Display for Symbol {
 }
 
 #[derive(PartialEq, Clone, Debug)]
-pub struct Cons {
-    pub car: Box<SExpr>,
-    pub cdr: Box<SExpr>,
+pub struct Cons<T> {
+    pub car: Box<SExpr<T>>,
+    pub cdr: Box<SExpr<T>>,
 }
 
-impl Cons {
-    pub fn new(car: SExpr, cdr: SExpr) -> Self {
+impl<T> Cons<T> {
+    pub fn new(car: SExpr<T>, cdr: SExpr<T>) -> Self {
         Cons {
             car: Box::new(car),
             cdr: Box::new(cdr),
         }
     }
 
-    pub fn try_into_vector(self, span: Span) -> Option<SExpr> {
+    pub fn try_into_vector(self, span: Span) -> Option<SExpr<T>> {
         let mut vector = vec![*self.car];
         let mut cur = *self.cdr;
         while let SExpr::Cons(Cons { car, cdr }, _) = cur {
@@ -286,7 +306,9 @@ impl Cons {
             None
         }
     }
+}
 
+impl<T: fmt::Display> Cons<T> {
     fn fmt_disp(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "{}", self.car)?;
         match self.cdr.as_ref() {
@@ -304,16 +326,16 @@ impl Cons {
     }
 }
 
-impl fmt::Display for Cons {
+impl<T: fmt::Display> fmt::Display for Cons<T> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "(")?;
         self.fmt_disp(f)
     }
 }
 
-impl TryFrom<SExpr> for Cons {
+impl<T> TryFrom<SExpr<T>> for Cons<T> {
     type Error = ();
-    fn try_from(value: SExpr) -> Result<Self, Self::Error> {
+    fn try_from(value: SExpr<T>) -> Result<Self, Self::Error> {
         if let SExpr::Cons(cons, _) = value {
             Ok(cons)
         } else {
@@ -331,9 +353,9 @@ impl fmt::Display for Bool {
     }
 }
 
-impl TryFrom<SExpr> for Bool {
+impl<T> TryFrom<SExpr<T>> for Bool {
     type Error = ();
-    fn try_from(value: SExpr) -> Result<Self, Self::Error> {
+    fn try_from(value: SExpr<T>) -> Result<Self, Self::Error> {
         if let SExpr::Bool(bool, _) = value {
             Ok(bool)
         } else {
@@ -376,10 +398,10 @@ impl fmt::Display for Str {
 }
 
 #[derive(Debug, PartialEq, Clone)]
-pub struct Vector(pub Vec<SExpr>);
+pub struct Vector<T>(pub Vec<SExpr<T>>);
 
-impl Vector {
-    pub fn into_cons_list(self, span: Span) -> SExpr {
+impl<T> Vector<T> {
+    pub fn into_cons_list(self, span: Span) -> SExpr<T> {
         let mut prev = SExpr::Nil(Span {
             lo: span.hi - 1,
             hi: span.hi,
@@ -391,7 +413,7 @@ impl Vector {
     }
 }
 
-impl fmt::Display for Vector {
+impl<T: fmt::Display> fmt::Display for Vector<T> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "#(")?;
         for e in self.0.iter().take(1) {

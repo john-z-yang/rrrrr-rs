@@ -17,7 +17,7 @@ fn main() {
                     let expanded = session
                         .tokenize(&lines)
                         .and_then(|tokens| session.parse(&tokens))
-                        .and_then(|sexpr| session.expand(&session.introduce(&sexpr)));
+                        .and_then(|sexpr| session.expand(&session.introduce(sexpr)));
                     match expanded {
                         Ok(expanded) => println!("{}", expanded),
                         Err(err) => err.pprint_with_source(&lines),

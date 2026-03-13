@@ -32,15 +32,15 @@ impl Session {
         compile::lex::tokenize(source)
     }
 
-    pub fn parse(&self, tokens: &[Token]) -> Result<SExpr> {
+    pub fn parse(&self, tokens: &[Token]) -> Result<SExpr<Symbol>> {
         compile::parse::parse(tokens)
     }
 
-    pub fn introduce(&self, form: &SExpr) -> SExpr {
+    pub fn introduce(&self, form: SExpr<Symbol>) -> SExpr<Id> {
         compile::expand::introduce(form)
     }
 
-    pub fn expand(&mut self, form: &SExpr) -> Result<SExpr> {
+    pub fn expand(&mut self, form: &SExpr<Id>) -> Result<SExpr<Id>> {
         compile::expand::expand(form, &mut self.bindings, &mut self.env)
     }
 

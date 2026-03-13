@@ -245,29 +245,29 @@ macro_rules! template_sexpr {
     }};
 }
 
-pub fn try_first(sexpr: &SExpr) -> Option<SExpr> {
+pub fn try_first<T: Clone>(sexpr: &SExpr<T>) -> Option<SExpr<T>> {
     match sexpr {
         SExpr::Cons(cons, _) => Some(*cons.car.clone()),
         _ => None,
     }
 }
 
-pub fn first(sexpr: &SExpr) -> SExpr {
+pub fn first<T: Clone>(sexpr: &SExpr<T>) -> SExpr<T> {
     try_first(sexpr).expect("first expected parameter to be a cons")
 }
 
-pub fn try_rest(sexpr: &SExpr) -> Option<SExpr> {
+pub fn try_rest<T: Clone>(sexpr: &SExpr<T>) -> Option<SExpr<T>> {
     match sexpr {
         SExpr::Cons(cons, _) => Some(*cons.cdr.clone()),
         _ => None,
     }
 }
 
-pub fn rest(sexpr: &SExpr) -> SExpr {
+pub fn rest<T: Clone>(sexpr: &SExpr<T>) -> SExpr<T> {
     try_rest(sexpr).expect("rest expected parameter to be a cons")
 }
 
-pub fn len(sexpr: &SExpr) -> usize {
+pub fn len<T>(sexpr: &SExpr<T>) -> usize {
     let mut res = 0;
     let mut cur = sexpr;
     while let SExpr::Cons(Cons { cdr, .. }, _) = cur {
@@ -277,25 +277,25 @@ pub fn len(sexpr: &SExpr) -> usize {
     res
 }
 
-pub fn try_dotted_tail(sexpr: &SExpr) -> Option<SExpr> {
+pub fn try_dotted_tail<T: Clone>(sexpr: &SExpr<T>) -> Option<SExpr<T>> {
     let SExpr::Cons(Cons { cdr: cur, .. }, _) = sexpr else {
         return None;
     };
-    let mut cur: &SExpr = cur.as_ref();
+    let mut cur: &SExpr<T> = cur.as_ref();
     while let SExpr::Cons(Cons { cdr, .. }, _) = cur {
         cur = cdr;
     }
     Some(cur.clone())
 }
 
-pub fn is_proper_list(sexpr: &SExpr) -> bool {
+pub fn is_proper_list<T: Clone>(sexpr: &SExpr<T>) -> bool {
     if let SExpr::Nil(_) = sexpr {
         return true;
     }
     try_dotted_tail(sexpr).is_some_and(|tail| matches!(tail, SExpr::Nil(_)))
 }
 
-pub fn append(head: &SExpr, tail: &SExpr) -> SExpr {
+pub fn append<T: Clone>(head: &SExpr<T>, tail: &SExpr<T>) -> SExpr<T> {
     match head {
         SExpr::Nil(_) => tail.clone(),
         SExpr::Cons(cons, span) => {
@@ -305,7 +305,7 @@ pub fn append(head: &SExpr, tail: &SExpr) -> SExpr {
     }
 }
 
-pub fn nth(sexpr: &SExpr, idx: usize) -> Option<SExpr> {
+pub fn nth<T: Clone>(sexpr: &SExpr<T>, idx: usize) -> Option<SExpr<T>> {
     let SExpr::Cons(cons, _) = sexpr else {
         return None;
     };
@@ -316,7 +316,7 @@ pub fn nth(sexpr: &SExpr, idx: usize) -> Option<SExpr> {
     }
 }
 
-pub fn last(sexpr: &SExpr) -> Option<SExpr> {
+pub fn last<T: Clone>(sexpr: &SExpr<T>) -> Option<SExpr<T>> {
     match sexpr {
         SExpr::Cons(cons, _) if matches!(*cons.cdr, SExpr::Nil(_)) => {
             Some(cons.car.as_ref().clone())
@@ -326,9 +326,9 @@ pub fn last(sexpr: &SExpr) -> Option<SExpr> {
     }
 }
 
-pub fn try_for_each<F, E>(sexpr: &SExpr, mut op: F) -> Result<(), E>
+pub fn try_for_each<T, F, E>(sexpr: &SExpr<T>, mut op: F) -> Result<(), E>
 where
-    F: FnMut(&SExpr) -> Result<(), E>,
+    F: FnMut(&SExpr<T>) -> Result<(), E>,
 {
     let mut cur = sexpr;
     while let SExpr::Cons(Cons { car, cdr }, _) = cur {
@@ -338,9 +338,9 @@ where
     Ok(())
 }
 
-pub fn try_map<F, E>(sexpr: &SExpr, mut op: F) -> Result<SExpr, E>
+pub fn try_map<T: Clone, F, E>(sexpr: &SExpr<T>, mut op: F) -> Result<SExpr<T>, E>
 where
-    F: FnMut(&SExpr) -> Result<SExpr, E>,
+    F: FnMut(&SExpr<T>) -> Result<SExpr<T>, E>,
 {
     if let SExpr::Cons(cons, span) = sexpr {
         return Ok(SExpr::Cons(
