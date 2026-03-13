@@ -127,7 +127,7 @@ macro_rules! if_let_sexpr {
     (
         @tail_pos ($id:ident @ ..) = $targ:expr => $($handler:tt)*
     ) => {
-        let $id = &$targ;
+        let $id = $targ;
         $($handler)*
     };
 }
@@ -338,15 +338,15 @@ where
     Ok(())
 }
 
-pub fn try_map<T: Clone, F, E>(sexpr: &SExpr<T>, mut op: F) -> Result<SExpr<T>, E>
+pub fn try_map<T, F, E>(sexpr: SExpr<T>, mut op: F) -> Result<SExpr<T>, E>
 where
-    F: FnMut(&SExpr<T>) -> Result<SExpr<T>, E>,
+    F: FnMut(SExpr<T>) -> Result<SExpr<T>, E>,
 {
     if let SExpr::Cons(cons, span) = sexpr {
         return Ok(SExpr::Cons(
-            Cons::new(op(&cons.car)?, try_map(&cons.cdr, op)?),
-            *span,
+            Cons::new(op(*cons.car)?, try_map(*cons.cdr, op)?),
+            span,
         ));
     }
-    Ok(sexpr.clone())
+    Ok(sexpr)
 }

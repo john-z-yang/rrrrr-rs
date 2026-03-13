@@ -41,7 +41,7 @@ pub(crate) fn expand(
 ) -> Result<SExpr<Id>> {
     let mut bindings_snapshot = bindings.clone();
     let mut env_snapshot = env.clone();
-    let result = expand_sexpr(&sexpr, bindings, env, Context::new(SyntaxContext::TopLevel));
+    let result = expand_sexpr(sexpr, bindings, env, Context::new(SyntaxContext::TopLevel));
     if result.is_err() {
         mem::swap(&mut bindings_snapshot, bindings);
         mem::swap(&mut env_snapshot, env);
@@ -80,12 +80,12 @@ enum SyntaxContext {
 }
 
 fn expand_sexpr(
-    sexpr: &SExpr<Id>,
+    sexpr: SExpr<Id>,
     bindings: &mut Bindings,
     env: &mut Env,
     ctx: Context,
 ) -> Result<SExpr<Id>> {
-    if let SExpr::Nil(span) = sexpr {
+    if let SExpr::Nil(span) = &sexpr {
         return Err(CompilationError {
             span: *span,
             reason: "Unexpected empty list".to_owned(),
@@ -94,7 +94,7 @@ fn expand_sexpr(
     if let SExpr::Var(..) = sexpr {
         return expand_id(sexpr, bindings);
     }
-    if_let_sexpr! {(SExpr::Var(..), ..) = sexpr =>
+    if_let_sexpr! {(SExpr::Var(..), ..) = &sexpr =>
         return expand_id_application(sexpr, bindings, env, ctx);
     };
     if_let_sexpr! {(..) = sexpr =>
@@ -103,8 +103,8 @@ fn expand_sexpr(
     Ok(sexpr.clone())
 }
 
-fn expand_id(sexpr: &SExpr<Id>, bindings: &mut Bindings) -> Result<SExpr<Id>> {
-    let SExpr::Var(id, span) = sexpr else {
+fn expand_id(sexpr: SExpr<Id>, bindings: &mut Bindings) -> Result<SExpr<Id>> {
+    let SExpr::Var(id, span) = &sexpr else {
         unreachable!("expand_id expected an ID");
     };
     match bindings.resolve_sym(id) {
@@ -114,12 +114,12 @@ fn expand_id(sexpr: &SExpr<Id>, bindings: &mut Bindings) -> Result<SExpr<Id>> {
                 reason: format!("Invalid '{}' form: not in parentheses", symbol),
             })
         }
-        _ => Ok(sexpr.clone()),
+        _ => Ok(sexpr),
     }
 }
 
 fn apply_transformer(
-    sexpr: &SExpr<Id>,
+    sexpr: SExpr<Id>,
     transformer: &Transformer,
     name: &Id,
     bindings: &mut Bindings,
@@ -147,12 +147,12 @@ fn apply_transformer(
 }
 
 fn expand_id_application(
-    sexpr: &SExpr<Id>,
+    sexpr: SExpr<Id>,
     bindings: &mut Bindings,
     env: &mut Env,
     mut ctx: Context,
 ) -> Result<SExpr<Id>> {
-    let (id, binding) = match try_first(sexpr) {
+    let (id, binding) = match try_first(&sexpr) {
         Some(SExpr::Var(id, _)) => match bindings.resolve_sym(&id) {
             Some(binding) => (id, binding),
             None => {
@@ -180,7 +180,7 @@ fn expand_id_application(
         _ => {
             if let Some(transformer) = env.get(&binding) {
                 expand_sexpr(
-                    &apply_transformer(sexpr, transformer, &id, bindings, &mut ctx)?,
+                    apply_transformer(sexpr, transformer, &id, bindings, &mut ctx)?,
                     bindings,
                     env,
                     ctx,
@@ -193,14 +193,14 @@ fn expand_id_application(
 }
 
 fn expand_fn_application(
-    sexpr: &SExpr<Id>,
+    sexpr: SExpr<Id>,
     bindings: &mut Bindings,
     env: &mut Env,
     ctx: Context,
 ) -> Result<SExpr<Id>> {
     try_map(sexpr, |sub_sexpr| {
         expand_sexpr(
-            sub_sexpr,
+            sub_sexpr.clone(),
             bindings,
             env,
             ctx.with_syntax_ctx(SyntaxContext::Expression),
@@ -209,30 +209,30 @@ fn expand_fn_application(
 }
 
 fn expand_if(
-    sexpr: &SExpr<Id>,
+    sexpr: SExpr<Id>,
     bindings: &mut Bindings,
     env: &mut Env,
     ctx: Context,
 ) -> Result<SExpr<Id>> {
     let expr_ctx = ctx.with_syntax_ctx(SyntaxContext::Expression);
     match_sexpr! {
-        sexpr;
+        &sexpr;
 
         (iif, check, consequent, alternate) => {
             Ok(template_sexpr!((
                 iif.clone(),
-                expand_sexpr(&check.clone(), bindings, env, expr_ctx)?,
-                expand_sexpr(&consequent.clone(), bindings, env, expr_ctx)?,
-                expand_sexpr(&alternate.clone(), bindings, env, expr_ctx)?,
-            ) => sexpr).unwrap())
+                expand_sexpr(check.clone(), bindings, env, expr_ctx)?,
+                expand_sexpr(consequent.clone(), bindings, env, expr_ctx)?,
+                expand_sexpr(alternate.clone(), bindings, env, expr_ctx)?,
+            ) => &sexpr).unwrap())
         },
 
         (iif, check, consequent) => {
             Ok(template_sexpr!((
                 iif.clone(),
-                expand_sexpr(&check.clone(), bindings, env, expr_ctx)?,
-                expand_sexpr(&consequent.clone(), bindings, env, expr_ctx)?,
-            ) => sexpr).unwrap())
+                expand_sexpr(check.clone(), bindings, env, expr_ctx)?,
+                expand_sexpr(consequent.clone(), bindings, env, expr_ctx)?,
+            ) => &sexpr).unwrap())
         },
 
         _ => {
@@ -245,27 +245,27 @@ fn expand_if(
 }
 
 fn expand_begin(
-    sexpr: &SExpr<Id>,
+    sexpr: SExpr<Id>,
     bindings: &mut Bindings,
     env: &mut Env,
     ctx: Context,
 ) -> Result<SExpr<Id>> {
-    if !is_proper_list(sexpr) {
+    if !is_proper_list(&sexpr) {
         return Err(CompilationError {
             span: sexpr.get_span(),
             reason: "Invalid 'begin' form: expected a proper list".to_owned(),
         });
     }
-    if len(sexpr) == 1 {
+    if len(&sexpr) == 1 {
         return Err(CompilationError {
             span: sexpr.get_span(),
             reason: "Invalid 'begin' form: expected at least one expression".to_owned(),
         });
     }
     let mut res = SExpr::cons(
-        first(sexpr),
-        try_map(&rest(sexpr), |sub_sexpr| {
-            expand_sexpr(sub_sexpr, bindings, env, ctx)
+        first(&sexpr),
+        try_map(rest(&sexpr), |sub_sexpr| {
+            expand_sexpr(sub_sexpr.clone(), bindings, env, ctx)
         })?,
     );
     res.update_span(sexpr.get_span());
@@ -273,12 +273,12 @@ fn expand_begin(
 }
 
 fn expand_set(
-    sexpr: &SExpr<Id>,
+    sexpr: SExpr<Id>,
     bindings: &mut Bindings,
     env: &mut Env,
     ctx: Context,
 ) -> Result<SExpr<Id>> {
-    if_let_sexpr! {(set, var @ SExpr::Var(id, _), exp) = sexpr =>
+    if_let_sexpr! {(set, var @ SExpr::Var(id, _), exp) = &sexpr =>
         if let Some(resolved) = bindings.resolve_sym(id)
             && (Bindings::CORE_FORMS.contains(&resolved.0.as_str()) || Bindings::CORE_PRIMITIVES.contains(&resolved.0.as_str())) {
                 return Err(CompilationError {
@@ -286,8 +286,8 @@ fn expand_set(
                     reason: format!("Cannot mutate core forms/primatives '{}'", id),
                 })
             }
-        let exp = expand_sexpr(exp, bindings, env, ctx.with_syntax_ctx(SyntaxContext::Expression))?;
-        return Ok(template_sexpr!((set.clone(), var.clone(), exp) => sexpr).unwrap());
+        let exp = expand_sexpr(exp.clone(), bindings, env, ctx.with_syntax_ctx(SyntaxContext::Expression))?;
+        return Ok(template_sexpr!((set.clone(), var.clone(), exp) => &sexpr).unwrap());
     }
     Err(CompilationError {
         span: sexpr.get_span(),
@@ -296,13 +296,13 @@ fn expand_set(
 }
 
 fn expand_define(
-    sexpr: &SExpr<Id>,
+    sexpr: SExpr<Id>,
     bindings: &mut Bindings,
     env: &mut Env,
     ctx: Context,
 ) -> Result<SExpr<Id>> {
     match_sexpr!(
-        sexpr;
+        &sexpr;
 
         (define, var @ SExpr::Var(id, _), exp) => {
             if matches!(ctx.syntax_ctx, SyntaxContext::Expression) {
@@ -315,19 +315,19 @@ fn expand_define(
                 let binding = bindings.gen_sym(id);
                 bindings.add_binding(id, &binding);
             }
-            let exp = expand_sexpr(exp, bindings, env, ctx.with_syntax_ctx(SyntaxContext::Expression))?;
-            Ok(template_sexpr!((define.clone(), var.clone(), exp) => sexpr).unwrap())
+            let exp = expand_sexpr(exp.clone(), bindings, env, ctx.with_syntax_ctx(SyntaxContext::Expression))?;
+            Ok(template_sexpr!((define.clone(), var.clone(), exp) => &sexpr).unwrap())
         },
 
         (define, (func_name @ SExpr::Var(..), args @ ..), body @ ..) => {
             expand_sexpr(
-                &make_sexpr!(
+                make_sexpr!(
                     define.clone(),
                     func_name.clone(),
                     (
                         SExpr::Var(Id::new("lambda", [Bindings::CORE_SCOPE]), sexpr.get_span()),
-                        (*args).clone(),
-                        ..(*body).clone(),
+                        args.clone(),
+                        ..body.clone(),
                     )
                 ),
                 bindings,
@@ -346,12 +346,12 @@ fn expand_define(
 }
 
 fn expand_define_syntax(
-    sexpr: &SExpr<Id>,
+    sexpr: SExpr<Id>,
     bindings: &mut Bindings,
     env: &mut Env,
     ctx: Context,
 ) -> Result<SExpr<Id>> {
-    if_let_sexpr! {(_, SExpr::Var(id, _), transformer_spec) = sexpr =>
+    if_let_sexpr! {(_, SExpr::Var(id, _), transformer_spec) = &sexpr =>
         if ctx.syntax_ctx != SyntaxContext::TopLevel {
             return Err(CompilationError {
                 span: sexpr.get_span(),
@@ -382,13 +382,13 @@ fn expand_define_syntax(
 }
 
 fn expand_lambda(
-    sexpr: &SExpr<Id>,
+    sexpr: SExpr<Id>,
     bindings: &mut Bindings,
     env: &mut Env,
     ctx: Context,
 ) -> Result<SExpr<Id>> {
     match_sexpr! {
-        sexpr;
+        &sexpr;
 
         (lambda, (args @ ..), body @ ..) => {
             if len(body) == 0 {
@@ -446,7 +446,7 @@ fn expand_lambda(
             };
 
             let body = expand_body(&body.add_scope(scope_id), bindings, env, ctx)?;
-            Ok(template_sexpr!((lambda.clone(), args, ..body) => sexpr).unwrap())
+            Ok(template_sexpr!((lambda.clone(), args, ..body) => &sexpr).unwrap())
         },
 
         (lambda, arg @ SExpr::Var(..), body @ ..) => {
@@ -465,7 +465,7 @@ fn expand_lambda(
             bindings.add_binding(id, &binding);
 
             let body = expand_body(&body.add_scope(scope_id), bindings, env, ctx)?;
-            Ok(template_sexpr!((lambda.clone(), arg, ..body) => sexpr).unwrap())
+            Ok(template_sexpr!((lambda.clone(), arg, ..body) => &sexpr).unwrap())
         },
 
         _ => {
@@ -492,9 +492,9 @@ fn expand_body(
         });
     }
 
-    try_map(&body, |sexpr| {
+    try_map(body, |sexpr| {
         expand_sexpr(
-            sexpr,
+            sexpr.clone(),
             bindings,
             env,
             ctx.with_syntax_ctx(SyntaxContext::Body),
@@ -535,7 +535,7 @@ fn partial_expand_body(
                 let Some(transformer) = env.get(&binding) else {
                     return Ok((form, BodyFormKind::Other));
                 };
-                form = apply_transformer(&form, transformer, &id, bindings, ctx)?;
+                form = apply_transformer(form, transformer, &id, bindings, ctx)?;
             }
         }
     }
@@ -598,7 +598,7 @@ fn normalize_body(
 
 fn collect_define(sexpr: &SExpr<Id>, bindings: &mut Bindings) -> Result<()> {
     let (id, span) = match_sexpr! {
-        sexpr;
+        &sexpr;
 
         (_, SExpr::Var(id, span), _) => {
             (id, span)
@@ -653,7 +653,7 @@ impl fmt::Display for SyntaxBindingForm {
 }
 
 fn expand_let_syntax(
-    sexpr: &SExpr<Id>,
+    sexpr: SExpr<Id>,
     bindings: &mut Bindings,
     env: &mut Env,
     ctx: Context,
@@ -668,7 +668,7 @@ fn expand_let_syntax(
 }
 
 fn expand_letrec_syntax(
-    sexpr: &SExpr<Id>,
+    sexpr: SExpr<Id>,
     bindings: &mut Bindings,
     env: &mut Env,
     ctx: Context,
@@ -683,13 +683,13 @@ fn expand_letrec_syntax(
 }
 
 fn expand_syntax_binding(
-    sexpr: &SExpr<Id>,
+    sexpr: SExpr<Id>,
     bindings: &mut Bindings,
     env: &mut Env,
     form: SyntaxBindingForm,
     ctx: Context,
 ) -> Result<SExpr<Id>> {
-    if_let_sexpr! {(_, (binding_pairs @ ..), body @ ..) = sexpr =>
+    if_let_sexpr! {(_, (binding_pairs @ ..), body @ ..) = &sexpr =>
         if !is_proper_list(binding_pairs) {
             return Err(CompilationError {
                 span: sexpr.get_span(),
@@ -760,13 +760,13 @@ fn expand_syntax_binding(
 }
 
 fn expand_quasiquote(
-    sexpr: &SExpr<Id>,
+    sexpr: SExpr<Id>,
     bindings: &mut Bindings,
     env: &mut Env,
     ctx: Context,
 ) -> Result<SExpr<Id>> {
-    if_let_sexpr! {(_, args) = sexpr => {
-        return expand_sexpr(&expand_quasiquote_args(args, bindings, 0)?, bindings, env, ctx);
+    if_let_sexpr! {(_, args) = &sexpr => {
+        return expand_sexpr(expand_quasiquote_args(args.clone(), bindings, 0)?, bindings, env, ctx);
     }};
     Err(CompilationError {
         span: sexpr.get_span(),
@@ -775,12 +775,12 @@ fn expand_quasiquote(
 }
 
 fn expand_quasiquote_args_list(
-    sexpr: &SExpr<Id>,
+    sexpr: SExpr<Id>,
     bindings: &mut Bindings,
     depth: u32,
 ) -> Result<SExpr<Id>> {
     match_sexpr! {
-        sexpr;
+        &sexpr;
 
         (car, cdr @ ..) => {
             if let SExpr::Var(id, _) = car
@@ -795,7 +795,7 @@ fn expand_quasiquote_args_list(
                             SExpr::Var(Id::new("quote", [Bindings::CORE_SCOPE]), sexpr.get_span()),
                             SExpr::Var(Id::new("quasiquote", [Bindings::CORE_SCOPE]), sexpr.get_span()),
                         ),
-                        expand_quasiquote_args(cdr, bindings, depth + 1)?,
+                        expand_quasiquote_args(cdr.clone(), bindings, depth + 1)?,
                     ),
                 ))
             } else if let SExpr::Var(id, _) = car
@@ -811,18 +811,18 @@ fn expand_quasiquote_args_list(
                                 SExpr::Var(Id::new("quote", [Bindings::CORE_SCOPE]), sexpr.get_span()),
                                 car.clone(),
                             ),
-                            expand_quasiquote_args(cdr, bindings, depth - 1)?,
+                            expand_quasiquote_args(cdr.clone(), bindings, depth - 1)?,
                         ),
                     ))
                 } else if binding.symbol.0 == "unquote" {
                     Ok(make_sexpr!(
                         SExpr::Var(Id::new("list", [Bindings::CORE_SCOPE]), sexpr.get_span()),
-                        ..(*cdr).clone(),
+                        ..cdr.clone(),
                     ))
                 } else {
                     Ok(make_sexpr!(
                         SExpr::Var(Id::new("append", [Bindings::CORE_SCOPE]), sexpr.get_span()),
-                        ..(*cdr).clone(),
+                        ..cdr.clone(),
                     ))
                 }
             } else {
@@ -830,8 +830,8 @@ fn expand_quasiquote_args_list(
                     SExpr::Var(Id::new("list", [Bindings::CORE_SCOPE]), sexpr.get_span()),
                     (
                         SExpr::Var(Id::new("append", [Bindings::CORE_SCOPE]), sexpr.get_span()),
-                        expand_quasiquote_args_list(car, bindings, depth)?,
-                        expand_quasiquote_args(cdr, bindings, depth)?,
+                        expand_quasiquote_args_list(car.clone(), bindings, depth)?,
+                        expand_quasiquote_args(cdr.clone(), bindings, depth)?,
                     ),
                 ))
             }
@@ -842,7 +842,7 @@ fn expand_quasiquote_args_list(
                 SExpr::Var(Id::new("list", [Bindings::CORE_SCOPE]), sexpr.get_span()),
                 (
                     SExpr::Var(Id::new("list->vector", [Bindings::CORE_SCOPE]), sexpr.get_span()),
-                    expand_quasiquote_args(&vector.clone().into_cons_list(*span), bindings, depth)?,
+                    expand_quasiquote_args(vector.clone().into_cons_list(*span), bindings, depth)?,
                 ),
             ))
         },
@@ -859,12 +859,12 @@ fn expand_quasiquote_args_list(
 }
 
 fn expand_quasiquote_args(
-    sexpr: &SExpr<Id>,
+    sexpr: SExpr<Id>,
     bindings: &mut Bindings,
     depth: u32,
 ) -> Result<SExpr<Id>> {
     match_sexpr! {
-        sexpr;
+        &sexpr;
 
         (car, cdr @ ..) => {
             if let SExpr::Var(id, _) = car
@@ -883,7 +883,7 @@ fn expand_quasiquote_args(
                             sexpr.get_span(),
                         ),
                     ),
-                    expand_quasiquote_args(cdr, bindings, depth + 1)?,
+                    expand_quasiquote_args(cdr.clone(), bindings, depth + 1)?,
                 ))
             } else if let SExpr::Var(id, _) = car
                 && let Some(binding) = bindings.resolve(id)
@@ -896,7 +896,7 @@ fn expand_quasiquote_args(
                             SExpr::Var(Id::new("quote", [Bindings::CORE_SCOPE]), sexpr.get_span()),
                             car.clone(),
                         ),
-                        expand_quasiquote_args(cdr, bindings, depth - 1)?,
+                        expand_quasiquote_args(cdr.clone(), bindings, depth - 1)?,
                     ))
                 } else if binding.symbol.0 == "unquote" && matches!(try_rest(cdr), Some(SExpr::Nil(..))) {
                     Ok(first(cdr))
@@ -909,8 +909,8 @@ fn expand_quasiquote_args(
             } else {
                 Ok(make_sexpr!(
                     SExpr::Var(Id::new("append", [Bindings::CORE_SCOPE]), sexpr.get_span()),
-                    expand_quasiquote_args_list(car, bindings, depth)?,
-                    expand_quasiquote_args(cdr, bindings, depth)?,
+                    expand_quasiquote_args_list(car.clone(), bindings, depth)?,
+                    expand_quasiquote_args(cdr.clone(), bindings, depth)?,
                 ))
             }
         },
@@ -918,7 +918,7 @@ fn expand_quasiquote_args(
         SExpr::Vector(vector, span) => {
             Ok(make_sexpr!(
                 SExpr::Var(Id::new("list->vector", [Bindings::CORE_SCOPE]), sexpr.get_span()),
-                expand_quasiquote_args(&vector.clone().into_cons_list(*span), bindings, depth)?,
+                expand_quasiquote_args(vector.clone().into_cons_list(*span), bindings, depth)?,
             ))
         },
 
