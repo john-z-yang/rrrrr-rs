@@ -3,7 +3,7 @@ use rustyline::DefaultEditor;
 use rustyline::error::ReadlineError;
 
 fn main() {
-    let mut session = Session::new();
+    let mut session = Session::with_prelude();
 
     let mut rl = DefaultEditor::new().expect("Unable to open interactive terminal");
     let _ = rl.load_history("history.txt");

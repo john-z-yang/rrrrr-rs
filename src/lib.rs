@@ -10,6 +10,8 @@ use compile::{
     transformer::Transformer,
 };
 
+use crate::compile::prelude::PRELUDE;
+
 #[derive(Debug, Clone)]
 pub struct Session {
     bindings: Bindings,
@@ -24,8 +26,21 @@ impl Session {
         }
     }
 
+    pub fn with_prelude() -> Self {
+        let mut session = Self::new();
+        session.load_prelude();
+        session
+    }
+
     pub fn reset(&mut self) {
-        *self = Self::new();
+        *self = Self::with_prelude();
+    }
+
+    fn load_prelude(&mut self) {
+        self.tokenize(PRELUDE)
+            .and_then(|tokens| self.parse(&tokens))
+            .and_then(|sexpr| self.expand(self.introduce(sexpr)))
+            .expect("Unable to load prelude");
     }
 
     pub fn tokenize(&self, source: &str) -> Result<Vec<Token>> {
