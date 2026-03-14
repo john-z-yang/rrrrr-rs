@@ -301,14 +301,19 @@ pub fn is_proper_list<T: Clone>(sexpr: &SExpr<T>) -> bool {
     try_dotted_tail(sexpr).is_some_and(|tail| matches!(tail, SExpr::Nil(_)))
 }
 
-pub fn append<T: Clone>(head: SExpr<T>, tail: SExpr<T>) -> SExpr<T> {
-    match head {
-        SExpr::Nil(_) => tail.clone(),
-        SExpr::Cons(cons, span) => {
-            SExpr::Cons(Cons::new(*cons.car.clone(), append(*cons.cdr, tail)), span)
-        }
-        _ => unreachable!("append expected a proper list"),
+pub fn append<T>(head: SExpr<T>, tail: SExpr<T>) -> SExpr<T> {
+    if let SExpr::Nil(_) = head {
+        return tail;
     }
+    let SExpr::Cons(mut cons, span) = head else {
+        unreachable!("append expected a proper list")
+    };
+    let mut cur = &mut *cons.cdr;
+    while let SExpr::Cons(cons, _) = cur {
+        cur = &mut *cons.cdr;
+    }
+    *cur = tail;
+    SExpr::Cons(cons, span)
 }
 
 pub fn nth<T: Clone>(sexpr: &SExpr<T>, idx: usize) -> Option<SExpr<T>> {
