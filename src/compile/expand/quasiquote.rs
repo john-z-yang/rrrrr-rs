@@ -1,4 +1,4 @@
-use super::{expand_sexpr, Context, Env};
+use super::{Context, Env, expand_sexpr};
 use crate::compile::{
     bindings::Bindings,
     compilation_error::{CompilationError, Result},
