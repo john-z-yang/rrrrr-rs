@@ -388,7 +388,7 @@ impl SyntaxRule {
 
 impl Transformer {
     pub(crate) fn new(spec: &SExpr<Id>) -> Result<Self> {
-        if_let_sexpr! {(_, (literals_list @ ..), rules @ ..) = spec =>
+        if_let_sexpr! {(_, literals_list @ (..), rules @ ..) = spec =>
             let mut literals = HashSet::<Symbol>::new();
             if len(rules) == 0 {
                 return Err(CompilationError {

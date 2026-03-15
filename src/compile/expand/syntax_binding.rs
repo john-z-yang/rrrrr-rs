@@ -67,7 +67,7 @@ fn expand_syntax_binding(
     form: SyntaxBindingForm,
     ctx: Context,
 ) -> Result<SExpr<Id>> {
-    if_let_sexpr! {(_, (binding_pairs @ ..), body @ ..) = &sexpr =>
+    if_let_sexpr! {(_, binding_pairs @ (..), body @ ..) = &sexpr =>
         if !is_proper_list(binding_pairs) {
             return Err(CompilationError {
                 span: sexpr.get_span(),

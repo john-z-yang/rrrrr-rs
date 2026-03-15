@@ -397,7 +397,7 @@ fn expand_lambda(
     match_sexpr! {
         &sexpr;
 
-        (lambda, (args @ ..), body @ ..) => {
+        (lambda, args @ (..), body @ ..) => {
             if len(body) == 0 {
                 return Err(CompilationError {
                     span: sexpr.get_span(),

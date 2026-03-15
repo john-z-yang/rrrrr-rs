@@ -34,7 +34,7 @@ macro_rules! make_sexpr {
 
 #[macro_export]
 macro_rules! if_let_sexpr {
-    // Empty list aka Nil
+    // 0: Empty list
     (
         () = $targ:expr => $($handler:tt)*
     ) => {
@@ -43,7 +43,7 @@ macro_rules! if_let_sexpr {
         }
     };
 
-    // Any list
+    // 1: Any list
     (
         (..) = $targ:expr => $($handler:tt)*
     ) => {
@@ -54,21 +54,8 @@ macro_rules! if_let_sexpr {
         };
     };
 
-    // Any list, assign the list to an identifier
-    (
-        ($id:ident @ ..) = $targ:expr => $($handler:tt)*
-    ) => {
-        if let $crate::compile::sexpr::SExpr::Cons(_, _) = $targ {
-            let $id = $targ;
-            $($handler)*
-        } else if let $crate::compile::sexpr::SExpr::Nil(_) = $targ {
-            let $id = $targ;
-            $($handler)*
-        }
-    };
 
-
-    // Nested list with tail capture i.e. ((a, b), rest @ ..)
+    // 2: Nested list with tail capture i.e. ((a, b), rest @ ..)
     (
         (($($inner:tt)*), $id:ident @ ..) = $targ:expr => $($handler:tt)*
     ) => {
@@ -82,7 +69,7 @@ macro_rules! if_let_sexpr {
         };
     };
 
-    // Nested list i.e. ((a, b), c, d)
+    // 3: Nested list i.e. ((a, b), c, d)
     (
         (($($inner:tt)*) $(, $($rest:tt)*)?) = $targ:expr => $($handler:tt)*
     ) => {
@@ -96,7 +83,37 @@ macro_rules! if_let_sexpr {
         };
     };
 
-    // Structural pattern with tail capture i.e. (a, rest @ ..)
+    // 4: Assign id to structural pattern with tail capture i.e. (first @ (a, b, c), rest @ ..)
+    (
+        ($id:ident @ ($($pat:tt)*), $tail:ident @ ..) = $targ:expr => $($handler:tt)*
+    ) => {
+        if let $crate::compile::sexpr::SExpr::Cons(cons, _) = $targ {
+            let (car, cdr) = cons.into();
+            let $id = car;
+            if_let_sexpr! {($($pat)*) = &$id =>
+                if_let_sexpr! {@tail_pos ($tail @ ..) = cdr =>
+                    $($handler)*
+                }
+            }
+        };
+    };
+
+    // 5: Assign id to structural pattern i.e. (first @ (a, b, c), ...)
+    (
+        ($id:ident @ ($($pat:tt)*) $(, $($rest:tt)*)?) = $targ:expr => $($handler:tt)*
+    ) => {
+        if let $crate::compile::sexpr::SExpr::Cons(cons, _) = $targ {
+            let (car, cdr) = cons.into();
+            let $id = car;
+            if_let_sexpr! {($($pat)*) = &$id =>
+                if_let_sexpr! {($($($rest)*)?) = cdr =>
+                    $($handler)*
+                }
+            }
+        };
+    };
+
+    // 6: Structural pattern with tail capture i.e. (a, rest @ ..)
     (
         ($pat:pat, $id:ident @ ..) = $targ:expr => $($handler:tt)*
     ) => {
@@ -111,7 +128,7 @@ macro_rules! if_let_sexpr {
         };
     };
 
-    // Structural pattern i.e. (a, b, c)
+    // 7: Structural pattern i.e. (a, b, c)
     (
         ($pat:pat $(, $($rest:tt)*)?) = $targ:expr => $($handler:tt)*
     ) => {
@@ -126,7 +143,7 @@ macro_rules! if_let_sexpr {
         };
     };
 
-    // Internal rule: we came from (<some pattern>, $id:ident @ ..) and we just matched the
+    // 8: Internal rule: we came from (<some pattern>, $id:ident @ ..) and we just matched the
     // previous car. Now $id:ident @ .. should match anything
     (
         @tail_pos ($id:ident @ ..) = $targ:expr => $($handler:tt)*

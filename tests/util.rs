@@ -2,10 +2,11 @@ use rrrrr_rs::{
     compile::{
         lex::tokenize,
         parse::parse,
-        sexpr::{Num, SExpr, Symbol},
+        sexpr::{Num, SExpr, Str, Symbol},
         span::Span,
+        util::{is_proper_list, len},
     },
-    if_let_sexpr, match_sexpr, template_sexpr,
+    if_let_sexpr, make_sexpr, match_sexpr, template_sexpr,
 };
 
 #[test]
@@ -208,15 +209,27 @@ fn test_if_let_sexpr_tail_capture_nil() {
 }
 
 #[test]
-fn test_if_let_sexpr_standalone_rest_rejects_atom() {
-    // ($id @ ..) standalone should NOT match an atom
-    let sexpr = parse(&tokenize("foo").unwrap()).unwrap();
+fn test_if_let_sexpr_capture_and_assign_id() {
+    // (a @ (...), rest @ ...)
+    let sexpr = parse(&tokenize("((\"str\" 0) 1)").unwrap()).unwrap();
     let mut matched = false;
-    if_let_sexpr! {(rest @ ..) = &sexpr => {
-        let _ = rest;
+    if_let_sexpr! {(inner @ (first @ SExpr::Str(_, _), second @ SExpr::Num(_, _)), third @ SExpr::Num(_, _)) = sexpr => {
         matched = true;
+        assert_eq!(len(&inner), 2);
+        assert!(is_proper_list(&inner));
+        let span = Span{ lo: 0, hi: 0 };
+        assert_eq!(
+            inner.without_spans(),
+            make_sexpr!(
+                SExpr::Str(Str("str".to_owned()), span),
+                SExpr::Num(Num(0.0), span),
+            ).without_spans()
+        );
+        assert_eq!(first.without_spans(), SExpr::Str(Str("str".to_owned()), span).without_spans());
+        assert_eq!(second.without_spans(), SExpr::Num(Num(0.0), span).without_spans());
+        assert_eq!(third.without_spans(), SExpr::Num(Num(1.0), span).without_spans());
     }}
-    assert!(!matched);
+    assert!(matched);
 }
 
 #[test]
