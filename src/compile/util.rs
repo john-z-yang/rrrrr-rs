@@ -333,23 +333,23 @@ pub fn append<T>(head: SExpr<T>, tail: SExpr<T>) -> SExpr<T> {
     SExpr::Cons(cons, span)
 }
 
-pub fn nth<T: Clone>(sexpr: &SExpr<T>, idx: usize) -> Option<SExpr<T>> {
+pub fn try_nth<T: Clone>(sexpr: &SExpr<T>, idx: usize) -> Option<SExpr<T>> {
     let SExpr::Cons(cons, _) = sexpr else {
         return None;
     };
     if idx == 0 {
         Some(cons.car.as_ref().clone())
     } else {
-        nth(&cons.cdr, idx - 1)
+        try_nth(&cons.cdr, idx - 1)
     }
 }
 
-pub fn last<T: Clone>(sexpr: &SExpr<T>) -> Option<SExpr<T>> {
+pub fn try_last<T: Clone>(sexpr: &SExpr<T>) -> Option<SExpr<T>> {
     match sexpr {
         SExpr::Cons(cons, _) if matches!(*cons.cdr, SExpr::Nil(_)) => {
             Some(cons.car.as_ref().clone())
         }
-        SExpr::Cons(cons, _) => last(&cons.cdr),
+        SExpr::Cons(cons, _) => try_last(&cons.cdr),
         _ => None,
     }
 }
@@ -377,4 +377,21 @@ where
         ));
     }
     Ok(sexpr)
+}
+
+pub fn split<T>(list: SExpr<T>, n: usize) -> (SExpr<T>, SExpr<T>) {
+    if n == 0 {
+        let span = list.get_span();
+        return (SExpr::Nil(span), list);
+    }
+    let SExpr::Cons(cons, _) = list else {
+        panic!("split expected a cons list")
+    };
+    let (car, cdr) = cons.into();
+    if n == 1 {
+        let span = car.get_span();
+        return (SExpr::cons(car, SExpr::Nil(span)), cdr);
+    }
+    let (head, rest) = split(cdr, n - 1);
+    (SExpr::cons(car, head), rest)
 }

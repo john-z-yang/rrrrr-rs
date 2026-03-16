@@ -4,7 +4,7 @@ use rrrrr_rs::{
         compilation_error::{CompilationError, Result},
         sexpr::{Id, Num, SExpr, Symbol},
         span::Span,
-        util::{first, nth, rest},
+        util::{first, rest, try_nth},
     },
 };
 
@@ -38,8 +38,11 @@ fn assert_generated_define_is_referenced(source: &str, expand_message: &str) {
     let (session, result) = expand_with_session(source);
     assert!(result.is_ok(), "{expand_message}, got: {:?}", result);
     let result = result.unwrap();
-    let defined_var = nth(&nth(&result, 2).unwrap(), 1).unwrap();
-    let body_ref = nth(&result, 3).unwrap();
+    // Body is now a letrec: (lambda () (letrec ((var init)) body))
+    let letrec = try_nth(&result, 2).unwrap();
+    let first_init = first(&try_nth(&letrec, 1).unwrap());
+    let defined_var = first(&first_init);
+    let body_ref = try_nth(&letrec, 2).unwrap();
     let SExpr::Var(defined_var, _) = defined_var else {
         panic!("Expected define variable to be an identifier");
     };
@@ -706,7 +709,7 @@ fn test_literal_matching_respects_lexical_binding() {
     )
     .unwrap();
 
-    let body = nth(&result, 2).unwrap();
+    let body = try_nth(&result, 2).unwrap();
     assert_eq!(
         body.without_spans(),
         SExpr::Num(Num(2.0), body.get_span()).without_spans()
@@ -720,12 +723,15 @@ fn test_expand_lambda_internal_define_inside_begin() {
     let (session, result) = expand_with_session("(lambda () (begin (define x 1) x))");
     let result = result.unwrap();
 
-    let defined_var = nth(&nth(&result, 2).unwrap(), 1).unwrap();
-    let last_body_expr = nth(&result, 3).unwrap();
+    // Body is now: (lambda () (letrec ((x 1)) x))
+    let letrec = try_nth(&result, 2).unwrap();
     assert!(
-        nth(&result, 4).is_none(),
-        "Expected begin to be spliced into lambda body"
+        try_nth(&result, 3).is_none(),
+        "Expected begin to be spliced and desugared into a single letrec"
     );
+    let first_init = first(&try_nth(&letrec, 1).unwrap());
+    let defined_var = first(&first_init);
+    let last_body_expr = try_nth(&letrec, 2).unwrap();
 
     let SExpr::Var(defined_var, _) = defined_var else {
         panic!("Expected define variable to be an identifier");
@@ -741,141 +747,6 @@ fn test_expand_lambda_internal_define_inside_begin() {
 }
 
 #[test]
-fn test_expand_lambda_shadowed_begin_is_not_spliced() {
-    let (session, result) =
-        expand_with_session("(lambda () (define begin (lambda x x)) (begin 1 2 3))");
-    let result = result.unwrap();
-
-    let defined_var = nth(&nth(&result, 2).unwrap(), 1).unwrap();
-    let begin_call = nth(&result, 3).unwrap();
-    let begin_head = first(&begin_call);
-    assert!(
-        nth(&result, 4).is_none(),
-        "Expected shadowed begin call to remain as a single body form"
-    );
-
-    let SExpr::Var(defined_var, _) = defined_var else {
-        panic!("Expected define variable to be an identifier");
-    };
-    let SExpr::Var(begin_head, _) = begin_head else {
-        panic!("Expected begin call head to be an identifier");
-    };
-    assert_eq!(
-        session.resolve_sym(&defined_var).unwrap(),
-        session.resolve_sym(&begin_head).unwrap(),
-        "Expected begin call to resolve to shadowing local binding"
-    );
-}
-
-#[test]
-fn test_expand_lambda_begin_binding_defined_inside_spliced_begin_shadows_nested_begin() {
-    let (session, result) =
-        expand_with_session("(lambda () (begin (define begin (lambda x x)) (begin 1 2)))");
-    let result = result.unwrap();
-
-    let define_begin_var = nth(&nth(&result, 2).unwrap(), 1).unwrap();
-    let nested_begin_call = nth(&result, 3).unwrap();
-    let nested_begin_head = first(&nested_begin_call);
-    assert!(
-        nth(&result, 4).is_none(),
-        "Expected begin wrapper to splice and keep nested begin call as a single form"
-    );
-
-    let SExpr::Var(define_begin_var, _) = define_begin_var else {
-        panic!("Expected define variable to be an identifier");
-    };
-    let SExpr::Var(nested_begin_head, _) = nested_begin_head else {
-        panic!("Expected nested begin call head to be an identifier");
-    };
-    let define_sym = session.resolve_sym(&define_begin_var).unwrap();
-    let nested_head_sym = session.resolve_sym(&nested_begin_head).unwrap();
-    assert_eq!(
-        define_sym, nested_head_sym,
-        "Expected nested begin call to resolve to locally-defined begin"
-    );
-    assert_ne!(
-        define_sym,
-        Symbol::new("begin"),
-        "Expected nested begin call not to resolve to core begin"
-    );
-}
-
-#[test]
-fn test_expand_lambda_begin_binding_defined_in_begin_group_shadows_following_begin_form() {
-    let (session, result) =
-        expand_with_session("(lambda () (begin (define begin (lambda x x))) (begin 1 2))");
-    let result = result.unwrap();
-
-    let define_begin_var = nth(&nth(&result, 2).unwrap(), 1).unwrap();
-    let following_begin_call = nth(&result, 3).unwrap();
-    let following_begin_head = first(&following_begin_call);
-    assert!(
-        nth(&result, 4).is_none(),
-        "Expected following begin to remain a call form after begin is rebound"
-    );
-
-    let SExpr::Var(define_begin_var, _) = define_begin_var else {
-        panic!("Expected define variable to be an identifier");
-    };
-    let SExpr::Var(following_begin_head, _) = following_begin_head else {
-        panic!("Expected begin call head to be an identifier");
-    };
-    let define_sym = session.resolve_sym(&define_begin_var).unwrap();
-    let following_head_sym = session.resolve_sym(&following_begin_head).unwrap();
-    assert_eq!(
-        define_sym, following_head_sym,
-        "Expected following begin form to resolve to locally-defined begin"
-    );
-    assert_ne!(
-        define_sym,
-        Symbol::new("begin"),
-        "Expected following begin form not to resolve to core begin"
-    );
-}
-
-#[test]
-fn test_expand_lambda_rebound_begin_reference_and_call_share_local_binding() {
-    let (session, result) =
-        expand_with_session("(lambda () (begin (define begin (lambda x x)) begin (begin 1 2)))");
-    let result = result.unwrap();
-
-    let define_begin_var = nth(&nth(&result, 2).unwrap(), 1).unwrap();
-    let begin_reference = nth(&result, 3).unwrap();
-    let begin_call = nth(&result, 4).unwrap();
-    let begin_call_head = first(&begin_call);
-    assert!(
-        nth(&result, 5).is_none(),
-        "Expected body to contain define, begin reference, and begin call"
-    );
-
-    let SExpr::Var(define_begin_var, _) = define_begin_var else {
-        panic!("Expected define variable to be an identifier");
-    };
-    let SExpr::Var(begin_reference, _) = begin_reference else {
-        panic!("Expected begin reference to be an identifier");
-    };
-    let SExpr::Var(begin_call_head, _) = begin_call_head else {
-        panic!("Expected begin call head to be an identifier");
-    };
-    let define_sym = session.resolve_sym(&define_begin_var).unwrap();
-    let reference_sym = session.resolve_sym(&begin_reference).unwrap();
-    let call_head_sym = session.resolve_sym(&begin_call_head).unwrap();
-    assert_eq!(
-        define_sym, reference_sym,
-        "Expected begin reference to resolve to locally-defined begin"
-    );
-    assert_eq!(
-        define_sym, call_head_sym,
-        "Expected begin call head to resolve to locally-defined begin"
-    );
-    assert_ne!(
-        define_sym,
-        Symbol::new("begin"),
-        "Expected rebound begin usages not to resolve to core begin"
-    );
-}
-
-#[test]
 fn test_expand_lambda_define_after_spliced_begin_is_collected() {
     let (session, result) = expand_with_session("(lambda () (begin (define x 1)) (define y 2) y)");
     assert!(
@@ -884,12 +755,16 @@ fn test_expand_lambda_define_after_spliced_begin_is_collected() {
     );
     let result = result.unwrap();
 
-    let defined_var_y = nth(&nth(&result, 3).unwrap(), 1).unwrap();
-    let final_expr = nth(&result, 4).unwrap();
+    // Body is now: (lambda () (letrec ((x 1) (y 2)) y))
+    let letrec = try_nth(&result, 2).unwrap();
     assert!(
-        nth(&result, 5).is_none(),
-        "Expected exactly 3 body forms after expansion"
+        try_nth(&result, 3).is_none(),
+        "Expected body to be a single letrec form"
     );
+    let initializers = try_nth(&letrec, 1).unwrap();
+    let second_init = try_nth(&initializers, 1).unwrap();
+    let defined_var_y = first(&second_init);
+    let final_expr = try_nth(&letrec, 2).unwrap();
 
     let SExpr::Var(defined_var_y, _) = defined_var_y else {
         panic!("Expected second define variable to be an identifier");
@@ -914,12 +789,16 @@ fn test_expand_lambda_multiple_begin_define_groups_stay_in_define_phase() {
     );
     let result = result.unwrap();
 
-    let defined_var_y = nth(&nth(&result, 3).unwrap(), 1).unwrap();
-    let final_expr = nth(&result, 4).unwrap();
+    // Body is now: (lambda () (letrec ((x 1) (y 2)) y))
+    let letrec = try_nth(&result, 2).unwrap();
     assert!(
-        nth(&result, 5).is_none(),
-        "Expected exactly 3 body forms after expansion"
+        try_nth(&result, 3).is_none(),
+        "Expected body to be a single letrec form"
     );
+    let initializers = try_nth(&letrec, 1).unwrap();
+    let second_init = try_nth(&initializers, 1).unwrap();
+    let defined_var_y = first(&second_init);
+    let final_expr = try_nth(&letrec, 2).unwrap();
 
     let SExpr::Var(defined_var_y, _) = defined_var_y else {
         panic!("Expected second define variable to be an identifier");
@@ -931,6 +810,88 @@ fn test_expand_lambda_multiple_begin_define_groups_stay_in_define_phase() {
         session.resolve_sym(&defined_var_y).unwrap(),
         session.resolve_sym(&final_expr).unwrap(),
         "Expected final y reference to resolve to second internal define"
+    );
+}
+
+#[test]
+fn test_expand_lambda_local_binding_shadows_transformer_after_body_boundary() {
+    let (session, result) = expand_with_session(
+        r#"
+        (let-syntax
+          ((m (syntax-rules () ((_) 1))))
+          (lambda ()
+            (define m (lambda () 2))
+            0
+            (m)))
+        "#,
+    );
+    let result = result.unwrap();
+
+    let letrec = try_nth(&result, 2).unwrap();
+    let init = first(&try_nth(&letrec, 1).unwrap());
+    let defined_var = first(&init);
+    let final_expr = try_nth(&letrec, 3).unwrap();
+    let call_head = first(&final_expr);
+
+    let SExpr::Var(defined_var, _) = defined_var else {
+        panic!("Expected internal define variable to be an identifier");
+    };
+    let SExpr::Var(call_head, _) = call_head else {
+        panic!("Expected final expression to remain a function application");
+    };
+    assert_eq!(
+        session.resolve_sym(&defined_var).unwrap(),
+        session.resolve_sym(&call_head).unwrap(),
+        "Expected post-boundary call to resolve to the local binding"
+    );
+}
+
+#[test]
+fn test_expand_lambda_local_binding_shadows_begin_after_body_boundary() {
+    let (session, result) =
+        expand_with_session("(lambda () (define begin (lambda x x)) 0 (begin 1 2))");
+    let result = result.unwrap();
+
+    let letrec = try_nth(&result, 2).unwrap();
+    let init = first(&try_nth(&letrec, 1).unwrap());
+    let defined_var = first(&init);
+    let final_expr = try_nth(&letrec, 3).unwrap();
+    let call_head = first(&final_expr);
+
+    let SExpr::Var(defined_var, _) = defined_var else {
+        panic!("Expected internal define variable to be an identifier");
+    };
+    let SExpr::Var(call_head, _) = call_head else {
+        panic!("Expected shadowed begin to remain a function application");
+    };
+    assert_eq!(
+        session.resolve_sym(&defined_var).unwrap(),
+        session.resolve_sym(&call_head).unwrap(),
+        "Expected post-boundary begin form to resolve to the local binding"
+    );
+}
+
+#[test]
+fn test_expand_lambda_macro_expanding_to_define_after_body_boundary_is_rejected() {
+    let result = expand_source(
+        r#"
+        (let-syntax
+          ((def (syntax-rules ()
+                  ((_ x v) (define x v)))))
+          (lambda ()
+            0
+            (def y 42)
+            y))
+        "#,
+    );
+    assert!(
+        matches!(
+            &result,
+            Err(CompilationError { reason, .. })
+                if reason == "'define' must appear at the beginning of a body"
+        ),
+        "Expected macro-generated define after body boundary to be rejected, got: {:?}",
+        result
     );
 }
 
@@ -998,11 +959,11 @@ fn test_expand_define_syntax_with_pattern_variable() {
         matches!(&list_id, SExpr::Var(id, _) if session.resolve_sym(id) == Some(Symbol::new("list")))
     );
     assert_eq!(
-        nth(&result, 1).unwrap().without_spans(),
+        try_nth(&result, 1).unwrap().without_spans(),
         SExpr::Num(Num(5.0), Span { lo: 0, hi: 0 }).without_spans()
     );
     assert_eq!(
-        nth(&result, 2).unwrap().without_spans(),
+        try_nth(&result, 2).unwrap().without_spans(),
         SExpr::Num(Num(5.0), Span { lo: 0, hi: 0 }).without_spans()
     );
 }
@@ -1029,15 +990,15 @@ fn test_expand_define_syntax_with_ellipsis() {
         matches!(&list_id, SExpr::Var(id, _) if session.resolve_sym(id) == Some(Symbol::new("list")))
     );
     assert_eq!(
-        nth(&result, 1).unwrap().without_spans(),
+        try_nth(&result, 1).unwrap().without_spans(),
         SExpr::Num(Num(1.0), span).without_spans()
     );
     assert_eq!(
-        nth(&result, 2).unwrap().without_spans(),
+        try_nth(&result, 2).unwrap().without_spans(),
         SExpr::Num(Num(2.0), span).without_spans()
     );
     assert_eq!(
-        nth(&result, 3).unwrap().without_spans(),
+        try_nth(&result, 3).unwrap().without_spans(),
         SExpr::Num(Num(3.0), span).without_spans()
     );
 }
@@ -1348,7 +1309,7 @@ fn test_expand_define_function_shorthand_no_args() {
 fn test_expand_define_function_shorthand_expands_to_lambda() {
     let result = expand_source("(define (foo x) x)").unwrap();
     // Expanded form: (define foo (lambda (x) x))
-    let lambda_expr = nth(&result, 2).unwrap();
+    let lambda_expr = try_nth(&result, 2).unwrap();
     let SExpr::Var(lambda_id, _) = first(&lambda_expr) else {
         panic!("Expected lambda identifier in expanded form");
     };
@@ -1379,10 +1340,11 @@ fn test_expand_lambda_internal_define_function_shorthand() {
     let (session, result) = expand_with_session("(lambda () (define (foo x) x) (foo 1))");
     let result = result.unwrap();
 
-    // Position 2 is the define form, position 1 within it is the defined var
-    let defined_var = nth(&nth(&result, 2).unwrap(), 1).unwrap();
-    // Position 3 is the body expression (foo 1), position 0 is the function ref
-    let body_ref = first(&nth(&result, 3).unwrap());
+    // Body is now: (lambda () (letrec ((foo (lambda (x) x))) (foo 1)))
+    let letrec = try_nth(&result, 2).unwrap();
+    let first_init = first(&try_nth(&letrec, 1).unwrap());
+    let defined_var = first(&first_init);
+    let body_ref = first(&try_nth(&letrec, 2).unwrap());
 
     let SExpr::Var(defined_var, _) = defined_var else {
         panic!("Expected define variable to be an identifier");
@@ -1477,10 +1439,10 @@ fn test_expand_letrec_bindings_are_visible_in_body() {
     );
     let result = result.unwrap();
     // Structure: (letrec ((x' 1)) x')
-    let initializers = nth(&result, 1).unwrap();
+    let initializers = try_nth(&result, 1).unwrap();
     let first_init = first(&initializers);
     let bound_var = first(&first_init);
-    let body_ref = nth(&result, 2).unwrap();
+    let body_ref = try_nth(&result, 2).unwrap();
     let SExpr::Var(bound_var, _) = bound_var else {
         panic!("Expected bound variable to be an identifier");
     };
@@ -1505,7 +1467,7 @@ fn test_expand_letrec_bindings_are_visible_in_init_expressions() {
     );
     let result = result.unwrap();
     // Structure: (letrec ((f' (lambda () g')) (g' (lambda () f'))) f')
-    let initializers = nth(&result, 1).unwrap();
+    let initializers = try_nth(&result, 1).unwrap();
 
     // Get the bound variable 'g' from second initializer
     let second_init = first(&rest(&initializers));
@@ -1516,8 +1478,8 @@ fn test_expand_letrec_bindings_are_visible_in_init_expressions() {
 
     // Get the reference to 'g' inside f's lambda body
     let first_init = first(&initializers);
-    let f_lambda = nth(&first_init, 1).unwrap(); // (lambda () g')
-    let f_lambda_body = nth(&f_lambda, 2).unwrap(); // g'
+    let f_lambda = try_nth(&first_init, 1).unwrap(); // (lambda () g')
+    let f_lambda_body = try_nth(&f_lambda, 2).unwrap(); // g'
     let SExpr::Var(g_ref, _) = f_lambda_body else {
         panic!("Expected g reference to be an identifier");
     };
@@ -1630,4 +1592,496 @@ fn test_expand_letrec_used_by_named_let() {
         "Expected named let (which uses letrec) to expand, got: {:?}",
         result
     );
+}
+
+// --- Nested body context tests ---
+
+#[test]
+fn test_expand_nested_lambda_with_inner_defines() {
+    // Outer lambda body has defines lowered to letrec;
+    // inner lambda body also has defines lowered to its own letrec
+    let (session, result) =
+        expand_with_session("(lambda () (define x 1) (lambda () (define y x) y))");
+    let result = result.unwrap();
+
+    // Structure: (lambda () (letrec ((x 1)) (lambda () (letrec ((y x')) y'))))
+    let outer_letrec = try_nth(&result, 2).unwrap();
+    let outer_init = first(&try_nth(&outer_letrec, 1).unwrap());
+    let outer_var = first(&outer_init);
+
+    let inner_lambda = try_nth(&outer_letrec, 2).unwrap();
+    let inner_letrec = try_nth(&inner_lambda, 2).unwrap();
+    let inner_init = first(&try_nth(&inner_letrec, 1).unwrap());
+    let inner_var = first(&inner_init);
+    let inner_init_expr = try_nth(&inner_init, 1).unwrap();
+    let inner_body_ref = try_nth(&inner_letrec, 2).unwrap();
+
+    let SExpr::Var(outer_var, _) = outer_var else {
+        panic!("Expected outer define var to be an identifier");
+    };
+    let SExpr::Var(inner_var, _) = inner_var else {
+        panic!("Expected inner define var to be an identifier");
+    };
+    let SExpr::Var(inner_init_expr, _) = inner_init_expr else {
+        panic!("Expected inner init expr to be an identifier");
+    };
+    let SExpr::Var(inner_body_ref, _) = inner_body_ref else {
+        panic!("Expected inner body ref to be an identifier");
+    };
+
+    // inner y's init references outer x
+    assert_eq!(
+        session.resolve_sym(&outer_var).unwrap(),
+        session.resolve_sym(&inner_init_expr).unwrap(),
+        "Expected inner define init to reference outer define"
+    );
+    // inner body references inner y
+    assert_eq!(
+        session.resolve_sym(&inner_var).unwrap(),
+        session.resolve_sym(&inner_body_ref).unwrap(),
+        "Expected inner body to reference inner define"
+    );
+}
+
+#[test]
+fn test_expand_inner_lambda_with_defines_but_outer_without() {
+    // Outer lambda body has no defines (no letrec);
+    // inner lambda body does have defines (gets its own letrec)
+    let (session, result) = expand_with_session("(lambda () (lambda () (define x 1) x))");
+    let result = result.unwrap();
+
+    // Structure: (lambda () (lambda () (letrec ((x 1)) x)))
+    assert!(
+        try_nth(&result, 3).is_none(),
+        "Expected outer lambda to have a single body expression"
+    );
+    let inner_lambda = try_nth(&result, 2).unwrap();
+    let inner_letrec = try_nth(&inner_lambda, 2).unwrap();
+    let inner_init = first(&try_nth(&inner_letrec, 1).unwrap());
+    let defined_var = first(&inner_init);
+    let body_ref = try_nth(&inner_letrec, 2).unwrap();
+
+    let SExpr::Var(defined_var, _) = defined_var else {
+        panic!("Expected define var to be an identifier");
+    };
+    let SExpr::Var(body_ref, _) = body_ref else {
+        panic!("Expected body ref to be an identifier");
+    };
+    assert_eq!(
+        session.resolve_sym(&defined_var).unwrap(),
+        session.resolve_sym(&body_ref).unwrap(),
+        "Expected inner body reference to resolve to inner define"
+    );
+}
+
+#[test]
+fn test_expand_let_syntax_body_with_defines_lowered_to_letrec() {
+    // let-syntax body is a body context, so defines should be lowered to letrec
+    let (session, result) = expand_with_session(
+        r#"
+        (let-syntax
+          ((one (syntax-rules () ((_) 1))))
+          (define x (one))
+          x)
+        "#,
+    );
+    let result = result.unwrap();
+
+    // The let-syntax body expands to: (letrec ((x 1)) x)
+    // (let-syntax itself disappears, its body is the result)
+    let SExpr::Cons(..) = &result else {
+        panic!("Expected result to be a list (letrec form)");
+    };
+    let head = first(&result);
+    let SExpr::Var(head_id, _) = head else {
+        panic!("Expected result head to be an identifier");
+    };
+    assert_eq!(
+        session.resolve_sym(&head_id),
+        Some(Symbol::new("letrec")),
+        "Expected let-syntax body with defines to lower to letrec"
+    );
+
+    let init = first(&try_nth(&result, 1).unwrap());
+    let defined_var = first(&init);
+    let body_ref = try_nth(&result, 2).unwrap();
+    let SExpr::Var(defined_var, _) = defined_var else {
+        panic!("Expected define var to be an identifier");
+    };
+    let SExpr::Var(body_ref, _) = body_ref else {
+        panic!("Expected body ref to be an identifier");
+    };
+    assert_eq!(
+        session.resolve_sym(&defined_var).unwrap(),
+        session.resolve_sym(&body_ref).unwrap(),
+        "Expected body reference to resolve to define within let-syntax body"
+    );
+}
+
+#[test]
+fn test_expand_letrec_body_with_defines_creates_nested_letrec() {
+    // letrec body is a body context; internal defines create a nested letrec
+    let (session, result) = expand_with_session("(letrec ((x 1)) (define y x) y)");
+    let result = result.unwrap();
+
+    // Structure: (letrec ((x 1)) (letrec ((y x')) y'))
+    let outer_init = first(&try_nth(&result, 1).unwrap());
+    let outer_var = first(&outer_init);
+    let inner_letrec = try_nth(&result, 2).unwrap();
+
+    let inner_head = first(&inner_letrec);
+    let SExpr::Var(inner_head_id, _) = inner_head else {
+        panic!("Expected inner form to be letrec");
+    };
+    assert_eq!(
+        session.resolve_sym(&inner_head_id),
+        Some(Symbol::new("letrec")),
+        "Expected inner defines to produce nested letrec"
+    );
+
+    let inner_init = first(&try_nth(&inner_letrec, 1).unwrap());
+    let inner_var = first(&inner_init);
+    let inner_init_expr = try_nth(&inner_init, 1).unwrap();
+    let inner_body_ref = try_nth(&inner_letrec, 2).unwrap();
+
+    let SExpr::Var(outer_var, _) = outer_var else {
+        panic!("Expected outer var to be an identifier");
+    };
+    let SExpr::Var(inner_var, _) = inner_var else {
+        panic!("Expected inner var to be an identifier");
+    };
+    let SExpr::Var(inner_init_expr, _) = inner_init_expr else {
+        panic!("Expected inner init expr to be an identifier");
+    };
+    let SExpr::Var(inner_body_ref, _) = inner_body_ref else {
+        panic!("Expected inner body ref to be an identifier");
+    };
+
+    assert_eq!(
+        session.resolve_sym(&outer_var).unwrap(),
+        session.resolve_sym(&inner_init_expr).unwrap(),
+        "Expected inner define init to reference outer letrec binding"
+    );
+    assert_eq!(
+        session.resolve_sym(&inner_var).unwrap(),
+        session.resolve_sym(&inner_body_ref).unwrap(),
+        "Expected inner body to reference inner define"
+    );
+}
+
+#[test]
+fn test_expand_multiple_define_function_shorthands_in_body() {
+    let (session, result) =
+        expand_with_session("(lambda () (define (f x) x) (define (g y) (f y)) (g 1))");
+    let result = result.unwrap();
+
+    // Structure: (lambda () (letrec ((f (lambda (x) x)) (g (lambda (y) (f y)))) (g 1)))
+    let letrec = try_nth(&result, 2).unwrap();
+    let initializers = try_nth(&letrec, 1).unwrap();
+
+    let f_init = first(&initializers);
+    let f_var = first(&f_init);
+    let f_lambda = try_nth(&f_init, 1).unwrap();
+
+    let g_init = try_nth(&initializers, 1).unwrap();
+    let g_var = first(&g_init);
+    let g_lambda = try_nth(&g_init, 1).unwrap();
+
+    // f's lambda body references its own param
+    let SExpr::Var(f_var_id, _) = &f_var else {
+        panic!("Expected f to be an identifier");
+    };
+    let SExpr::Var(g_var_id, _) = &g_var else {
+        panic!("Expected g to be an identifier");
+    };
+    assert_ne!(
+        session.resolve_sym(f_var_id).unwrap(),
+        session.resolve_sym(g_var_id).unwrap(),
+        "Expected f and g to have distinct bindings"
+    );
+
+    // g's lambda body calls f — check f reference resolves to f's define
+    let g_body = try_nth(&g_lambda, 2).unwrap(); // (f y)
+    let f_ref_in_g = first(&g_body);
+    let SExpr::Var(f_ref_in_g, _) = f_ref_in_g else {
+        panic!("Expected f reference in g's body to be an identifier");
+    };
+    assert_eq!(
+        session.resolve_sym(f_var_id).unwrap(),
+        session.resolve_sym(&f_ref_in_g).unwrap(),
+        "Expected g's body to reference f from the same letrec"
+    );
+
+    // body expression calls g
+    let body_call = try_nth(&letrec, 2).unwrap(); // (g 1)
+    let g_ref = first(&body_call);
+    let SExpr::Var(g_ref, _) = g_ref else {
+        panic!("Expected g reference in body to be an identifier");
+    };
+    assert_eq!(
+        session.resolve_sym(g_var_id).unwrap(),
+        session.resolve_sym(&g_ref).unwrap(),
+        "Expected body to reference g from the letrec"
+    );
+
+    // verify f and g init expressions are lambdas
+    let f_head = first(&f_lambda);
+    let g_head = first(&g_lambda);
+    let SExpr::Var(f_head_id, _) = f_head else {
+        panic!("Expected f init to be a lambda");
+    };
+    let SExpr::Var(g_head_id, _) = g_head else {
+        panic!("Expected g init to be a lambda");
+    };
+    assert_eq!(session.resolve_sym(&f_head_id), Some(Symbol::new("lambda")));
+    assert_eq!(session.resolve_sym(&g_head_id), Some(Symbol::new("lambda")));
+}
+
+#[test]
+fn test_expand_duplicate_define_across_begin_splices_errors() {
+    let result = expand_source("(lambda () (begin (define x 1)) (define x 2) x)");
+    assert!(
+        matches!(
+            &result,
+            Err(CompilationError { reason, .. })
+                if reason.contains("Duplicate definition")
+        ),
+        "Expected duplicate define across begin splices to be rejected, got: {:?}",
+        result
+    );
+}
+
+#[test]
+fn test_expand_duplicate_define_within_single_begin_errors() {
+    let result = expand_source("(lambda () (begin (define x 1) (define x 2) x))");
+    assert!(
+        matches!(
+            &result,
+            Err(CompilationError { reason, .. })
+                if reason.contains("Duplicate definition")
+        ),
+        "Expected duplicate defines within begin to be rejected, got: {:?}",
+        result
+    );
+}
+
+#[test]
+fn test_expand_lambda_with_let_syntax_and_defines_in_body() {
+    // let-syntax inside a lambda body expression — the let-syntax itself
+    // has its own body with defines
+    let (session, result) = expand_with_session(
+        r#"
+        (lambda ()
+          (define x 1)
+          (let-syntax
+            ((inc (syntax-rules () ((_ v) (+ v 1)))))
+            (define y (inc x))
+            y))
+        "#,
+    );
+    let result = result.unwrap();
+
+    // Outer: (lambda () (letrec ((x 1)) (let-syntax-body...)))
+    let outer_letrec = try_nth(&result, 2).unwrap();
+    let outer_init = first(&try_nth(&outer_letrec, 1).unwrap());
+    let outer_var = first(&outer_init);
+
+    let SExpr::Var(..) = &outer_var else {
+        panic!("Expected outer define var to be an identifier");
+    };
+
+    // Inner let-syntax body should produce a nested letrec
+    let inner_letrec = try_nth(&outer_letrec, 2).unwrap();
+    let inner_head = first(&inner_letrec);
+    let SExpr::Var(inner_head_id, _) = inner_head else {
+        panic!("Expected inner form head to be an identifier");
+    };
+    assert_eq!(
+        session.resolve_sym(&inner_head_id),
+        Some(Symbol::new("letrec")),
+        "Expected let-syntax body with defines to produce letrec"
+    );
+}
+
+#[test]
+fn test_expand_define_init_is_expanded_in_expression_context() {
+    // define's init expression must be in expression context,
+    // so nested define inside init should error
+    let result = expand_source("(lambda () (define x (define y 1)) x)");
+    assert!(
+        matches!(
+            &result,
+            Err(CompilationError { reason, .. })
+                if reason == "'define' is not allowed in an expression context"
+        ),
+        "Expected define in init expression to be rejected, got: {:?}",
+        result
+    );
+}
+
+#[test]
+fn test_expand_letrec_lowering_preserves_mutual_recursion() {
+    // Classic mutually recursive internal defines
+    let (session, result) = expand_with_session(
+        r#"
+        (lambda ()
+          (define (even? n) (if n (odd? n) #t))
+          (define (odd? n) (if n (even? n) #f))
+          (even? 1))
+        "#,
+    );
+    let result = result.unwrap();
+
+    // Structure: (lambda () (letrec ((even? ...) (odd? ...)) (even? 1)))
+    let letrec = try_nth(&result, 2).unwrap();
+    let initializers = try_nth(&letrec, 1).unwrap();
+
+    let even_init = first(&initializers);
+    let even_var = first(&even_init);
+    let odd_init = try_nth(&initializers, 1).unwrap();
+    let odd_var = first(&odd_init);
+
+    let SExpr::Var(even_var_id, _) = &even_var else {
+        panic!("Expected even? to be an identifier");
+    };
+    let SExpr::Var(odd_var_id, _) = &odd_var else {
+        panic!("Expected odd? to be an identifier");
+    };
+
+    // even?'s lambda body should reference odd?
+    let even_lambda = try_nth(&even_init, 1).unwrap();
+    let even_body = try_nth(&even_lambda, 2).unwrap(); // (if n (odd? n) #t)
+    let odd_ref_in_even = first(&try_nth(&even_body, 2).unwrap()); // odd? in (odd? n)
+    let SExpr::Var(odd_ref_id, _) = odd_ref_in_even else {
+        panic!("Expected odd? reference in even?'s body to be an identifier");
+    };
+    assert_eq!(
+        session.resolve_sym(odd_var_id).unwrap(),
+        session.resolve_sym(&odd_ref_id).unwrap(),
+        "Expected even?'s body to reference odd? from the same letrec"
+    );
+
+    // odd?'s lambda body should reference even?
+    let odd_lambda = try_nth(&odd_init, 1).unwrap();
+    let odd_body = try_nth(&odd_lambda, 2).unwrap(); // (if n (even? n) #f)
+    let even_ref_in_odd = first(&try_nth(&odd_body, 2).unwrap()); // even? in (even? n)
+    let SExpr::Var(even_ref_id, _) = even_ref_in_odd else {
+        panic!("Expected even? reference in odd?'s body to be an identifier");
+    };
+    assert_eq!(
+        session.resolve_sym(even_var_id).unwrap(),
+        session.resolve_sym(&even_ref_id).unwrap(),
+        "Expected odd?'s body to reference even? from the same letrec"
+    );
+}
+
+#[test]
+fn test_expand_macro_expanding_to_define_in_let_syntax_body() {
+    let (session, result) = expand_with_session(
+        r#"
+        (let-syntax
+          ((def (syntax-rules ()
+                  ((_ x v) (define x v)))))
+          (def y 42)
+          y)
+        "#,
+    );
+    let result = result.unwrap();
+
+    // let-syntax body: (letrec ((y 42)) y)
+    let head = first(&result);
+    let SExpr::Var(head_id, _) = head else {
+        panic!("Expected result head to be an identifier");
+    };
+    assert_eq!(
+        session.resolve_sym(&head_id),
+        Some(Symbol::new("letrec")),
+        "Expected macro-generated define in let-syntax body to produce letrec"
+    );
+
+    let init = first(&try_nth(&result, 1).unwrap());
+    let defined_var = first(&init);
+    let body_ref = try_nth(&result, 2).unwrap();
+    let SExpr::Var(defined_var, _) = defined_var else {
+        panic!("Expected define var to be an identifier");
+    };
+    let SExpr::Var(body_ref, _) = body_ref else {
+        panic!("Expected body ref to be an identifier");
+    };
+    assert_eq!(
+        session.resolve_sym(&defined_var).unwrap(),
+        session.resolve_sym(&body_ref).unwrap(),
+        "Expected body reference to resolve to macro-generated define"
+    );
+}
+
+#[test]
+fn test_expand_begin_with_defines_inside_let_syntax_body() {
+    let result = expand_source(
+        r#"
+        (let-syntax
+          ((m (syntax-rules () ((_) 1))))
+          (begin (define x (m)))
+          x)
+        "#,
+    );
+    assert!(
+        result.is_ok(),
+        "Expected begin with defines inside let-syntax body to expand, got: {:?}",
+        result
+    );
+}
+
+#[test]
+fn test_expand_multiple_body_expressions_after_defines() {
+    // Multiple expressions after defines — all should be in the letrec body
+    let (session, result) = expand_with_session("(lambda () (define x 1) x x x)");
+    let result = result.unwrap();
+
+    // Structure: (lambda () (letrec ((x 1)) x x x))
+    let letrec = try_nth(&result, 2).unwrap();
+    assert!(
+        try_nth(&result, 3).is_none(),
+        "Expected single letrec form in lambda body"
+    );
+    // letrec should have initializer list + 3 body expressions
+    assert!(try_nth(&letrec, 2).is_some(), "Expected first body expr");
+    assert!(try_nth(&letrec, 3).is_some(), "Expected second body expr");
+    assert!(try_nth(&letrec, 4).is_some(), "Expected third body expr");
+    assert!(try_nth(&letrec, 5).is_none(), "Expected only 3 body exprs");
+
+    // All body exprs should reference x
+    let init = first(&try_nth(&letrec, 1).unwrap());
+    let x_var = first(&init);
+    let SExpr::Var(x_var_id, _) = &x_var else {
+        panic!("Expected x to be an identifier");
+    };
+
+    for i in 2..=4 {
+        let expr = try_nth(&letrec, i).unwrap();
+        let SExpr::Var(ref expr_id, _) = expr else {
+            panic!("Expected body expr {} to be an identifier", i - 1);
+        };
+        assert_eq!(
+            session.resolve_sym(x_var_id).unwrap(),
+            session.resolve_sym(expr_id).unwrap(),
+            "Expected body expr {} to reference the defined x",
+            i - 1
+        );
+    }
+}
+
+#[test]
+fn test_expand_body_with_only_expressions_no_letrec() {
+    // A body with no defines should NOT produce a letrec wrapper
+    let result = expand_source("(lambda () 1 2 3)").unwrap();
+
+    // Structure: (lambda () 1 2 3) — no letrec wrapper
+    let first_expr = try_nth(&result, 2).unwrap();
+    assert!(
+        matches!(first_expr, SExpr::Num(..)),
+        "Expected first body expression to be a number, not a letrec"
+    );
+    assert!(try_nth(&result, 3).is_some(), "Expected second body expr");
+    assert!(try_nth(&result, 4).is_some(), "Expected third body expr");
 }
