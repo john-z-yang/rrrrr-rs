@@ -13,6 +13,18 @@ pub(super) fn expand_body(
     env: &mut Env,
     mut ctx: Context,
 ) -> Result<SExpr<Id>> {
+    if len(&body) == 0 {
+        return Err(CompilationError {
+            span: body.get_span(),
+            reason: "Invalid body: expected at least one body expression".to_owned(),
+        });
+    }
+    if !is_proper_list(&body) {
+        return Err(CompilationError {
+            span: body.get_span(),
+            reason: "Invalid body: expected it to be a proper list".to_owned(),
+        });
+    }
     let body = body.add_scope(bindings.new_scope_id());
     let (body, phase) = normalize_body(body, bindings, env, NormalizationPhase::Define, &mut ctx)?;
     if phase == NormalizationPhase::Define {

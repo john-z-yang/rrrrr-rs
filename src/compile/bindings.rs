@@ -22,6 +22,7 @@ impl Bindings {
         "quasiquote",
         "unquote",
         "unquote-splicing",
+        "letrec",
         "if",
         "lambda",
         "define",

@@ -86,7 +86,7 @@ fn test_expand_lambda_requires_body_expression() {
     assert!(matches!(
         expand_source("(lambda (x))"),
         Err(CompilationError { reason, .. })
-            if reason == "Invalid 'lambda' form: expected at least one body expression"
+            if reason == "Invalid body: expected at least one body expression"
     ));
 }
 
@@ -1453,4 +1453,175 @@ fn test_expand_macro_expansion_depth_limit_via_body() {
         Err(CompilationError { reason, .. })
             if reason == "Macro expansion depth limit exceeded (1024) while expanding 'loop'"
     ));
+}
+
+// --- Core letrec form tests ---
+
+#[test]
+fn test_expand_letrec_basic() {
+    let result = expand_source("(letrec ((x 1)) x)");
+    assert!(
+        result.is_ok(),
+        "Expected basic letrec to expand, got: {:?}",
+        result
+    );
+}
+
+#[test]
+fn test_expand_letrec_bindings_are_visible_in_body() {
+    let (session, result) = expand_with_session("(letrec ((x 1)) x)");
+    assert!(result.is_ok(), "Expected letrec to expand, got: {:?}", result);
+    let result = result.unwrap();
+    // Structure: (letrec ((x' 1)) x')
+    let initializers = nth(&result, 1).unwrap();
+    let first_init = first(&initializers);
+    let bound_var = first(&first_init);
+    let body_ref = nth(&result, 2).unwrap();
+    let SExpr::Var(bound_var, _) = bound_var else {
+        panic!("Expected bound variable to be an identifier");
+    };
+    let SExpr::Var(body_ref, _) = body_ref else {
+        panic!("Expected body reference to be an identifier");
+    };
+    assert_eq!(
+        session.resolve_sym(&bound_var).unwrap(),
+        session.resolve_sym(&body_ref).unwrap(),
+        "Expected body reference to resolve to the letrec-bound variable"
+    );
+}
+
+#[test]
+fn test_expand_letrec_bindings_are_visible_in_init_expressions() {
+    // In letrec, init expressions can see all bindings (for mutual recursion)
+    let (session, result) = expand_with_session(
+        "(letrec ((f (lambda () g)) (g (lambda () f))) f)",
+    );
+    assert!(result.is_ok(), "Expected letrec to expand, got: {:?}", result);
+    let result = result.unwrap();
+    // Structure: (letrec ((f' (lambda () g')) (g' (lambda () f'))) f')
+    let initializers = nth(&result, 1).unwrap();
+
+    // Get the bound variable 'g' from second initializer
+    let second_init = first(&rest(&initializers));
+    let g_bound = first(&second_init);
+    let SExpr::Var(g_bound, _) = g_bound else {
+        panic!("Expected g bound var to be an identifier");
+    };
+
+    // Get the reference to 'g' inside f's lambda body
+    let first_init = first(&initializers);
+    let f_lambda = nth(&first_init, 1).unwrap(); // (lambda () g')
+    let f_lambda_body = nth(&f_lambda, 2).unwrap(); // g'
+    let SExpr::Var(g_ref, _) = f_lambda_body else {
+        panic!("Expected g reference to be an identifier");
+    };
+
+    assert_eq!(
+        session.resolve_sym(&g_bound).unwrap(),
+        session.resolve_sym(&g_ref).unwrap(),
+        "Expected reference to 'g' inside f's init to resolve to letrec-bound 'g'"
+    );
+}
+
+#[test]
+fn test_expand_letrec_multiple_bindings() {
+    let result = expand_source("(letrec ((x 1) (y 2) (z 3)) (list x y z))");
+    assert!(
+        result.is_ok(),
+        "Expected letrec with multiple bindings to expand, got: {:?}",
+        result
+    );
+}
+
+#[test]
+fn test_expand_letrec_empty_bindings() {
+    let result = expand_source("(letrec () 1)");
+    assert!(
+        result.is_ok(),
+        "Expected letrec with empty bindings to expand, got: {:?}",
+        result
+    );
+}
+
+#[test]
+fn test_expand_letrec_body_with_internal_defines() {
+    let result = expand_source("(letrec ((x 1)) (define y 2) y)");
+    assert!(
+        result.is_ok(),
+        "Expected letrec body to allow internal defines, got: {:?}",
+        result
+    );
+}
+
+#[test]
+fn test_expand_letrec_rejects_duplicate_bindings() {
+    assert!(matches!(
+        expand_source("(letrec ((x 1) (x 2)) x)"),
+        Err(CompilationError { reason, .. }) if reason == "Duplicate id: 'x'"
+    ));
+}
+
+#[test]
+fn test_expand_letrec_rejects_missing_body() {
+    assert!(matches!(
+        expand_source("(letrec ((x 1)))"),
+        Err(CompilationError { reason, .. })
+            if reason == "Invalid body: expected at least one body expression"
+    ));
+}
+
+#[test]
+fn test_expand_letrec_rejects_invalid_initializer_shape() {
+    assert!(matches!(
+        expand_source("(letrec (x) x)"),
+        Err(CompilationError { reason, .. })
+            if reason == "Invalid 'letrec' form: expected initializer to be in the form of (var expr)"
+    ));
+}
+
+#[test]
+fn test_expand_letrec_rejects_non_id_in_initializer() {
+    assert!(matches!(
+        expand_source("(letrec ((42 1)) 1)"),
+        Err(CompilationError { reason, .. })
+            if reason == "Invalid 'letrec' form: expected initializer to be in the form of (var expr)"
+    ));
+}
+
+#[test]
+fn test_expand_letrec_rejects_define_in_init_expression() {
+    assert!(matches!(
+        expand_source("(letrec ((x (define y 1))) x)"),
+        Err(CompilationError { reason, .. })
+            if reason == "'define' is not allowed in an expression context"
+    ));
+}
+
+#[test]
+fn test_expand_letrec_invalid_form() {
+    assert!(matches!(
+        expand_source("(letrec)"),
+        Err(CompilationError { reason, .. })
+            if reason == "Invalid 'letrec' form"
+    ));
+}
+
+#[test]
+fn test_expand_letrec_body_only_defines_rejected() {
+    assert!(matches!(
+        expand_source("(letrec ((x 1)) (define y 2))"),
+        Err(CompilationError { reason, .. })
+            if reason == "Invalid body: expected at least one expression after definitions"
+    ));
+}
+
+#[test]
+fn test_expand_letrec_used_by_named_let() {
+    // Named let desugars to letrec; verify it still works
+    let result = expand_source("(let loop ((i 0)) (if i 1 (loop 0)))");
+    assert!(
+        result.is_ok(),
+        "Expected named let (which uses letrec) to expand, got: {:?}",
+        result
+    );
 }

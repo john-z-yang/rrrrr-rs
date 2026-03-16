@@ -105,15 +105,6 @@ pub const PRELUDE: &str = r#"
              body1 body2 ...)))))
 
 
-    (define-syntax letrec
-        (syntax-rules ()
-        ((_ ((var init) ...) body ...)
-        ((lambda ()
-            (define var init)
-            ...
-            body ...)))))
-
-
     (define-syntax do
       (syntax-rules ()
         ((do ((var init step ...) ...)

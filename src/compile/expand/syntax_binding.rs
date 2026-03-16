@@ -74,18 +74,6 @@ fn expand_syntax_binding(
                 reason: format!("Invalid '{form}' bindings: expected a proper list"),
             });
         }
-        if !is_proper_list(body) {
-            return Err(CompilationError {
-                span: sexpr.get_span(),
-                reason: format!("Invalid '{form}' body: expected a proper list"),
-            });
-        }
-        if len(body) == 0 {
-            return Err(CompilationError {
-                span: sexpr.get_span(),
-                reason: format!("Invalid '{form}' body: expected at least one expression"),
-            });
-        }
         let scope_id = bindings.new_scope_id();
 
         try_for_each(binding_pairs, |binding_pair| {

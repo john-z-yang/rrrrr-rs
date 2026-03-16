@@ -1,4 +1,5 @@
 mod body;
+mod letrec;
 mod quasiquote;
 mod syntax_binding;
 
@@ -22,6 +23,7 @@ use crate::{
     compile::{
         expand::{
             body::expand_body,
+            letrec::expand_letrec,
             quasiquote::expand_quasiquote,
             syntax_binding::{expand_let_syntax, expand_letrec_syntax},
         },
@@ -181,6 +183,7 @@ fn expand_id_application(
         "lambda" => expand_lambda(sexpr, bindings, env, ctx),
         "define" => expand_define(sexpr, bindings, env, ctx),
         "define-syntax" => expand_define_syntax(sexpr, bindings, env, ctx),
+        "letrec" => expand_letrec(sexpr, bindings, env, ctx),
         "set!" => expand_set(sexpr, bindings, env, ctx),
         "begin" => expand_begin(sexpr, bindings, env, ctx),
         "if" => expand_if(sexpr, bindings, env, ctx),
@@ -398,15 +401,11 @@ fn expand_lambda(
         &sexpr;
 
         (lambda, args @ (..), body @ ..) => {
-            if len(body) == 0 {
-                return Err(CompilationError {
-                    span: sexpr.get_span(),
-                    reason: "Invalid 'lambda' form: expected at least one body expression".to_owned(),
-                });
-            }
             let scope_id = bindings.new_scope_id();
             let args = args.clone().add_scope(scope_id);
-            let mut seen = HashSet::new();
+            let body = body.clone().add_scope(scope_id);
+
+            let mut arg_symbols = HashSet::new();
 
             try_for_each(&args, |arg| {
                 let SExpr::Var(id, _) = arg else {
@@ -418,7 +417,7 @@ fn expand_lambda(
                         ),
                     });
                 };
-                if !seen.insert(id.symbol.clone()) {
+                if !arg_symbols.insert(id.symbol.clone()) {
                     return Err(CompilationError {
                         span: arg.get_span(),
                         reason: format!("Duplicate parameter: '{}'", id),
@@ -432,7 +431,7 @@ fn expand_lambda(
             match try_dotted_tail(&args) {
                 None | Some(SExpr::Nil(_)) => {}
                 Some(SExpr::Var(id, _)) => {
-                    if !seen.insert(id.symbol.clone()) {
+                    if !arg_symbols.insert(id.symbol.clone()) {
                         return Err(CompilationError {
                             span: sexpr.get_span(),
                             reason: format!("Duplicate parameter: '{}'", id),
@@ -452,26 +451,22 @@ fn expand_lambda(
                 }
             };
 
-            let body = expand_body(body.clone().add_scope(scope_id), bindings, env, ctx)?;
+            let body = expand_body(body, bindings, env, ctx)?;
             Ok(template_sexpr!((lambda.clone(), args, ..body) => &sexpr).unwrap())
         },
 
         (lambda, arg @ SExpr::Var(..), body @ ..) => {
-            if len(body) == 0 {
-                return Err(CompilationError {
-                    span: sexpr.get_span(),
-                    reason: "Invalid 'lambda' form: expected at least one body expression".to_owned(),
-                });
-            }
             let scope_id = bindings.new_scope_id();
             let arg = arg.clone().add_scope(scope_id);
+            let body = body.clone().add_scope(scope_id);
+
             let SExpr::Var(id, _) = &arg else {
                 unreachable!("arg is already a SExpr::Var(..)")
             };
             let binding = bindings.gen_sym(id);
             bindings.add_binding(id, &binding);
 
-            let body = expand_body(body.clone().add_scope(scope_id), bindings, env, ctx)?;
+            let body = expand_body(body, bindings, env, ctx)?;
             Ok(template_sexpr!((lambda.clone(), arg, ..body) => &sexpr).unwrap())
         },
 
