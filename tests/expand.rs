@@ -1470,7 +1470,11 @@ fn test_expand_letrec_basic() {
 #[test]
 fn test_expand_letrec_bindings_are_visible_in_body() {
     let (session, result) = expand_with_session("(letrec ((x 1)) x)");
-    assert!(result.is_ok(), "Expected letrec to expand, got: {:?}", result);
+    assert!(
+        result.is_ok(),
+        "Expected letrec to expand, got: {:?}",
+        result
+    );
     let result = result.unwrap();
     // Structure: (letrec ((x' 1)) x')
     let initializers = nth(&result, 1).unwrap();
@@ -1493,10 +1497,12 @@ fn test_expand_letrec_bindings_are_visible_in_body() {
 #[test]
 fn test_expand_letrec_bindings_are_visible_in_init_expressions() {
     // In letrec, init expressions can see all bindings (for mutual recursion)
-    let (session, result) = expand_with_session(
-        "(letrec ((f (lambda () g)) (g (lambda () f))) f)",
+    let (session, result) = expand_with_session("(letrec ((f (lambda () g)) (g (lambda () f))) f)");
+    assert!(
+        result.is_ok(),
+        "Expected letrec to expand, got: {:?}",
+        result
     );
-    assert!(result.is_ok(), "Expected letrec to expand, got: {:?}", result);
     let result = result.unwrap();
     // Structure: (letrec ((f' (lambda () g')) (g' (lambda () f'))) f')
     let initializers = nth(&result, 1).unwrap();
