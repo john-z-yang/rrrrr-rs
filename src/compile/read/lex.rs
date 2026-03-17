@@ -1,12 +1,12 @@
 use std::{iter::Peekable, str::Chars};
 
 use crate::compile::{
-    compilation_error::Result,
+    compilation_error::{CompilationError, Result},
     sexpr::{Bool, Char, Num, Str, Symbol},
     span::Span,
 };
 
-use super::{compilation_error::CompilationError, token::Token};
+use super::token::Token;
 
 pub fn tokenize(source: &str) -> Result<Vec<Token>> {
     Lexer::new(source).scan()

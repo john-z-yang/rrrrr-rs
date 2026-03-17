@@ -1,10 +1,8 @@
 use rrrrr_rs::compile::{
     compilation_error::CompilationError,
-    lex::tokenize,
-    parse::parse,
+    read::{lex::tokenize, parse::parse, token::Token},
     sexpr::{Cons, Num, SExpr, Symbol, Vector},
     span::Span,
-    token::Token,
 };
 
 #[test]

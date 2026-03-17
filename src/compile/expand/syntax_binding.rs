@@ -1,13 +1,11 @@
 use std::fmt;
-use std::rc::Rc;
 
 use super::body::expand_body;
-use super::{Context, Env};
+use super::{Context, Env, transformer::Transformer};
 use crate::compile::{
     bindings::Bindings,
     compilation_error::{CompilationError, Result},
     sexpr::{Id, SExpr, Symbol},
-    transformer::Transformer,
     util::{first, is_proper_list, len, try_first, try_for_each},
 };
 use crate::if_let_sexpr;
@@ -97,7 +95,7 @@ fn expand_syntax_binding(
                     });
                 }
                 let transformer = Transformer::new(transformer_spec)?;
-                env.insert(binding, Rc::new(transformer));
+                env.insert(binding, transformer);
                 return Ok(());
             }
             Err(CompilationError {

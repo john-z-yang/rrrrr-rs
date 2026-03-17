@@ -1,9 +1,8 @@
 use rrrrr_rs::compile::{
     compilation_error::CompilationError,
-    lex::tokenize,
+    read::{lex::tokenize, token::Token},
     sexpr::{Bool, Char, Num, Str, Symbol},
     span::Span,
-    token::Token,
 };
 
 #[test]

@@ -1,7 +1,6 @@
 use rrrrr_rs::{
     compile::{
-        lex::tokenize,
-        parse::parse,
+        read::{lex::tokenize, parse::parse},
         sexpr::{Num, SExpr, Str, Symbol},
         span::Span,
         util::{is_proper_list, len},

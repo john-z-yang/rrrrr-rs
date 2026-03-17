@@ -1,9 +1,9 @@
 use std::{iter::Peekable, slice::Iter};
 
-use super::{compilation_error::CompilationError, sexpr::SExpr, token::Token};
+use super::token::Token;
 use crate::compile::{
-    compilation_error::Result,
-    sexpr::{Symbol, Vector},
+    compilation_error::{CompilationError, Result},
+    sexpr::{SExpr, Symbol, Vector},
     span::Span,
 };
 

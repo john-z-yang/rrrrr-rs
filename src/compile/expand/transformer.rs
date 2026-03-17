@@ -1,17 +1,16 @@
 use std::collections::{HashMap, HashSet};
 use std::rc::Rc;
 
-use crate::compile::bindings::Bindings;
-
-use crate::compile::sexpr::Vector;
-use crate::compile::util::{is_proper_list, len, try_dotted_tail, try_for_each};
+use crate::compile::{
+    bindings::Bindings,
+    compilation_error::{CompilationError, Result},
+    sexpr::{Id, SExpr, Symbol, Vector},
+    util::{is_proper_list, len, try_dotted_tail, try_for_each},
+};
 use crate::if_let_sexpr;
 
-use super::compilation_error::{CompilationError, Result};
-use super::sexpr::{Id, SExpr, Symbol};
-
 #[derive(Debug, Clone)]
-pub(crate) struct Transformer {
+pub(super) struct Transformer {
     syntax_rules: Vec<SyntaxRule>,
 }
 
@@ -387,7 +386,7 @@ impl SyntaxRule {
 }
 
 impl Transformer {
-    pub(crate) fn new(spec: &SExpr<Id>) -> Result<Self> {
+    pub(super) fn new(spec: &SExpr<Id>) -> Result<Self> {
         if_let_sexpr! {(_, literals_list @ (..), rules @ ..) = spec =>
             let mut literals = HashSet::<Symbol>::new();
             if len(rules) == 0 {
@@ -471,7 +470,7 @@ impl Transformer {
         })
     }
 
-    pub(crate) fn transform(
+    pub(super) fn transform(
         &self,
         application: &SExpr<Id>,
         bindings: &Bindings,
@@ -493,7 +492,11 @@ impl Transformer {
 mod tests {
     use std::collections::HashSet;
 
-    use crate::compile::{expand::introduce, lex::tokenize, parse::parse, span::Span};
+    use crate::compile::{
+        expand::introduce,
+        read::{lex::tokenize, parse::parse},
+        span::Span,
+    };
 
     use super::*;
 

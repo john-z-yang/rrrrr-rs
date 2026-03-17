@@ -2,6 +2,7 @@ mod body;
 mod letrec;
 mod quasiquote;
 mod syntax_binding;
+mod transformer;
 
 #[cfg(test)]
 mod tests;
@@ -12,11 +13,11 @@ use std::{
     rc::Rc,
 };
 
+use self::transformer::Transformer;
 use super::{
     bindings::Bindings,
     compilation_error::{CompilationError, Result},
     sexpr::{Id, SExpr, Symbol},
-    transformer::Transformer,
     util::{try_first, try_map},
 };
 use crate::{
@@ -32,7 +33,36 @@ use crate::{
     if_let_sexpr, make_sexpr, match_sexpr, template_sexpr,
 };
 
-type Env = HashMap<Symbol, Rc<Transformer>>;
+#[derive(Debug, Clone, Default)]
+pub(crate) struct Env {
+    transformers: HashMap<Symbol, Rc<Transformer>>,
+}
+
+impl Env {
+    fn get(&self, symbol: &Symbol) -> Option<&Transformer> {
+        self.transformers.get(symbol).map(Rc::as_ref)
+    }
+
+    #[cfg(test)]
+    fn is_empty(&self) -> bool {
+        self.transformers.is_empty()
+    }
+
+    fn insert(&mut self, symbol: Symbol, transformer: Transformer) {
+        self.transformers.insert(symbol, Rc::new(transformer));
+    }
+}
+
+impl<const N: usize> From<[(Symbol, Transformer); N]> for Env {
+    fn from(transformers: [(Symbol, Transformer); N]) -> Self {
+        Self {
+            transformers: transformers
+                .into_iter()
+                .map(|(symbol, transformer)| (symbol, Rc::new(transformer)))
+                .collect(),
+        }
+    }
+}
 
 const MAX_MACRO_DEPTH: u16 = 1024;
 
@@ -381,7 +411,7 @@ fn expand_define_syntax(
         let transformer = Transformer::new(transformer_spec)?;
         let binding = bindings.gen_sym(id);
         bindings.add_binding(id, &binding);
-        env.insert(binding, Rc::new(transformer));
+        env.insert(binding, transformer);
 
         return Ok(sexpr);
     }

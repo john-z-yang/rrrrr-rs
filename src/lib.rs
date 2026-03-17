@@ -1,13 +1,11 @@
 pub mod compile;
 
-use std::{collections::HashMap, rc::Rc};
-
 use compile::{
     bindings::Bindings,
     compilation_error::Result,
+    expand::Env,
+    read::token::Token,
     sexpr::{Id, SExpr, Symbol},
-    token::Token,
-    transformer::Transformer,
 };
 
 use crate::compile::prelude::PRELUDE;
@@ -15,14 +13,14 @@ use crate::compile::prelude::PRELUDE;
 #[derive(Debug, Clone)]
 pub struct Session {
     bindings: Bindings,
-    expander_env: HashMap<Symbol, Rc<Transformer>>,
+    expander_env: Env,
 }
 
 impl Session {
     pub fn new() -> Self {
         Self {
             bindings: Bindings::new(),
-            expander_env: HashMap::new(),
+            expander_env: Env::default(),
         }
     }
 
@@ -44,11 +42,11 @@ impl Session {
     }
 
     pub fn tokenize(&self, source: &str) -> Result<Vec<Token>> {
-        compile::lex::tokenize(source)
+        compile::read::lex::tokenize(source)
     }
 
     pub fn parse(&self, tokens: &[Token]) -> Result<SExpr<Symbol>> {
-        compile::parse::parse(tokens)
+        compile::read::parse::parse(tokens)
     }
 
     pub fn introduce(&self, form: SExpr<Symbol>) -> SExpr<Id> {
