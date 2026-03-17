@@ -1,4 +1,5 @@
 pub mod compile;
+pub mod prelude;
 
 use compile::{
     bindings::Bindings,
@@ -8,7 +9,7 @@ use compile::{
     sexpr::{Id, SExpr, Symbol},
 };
 
-use crate::compile::prelude::PRELUDE;
+use crate::prelude::SYNTAX_PRELUDE;
 
 #[derive(Debug, Clone)]
 pub struct Session {
@@ -35,7 +36,7 @@ impl Session {
     }
 
     fn load_prelude(&mut self) {
-        self.tokenize(PRELUDE)
+        self.tokenize(SYNTAX_PRELUDE)
             .and_then(|tokens| self.parse(&tokens))
             .and_then(|sexpr| self.expand(self.introduce(sexpr)))
             .expect("Unable to load prelude");
