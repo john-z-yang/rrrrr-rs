@@ -9,7 +9,7 @@ use compile::{
     sexpr::{Id, SExpr, Symbol},
 };
 
-use crate::prelude::SYNTAX_PRELUDE;
+use crate::prelude::DERIVED_FORMS;
 
 #[derive(Debug, Clone)]
 pub struct Session {
@@ -36,7 +36,7 @@ impl Session {
     }
 
     fn load_prelude(&mut self) {
-        self.tokenize(SYNTAX_PRELUDE)
+        self.tokenize(DERIVED_FORMS)
             .and_then(|tokens| self.parse(&tokens))
             .and_then(|sexpr| self.expand(self.introduce(sexpr)))
             .expect("Unable to load prelude");

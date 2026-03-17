@@ -1,4 +1,4 @@
-pub const SYNTAX_PRELUDE: &str = r#"
+pub const DERIVED_FORMS: &str = r#"
 
 
 ;⠀⠀⢀⣤⣤⣤⣤⣀⠀⠀⠀⠀⠀⠀⠀⠀⠀
