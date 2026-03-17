@@ -67,7 +67,7 @@ impl<const N: usize> From<[(Symbol, Transformer); N]> for Env {
 const MAX_MACRO_DEPTH: u16 = 1024;
 
 pub fn introduce(sexpr: SExpr<Symbol>) -> SExpr<Id> {
-    sexpr.map_var(&|symbol, _| Id {
+    sexpr.map_var(&|symbol| Id {
         symbol,
         scopes: std::collections::BTreeSet::from([Bindings::CORE_SCOPE]),
     })
@@ -341,7 +341,7 @@ fn expand_define(
     env: &mut Env,
     ctx: Context,
 ) -> Result<SExpr<Id>> {
-    match_sexpr!(
+    match_sexpr! {
         &sexpr;
 
         (define, var @ SExpr::Var(id, _), exp) => {
@@ -382,7 +382,7 @@ fn expand_define(
                 reason: "Invalid 'define' form".to_owned(),
             })
         },
-    )
+    }
 }
 
 fn expand_define_syntax(
@@ -413,7 +413,7 @@ fn expand_define_syntax(
         bindings.add_binding(id, &binding);
         env.insert(binding, transformer);
 
-        return Ok(sexpr);
+        return Ok(SExpr::Void(sexpr.get_span()));
     }
     Err(CompilationError {
         span: sexpr.get_span(),

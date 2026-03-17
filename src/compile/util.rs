@@ -6,7 +6,7 @@ macro_rules! make_sexpr {
         $expr
     };
     (($($inner:tt)+) $(,)?) => {{
-        let car = make_sexpr!($($inner)+);
+        let car = $crate::make_sexpr!($($inner)+);
         let span = car.get_span();
         $crate::compile::sexpr::SExpr::cons(
             car,
@@ -15,8 +15,8 @@ macro_rules! make_sexpr {
     }};
     (($($inner:tt)+), $($rest:tt)+) => {
         $crate::compile::sexpr::SExpr::cons(
-            make_sexpr!($($inner)+),
-            make_sexpr!($($rest)+),
+            $crate::make_sexpr!($($inner)+),
+            $crate::make_sexpr!($($rest)+),
         )
     };
     ($expr:expr $(,)?) => {{
@@ -28,7 +28,7 @@ macro_rules! make_sexpr {
         )
     }};
     ($first:expr, $($rest:tt)+) => {
-        $crate::compile::sexpr::SExpr::cons($first, make_sexpr!($($rest)+))
+        $crate::compile::sexpr::SExpr::cons($first, $crate::make_sexpr!($($rest)+))
     };
 }
 
@@ -61,8 +61,8 @@ macro_rules! if_let_sexpr {
     ) => {
         if let $crate::compile::sexpr::SExpr::Cons(cons, _) = $targ {
             let (car, cdr) = cons.into();
-            if_let_sexpr! {($($inner)*) = car => {
-                if_let_sexpr! {@tail_pos ($id @ ..) = cdr =>
+            $crate::if_let_sexpr! {($($inner)*) = car => {
+                $crate::if_let_sexpr! {@tail_pos ($id @ ..) = cdr =>
                     $($handler)*
                 }
             }}
@@ -75,8 +75,8 @@ macro_rules! if_let_sexpr {
     ) => {
         if let $crate::compile::sexpr::SExpr::Cons(cons, _) = $targ {
             let (car, cdr) = cons.into();
-            if_let_sexpr! {($($inner)*) = car => {
-                if_let_sexpr! {($($($rest)*)?) = cdr =>
+            $crate::if_let_sexpr! {($($inner)*) = car => {
+                $crate::if_let_sexpr! {($($($rest)*)?) = cdr =>
                     $($handler)*
                 }
             }}
@@ -90,8 +90,8 @@ macro_rules! if_let_sexpr {
         if let $crate::compile::sexpr::SExpr::Cons(cons, _) = $targ {
             let (car, cdr) = cons.into();
             let $id = car;
-            if_let_sexpr! {($($pat)*) = &$id =>
-                if_let_sexpr! {@tail_pos ($tail @ ..) = cdr =>
+            $crate::if_let_sexpr! {($($pat)*) = &$id =>
+                $crate::if_let_sexpr! {@tail_pos ($tail @ ..) = cdr =>
                     $($handler)*
                 }
             }
@@ -105,8 +105,8 @@ macro_rules! if_let_sexpr {
         if let $crate::compile::sexpr::SExpr::Cons(cons, _) = $targ {
             let (car, cdr) = cons.into();
             let $id = car;
-            if_let_sexpr! {($($pat)*) = &$id =>
-                if_let_sexpr! {($($($rest)*)?) = cdr =>
+            $crate::if_let_sexpr! {($($pat)*) = &$id =>
+                $crate::if_let_sexpr! {($($($rest)*)?) = cdr =>
                     $($handler)*
                 }
             }
@@ -121,7 +121,7 @@ macro_rules! if_let_sexpr {
             let (car, cdr) = cons.into();
             #[allow(irrefutable_let_patterns)]
             if let $pat = car {
-                if_let_sexpr! {@tail_pos ($id @ ..) = cdr =>
+                $crate::if_let_sexpr! {@tail_pos ($id @ ..) = cdr =>
                     $($handler)*
                 }
             }
@@ -136,7 +136,7 @@ macro_rules! if_let_sexpr {
             let (car, cdr) = cons.into();
             #[allow(irrefutable_let_patterns)]
             if let $pat = car {
-                if_let_sexpr! {($($($rest)*)?) = cdr =>
+                $crate::if_let_sexpr! {($($($rest)*)?) = cdr =>
                     $($handler)*
                 }
             }
@@ -169,7 +169,7 @@ macro_rules! match_sexpr {
     // Regular arm followed by more arms
     (@arms $targ:ident, ($($pat:tt)*) => $handler:block, $($rest:tt)*) => {{
         let mut result = None;
-        if_let_sexpr! { ($($pat)*) = $targ =>
+        $crate::if_let_sexpr! { ($($pat)*) = $targ =>
             result = Some($handler);
         }
         match result {

@@ -1,3 +1,4 @@
+pub mod alpha_reduce;
 pub mod bindings;
 pub mod compilation_error;
 pub mod expand;

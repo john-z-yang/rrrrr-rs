@@ -16,6 +16,7 @@ pub enum SExpr<T> {
     Char(Char, Span),
     Str(Str, Span),
     Vector(Vector<T>, Span),
+    Void(Span),
 }
 
 impl<T> SExpr<T> {
@@ -33,6 +34,7 @@ impl<T> SExpr<T> {
             SExpr::Char(_, span) => span,
             SExpr::Str(_, span) => span,
             SExpr::Vector(_, span) => span,
+            SExpr::Void(span) => span,
         }
     }
 
@@ -46,6 +48,7 @@ impl<T> SExpr<T> {
             SExpr::Char(_, span) => span,
             SExpr::Str(_, span) => span,
             SExpr::Vector(_, span) => span,
+            SExpr::Void(span) => span,
         } = span;
     }
 
@@ -55,9 +58,12 @@ impl<T> SExpr<T> {
         Self::Cons(Cons::new(car, cdr), start.combine(end))
     }
 
-    pub fn map_var<U>(self, f: &impl Fn(T, Span) -> U) -> SExpr<U> {
+    pub fn map_var<U, F>(self, f: &F) -> SExpr<U>
+    where
+        F: Fn(T) -> U,
+    {
         match self {
-            SExpr::Var(var, span) => SExpr::Var(f(var, span), span),
+            SExpr::Var(var, span) => SExpr::Var(f(var), span),
             SExpr::Cons(cons, span) => {
                 SExpr::Cons(Cons::new(cons.car.map_var(f), cons.cdr.map_var(f)), span)
             }
@@ -70,6 +76,7 @@ impl<T> SExpr<T> {
                 Vector(vector.0.into_iter().map(|sexpr| sexpr.map_var(f)).collect()),
                 span,
             ),
+            SExpr::Void(span) => SExpr::Void(span),
         }
     }
 }
@@ -149,6 +156,9 @@ impl<T: fmt::Display> fmt::Display for SExpr<T> {
             SExpr::Vector(vector, _) => {
                 write!(f, "{}", vector)
             }
+            SExpr::Void(_) => {
+                write!(f, "#<void>")
+            }
         }
     }
 }
@@ -178,6 +188,7 @@ impl<T: PartialEq> PartialEq for SExprWithoutSpans<'_, T> {
                             .zip(other.0.iter())
                             .all(|(left, right)| eq_sexpr_without_spans(left, right))
                 }
+                (SExpr::Void(_), SExpr::Void(_)) => true,
                 _ => false,
             }
         }
@@ -209,6 +220,24 @@ impl<T: fmt::Debug> fmt::Debug for SExprWithoutSpans<'_, T> {
                 list.finish()?;
                 write!(f, ")")
             }
+            SExpr::Void(_) => f.write_str("#<void>"),
+        }
+    }
+}
+
+#[derive(PartialEq, Clone, Eq, Hash, Debug)]
+pub enum Resolved {
+    Bound { symbol: Symbol, binding: Symbol },
+    Unbound { symbol: Symbol },
+    Literal { symbol: Symbol },
+}
+
+impl fmt::Display for Resolved {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            Resolved::Bound { binding, .. } => write!(f, "{}", binding),
+            Resolved::Unbound { symbol } => write!(f, "{}", symbol),
+            Resolved::Literal { symbol } => write!(f, "{}", symbol),
         }
     }
 }

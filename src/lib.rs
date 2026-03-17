@@ -9,7 +9,7 @@ use compile::{
     sexpr::{Id, SExpr, Symbol},
 };
 
-use crate::prelude::DERIVED_FORMS;
+use crate::{compile::sexpr::Resolved, prelude::DERIVED_FORMS};
 
 #[derive(Debug, Clone)]
 pub struct Session {
@@ -56,6 +56,10 @@ impl Session {
 
     pub fn expand(&mut self, form: SExpr<Id>) -> Result<SExpr<Id>> {
         compile::expand::expand(form, &mut self.bindings, &mut self.expander_env)
+    }
+
+    pub fn alpha_reduce(&self, form: SExpr<Id>) -> SExpr<Resolved> {
+        compile::alpha_reduce::alpha_reduce(form, &self.bindings)
     }
 
     pub fn resolve_sym(&self, id: &Id) -> Option<Symbol> {

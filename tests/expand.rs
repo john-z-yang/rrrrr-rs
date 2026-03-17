@@ -589,6 +589,26 @@ fn test_expand_define_syntax_basic() {
 }
 
 #[test]
+fn test_expand_define_syntax_returns_void() {
+    let mut session = Session::new();
+
+    let result = session_expand(
+        &mut session,
+        r#"
+        (define-syntax one
+          (syntax-rules ()
+            ((_) 1)))
+        "#,
+    )
+    .unwrap();
+
+    assert_eq!(
+        result.without_spans(),
+        SExpr::Void(Span { lo: 0, hi: 0 }).without_spans()
+    );
+}
+
+#[test]
 fn test_expand_define_syntax_multiple_definitions() {
     let mut session = Session::new();
 
