@@ -143,7 +143,7 @@ mod tests {
             (SExpr::Var(
                 Resolved::Bound {
                     symbol: Symbol::new("quote"),
-                    binding: Symbol::new("gensym_1:quote"),
+                    binding: Symbol::new("quote:1"),
                 },
                 span,
             )),
@@ -151,7 +151,7 @@ mod tests {
                 SExpr::Var(
                     Resolved::Bound {
                         symbol: Symbol::new("quote"),
-                        binding: Symbol::new("gensym_1:quote"),
+                        binding: Symbol::new("quote:1"),
                     },
                     span,
                 ),

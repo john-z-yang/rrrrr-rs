@@ -55,7 +55,7 @@ impl Bindings {
 
     pub(crate) fn gen_sym(&mut self, hint: &Id) -> Symbol {
         self.gen_sym_counter += 1;
-        Symbol(format!("gensym_{}:{}", self.gen_sym_counter, hint))
+        Symbol(format!("{}:{}", hint, self.gen_sym_counter))
     }
 
     pub(crate) fn add_binding(&mut self, id: &Id, symbol: &Symbol) {
@@ -145,9 +145,9 @@ mod tests {
         let gen_sym_1 = bindings.gen_sym(&Id::new("foo", [1]));
         let gen_sym_2 = bindings.gen_sym(&Id::new("bar", [1]));
         let gen_sym_3 = bindings.gen_sym(&Id::new("foo", [1, 2]));
-        assert_eq!(gen_sym_1, Symbol::new("gensym_1:foo"));
-        assert_eq!(gen_sym_2, Symbol::new("gensym_2:bar"));
-        assert_eq!(gen_sym_3, Symbol::new("gensym_3:foo"));
+        assert_eq!(gen_sym_1, Symbol::new("foo:1"));
+        assert_eq!(gen_sym_2, Symbol::new("bar:2"));
+        assert_eq!(gen_sym_3, Symbol::new("foo:3"));
     }
 
     #[test]
