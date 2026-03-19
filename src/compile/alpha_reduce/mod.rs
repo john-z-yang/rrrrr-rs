@@ -33,7 +33,7 @@ pub(crate) fn alpha_reduce(sexpr: SExpr<Id>, bindings: &Bindings) -> SExpr<Resol
                         },
                         None => Resolved::Unbound { symbol: id.symbol },
                     }),
-                    alpha_reduce(sexpr.clone(), bindings)
+                    alpha_reduce(sexpr.clone(), bindings),
                 )
             }
         },

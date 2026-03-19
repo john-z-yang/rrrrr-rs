@@ -372,7 +372,7 @@ fn expand_define(
                 ),
                 bindings,
                 env,
-                ctx
+                ctx,
             )
         },
 

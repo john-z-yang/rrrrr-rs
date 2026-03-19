@@ -222,13 +222,13 @@ fn transform_to_letrec(
     let initializer_list = try_map(initializers, |initializer| {
         if_let_sexpr! {(var @ SExpr::Var(..), init) = initializer.clone() => {
             return Ok(template_sexpr!((
-                    var,
-                    expand_sexpr(
-                        init,
-                        bindings,
-                        env,
-                        ctx.with_syntax_ctx(SyntaxContext::Expression)
-                    )?,
+                var,
+                expand_sexpr(
+                    init,
+                    bindings,
+                    env,
+                    ctx.with_syntax_ctx(SyntaxContext::Expression),
+                )?,
             ) => initializer).unwrap());
         }};
         unreachable!("bad initializer")
@@ -246,7 +246,7 @@ fn transform_to_letrec(
     Ok(make_sexpr!((
         SExpr::Var(
             Id::new("letrec", [Bindings::CORE_SCOPE]),
-            initializer_list.get_span()
+            initializer_list.get_span(),
         ),
         initializer_list,
         ..body,
