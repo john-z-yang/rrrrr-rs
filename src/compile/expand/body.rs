@@ -1,10 +1,13 @@
 use super::{Context, Env, SyntaxContext, apply_transformer, expand_sexpr};
-use crate::compile::{
-    bindings::Bindings,
-    compilation_error::{CompilationError, Result},
-    sexpr::{Cons, Id, SExpr},
-    span::Span,
-    util::{append, is_proper_list, len, rest, split, try_first, try_map},
+use crate::{
+    compile::{
+        bindings::Bindings,
+        compilation_error::{CompilationError, Result},
+        sexpr::{Cons, Id, SExpr},
+        span::Span,
+        util::{append, is_proper_list, len, rest, split, try_first, try_map},
+    },
+    template_sexpr,
 };
 use crate::{if_let_sexpr, make_sexpr, match_sexpr};
 
@@ -42,7 +45,7 @@ pub(super) fn expand_body(
             )
         })
     } else {
-        lower_to_letrec(initializers, expressions, bindings, env, ctx)
+        transform_to_letrec(initializers, expressions, bindings, env, ctx)
     }
 }
 
@@ -209,7 +212,7 @@ fn extract_define(define: &SExpr<Id>) -> Result<((Id, Span), SExpr<Id>)> {
     }
 }
 
-fn lower_to_letrec(
+fn transform_to_letrec(
     initializers: SExpr<Id>,
     expressions: SExpr<Id>,
     bindings: &mut Bindings,
@@ -217,16 +220,17 @@ fn lower_to_letrec(
     ctx: Context,
 ) -> Result<SExpr<Id>> {
     let initializer_list = try_map(initializers, |initializer| {
-        if_let_sexpr! {(var @ SExpr::Var(..), init) = initializer => {
-            return Ok(make_sexpr!(
-                var,
-                expand_sexpr(
-                init,
-                bindings,
-                env,
-                ctx.with_syntax_ctx(SyntaxContext::Expression))?
-            ));
-        }}
+        if_let_sexpr! {(var @ SExpr::Var(..), init) = initializer.clone() => {
+            return Ok(template_sexpr!((
+                    var,
+                    expand_sexpr(
+                        init,
+                        bindings,
+                        env,
+                        ctx.with_syntax_ctx(SyntaxContext::Expression)
+                    )?,
+            ) => initializer).unwrap());
+        }};
         unreachable!("bad initializer")
     })?;
 
