@@ -268,11 +268,12 @@ fn expand_if(
         },
 
         (iif, check, consequent) => {
-            Ok(template_sexpr!((
+            Ok(make_sexpr!(
                 iif.clone(),
                 expand_sexpr(check.clone(), bindings, env, expr_ctx)?,
                 expand_sexpr(consequent.clone(), bindings, env, expr_ctx)?,
-            ) => &sexpr).unwrap())
+                SExpr::Void(sexpr.get_span()),
+            ))
         },
 
         _ => {

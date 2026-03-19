@@ -867,6 +867,36 @@ fn test_expand_failed_define_syntax_does_not_persist_transformer() {
 // --- Quasiquote unit tests ---
 
 #[test]
+fn test_expand_if_three_arms() {
+    let mut bindings = Bindings::new();
+    let mut env = Env::default();
+    let result = expand_source("(if #t 1 2)", &mut bindings, &mut env).unwrap();
+    let span = Span { lo: 0, hi: 0 };
+    let expected = make_sexpr!(
+        SExpr::Var(Id::new("if", [Bindings::CORE_SCOPE]), span),
+        SExpr::Bool(Bool(true), span),
+        SExpr::Num(Num(1.0), span),
+        SExpr::Num(Num(2.0), span),
+    );
+    assert_eq!(result.without_spans(), expected.without_spans());
+}
+
+#[test]
+fn test_expand_if_two_arms_normalizes_to_three() {
+    let mut bindings = Bindings::new();
+    let mut env = Env::default();
+    let result = expand_source("(if #t 1)", &mut bindings, &mut env).unwrap();
+    let span = Span { lo: 0, hi: 0 };
+    let expected = make_sexpr!(
+        SExpr::Var(Id::new("if", [Bindings::CORE_SCOPE]), span),
+        SExpr::Bool(Bool(true), span),
+        SExpr::Num(Num(1.0), span),
+        SExpr::Void(span),
+    );
+    assert_eq!(result.without_spans(), expected.without_spans());
+}
+
+#[test]
 fn test_expand_quasiquote_atom() {
     let mut bindings = Bindings::new();
     let mut env = Env::default();
