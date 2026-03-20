@@ -56,8 +56,6 @@ fn assert_generated_define_is_referenced(source: &str, expand_message: &str) {
     );
 }
 
-// --- Error-only tests ---
-
 #[test]
 fn test_expand_lambda_invalid_non_id_param() {
     assert!(expand_source("(lambda 42 x)").is_err());
@@ -336,8 +334,6 @@ fn test_expand_define_syntax_rejects_non_syntax_rules_transformer() {
             if reason == "Expected a 'syntax-rules' transformer"
     ));
 }
-
-// --- Success-only / simple output tests ---
 
 #[test]
 fn test_expand_lambda_allows_unbound_id_in_body() {
@@ -1458,7 +1454,7 @@ fn test_expand_letrec_bindings_are_visible_in_body() {
         result
     );
     let result = result.unwrap();
-    // Structure: (letrec ((x' 1)) x')
+
     let initializers = try_nth(&result, 1).unwrap();
     let first_init = first(&initializers);
     let bound_var = first(&first_init);
@@ -1613,8 +1609,6 @@ fn test_expand_letrec_used_by_named_let() {
         result
     );
 }
-
-// --- Nested body context tests ---
 
 #[test]
 fn test_expand_nested_lambda_with_inner_defines() {
