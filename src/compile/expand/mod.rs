@@ -345,17 +345,14 @@ fn expand_define(
     match_sexpr! {
         &sexpr;
 
-        (define, var @ SExpr::Var(id, _), exp) => {
+        (define, var @ SExpr::Var(..), exp) => {
             if matches!(ctx.syntax_ctx, SyntaxContext::Expression) {
                 return Err(CompilationError {
                     span: sexpr.get_span(),
                     reason: "'define' is not allowed in an expression context".to_owned(),
                 });
             }
-            if ctx.syntax_ctx == SyntaxContext::TopLevel {
-                let binding = bindings.gen_sym(id);
-                bindings.add_binding(id, &binding);
-            }
+            assert_eq!(ctx.syntax_ctx, SyntaxContext::TopLevel);
             let exp = expand_sexpr(exp.clone(), bindings, env, ctx.with_syntax_ctx(SyntaxContext::Expression))?;
             Ok(template_sexpr!((define.clone(), var.clone(), exp) => &sexpr).unwrap())
         },

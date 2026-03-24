@@ -510,48 +510,6 @@ fn test_let_syntax_body_expansion() {
     );
 }
 
-// --- Stateful session tests ---
-
-#[test]
-fn test_expand_top_level_begin_define_persists_binding_for_following_expand() {
-    let mut session = Session::new();
-
-    let tokens = session.tokenize("(begin (define x 1) x)").unwrap();
-    let parsed = session.parse(&tokens).unwrap();
-    let introduced = session.introduce(parsed);
-    let first_result = session.expand(introduced);
-    assert!(
-        first_result.is_ok(),
-        "Expected top-level begin with define to expand successfully"
-    );
-
-    let tokens = session.tokenize("x").unwrap();
-    let parsed = session.parse(&tokens).unwrap();
-    let introduced = session.introduce(parsed);
-    let second_result = session.expand(introduced);
-    assert!(
-        second_result.is_ok(),
-        "Expected identifier defined inside top-level begin to remain bound for later expansion"
-    );
-}
-
-#[test]
-fn test_expand_successful_expansion_persists_bindings() {
-    let mut session = Session::new();
-
-    let tokens = session.tokenize("(define x 1)").unwrap();
-    let parsed = session.parse(&tokens).unwrap();
-    let introduced = session.introduce(parsed);
-    let result = session.expand(introduced);
-    assert!(result.is_ok());
-
-    let tokens = session.tokenize("x").unwrap();
-    let parsed = session.parse(&tokens).unwrap();
-    let introduced = session.introduce(parsed);
-    let result = session.expand(introduced);
-    assert!(result.is_ok());
-}
-
 #[test]
 fn test_expand_define_syntax_basic() {
     let mut session = Session::new();
@@ -1297,39 +1255,40 @@ fn test_unquote_splicing_outside_quasiquote_is_error() {
     );
 }
 
-// --- Define function shorthand ---
-
 #[test]
 fn test_expand_define_function_shorthand() {
-    let mut session = Session::new();
-    session_expand(&mut session, "(define (foo x) x)").unwrap();
-    // Binding for foo should persist
-    assert!(session_expand(&mut session, "foo").is_ok());
+    assert_eq!(
+        session_expand(&mut Session::new(), "(define (foo x) x)")
+            .unwrap()
+            .without_spans(),
+        session_expand(&mut Session::new(), "(define foo (lambda (x) x))")
+            .unwrap()
+            .without_spans(),
+    );
 }
 
 #[test]
 fn test_expand_define_function_shorthand_dotted_pair() {
-    let mut session = Session::new();
-    session_expand(&mut session, "(define (foo . x) x)").unwrap();
-    assert!(session_expand(&mut session, "foo").is_ok());
+    assert_eq!(
+        session_expand(&mut Session::new(), "(define (foo . x) x)")
+            .unwrap()
+            .without_spans(),
+        session_expand(&mut Session::new(), "(define foo (lambda x x))")
+            .unwrap()
+            .without_spans(),
+    );
 }
 
 #[test]
 fn test_expand_define_function_shorthand_no_args() {
-    let mut session = Session::new();
-    session_expand(&mut session, "(define (foo) 1)").unwrap();
-    assert!(session_expand(&mut session, "foo").is_ok());
-}
-
-#[test]
-fn test_expand_define_function_shorthand_expands_to_lambda() {
-    let result = expand_source("(define (foo x) x)").unwrap();
-    // Expanded form: (define foo (lambda (x) x))
-    let lambda_expr = try_nth(&result, 2).unwrap();
-    let SExpr::Var(lambda_id, _) = first(&lambda_expr) else {
-        panic!("Expected lambda identifier in expanded form");
-    };
-    assert_eq!(lambda_id.symbol, Symbol::new("lambda"));
+    assert_eq!(
+        session_expand(&mut Session::new(), "(define (foo) 1)")
+            .unwrap()
+            .without_spans(),
+        session_expand(&mut Session::new(), "(define foo (lambda () 1))")
+            .unwrap()
+            .without_spans(),
+    );
 }
 
 #[test]

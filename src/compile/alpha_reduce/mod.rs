@@ -31,7 +31,7 @@ pub(crate) fn alpha_reduce(sexpr: SExpr<Id>, bindings: &Bindings) -> SExpr<Resol
                             symbol: id.symbol,
                             binding,
                         },
-                        None => Resolved::Unbound { symbol: id.symbol },
+                        None => Resolved::Free { symbol: id.symbol },
                     }),
                     alpha_reduce(sexpr.clone(), bindings),
                 )
@@ -48,7 +48,7 @@ pub(crate) fn alpha_reduce(sexpr: SExpr<Id>, bindings: &Bindings) -> SExpr<Resol
         _ => {
             sexpr.clone().map_var(&|id| match bindings.resolve_sym(&id) {
                 Some(binding) => Resolved::Bound { symbol: id.symbol, binding },
-                None => Resolved::Unbound { symbol: id.symbol }
+                None => Resolved::Free { symbol: id.symbol }
             })
         },
     }
@@ -156,7 +156,7 @@ mod tests {
                     span,
                 ),
                 SExpr::Var(
-                    Resolved::Unbound {
+                    Resolved::Free {
                         symbol: Symbol::new("x"),
                     },
                     span,

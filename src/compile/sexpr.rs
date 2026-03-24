@@ -228,7 +228,7 @@ impl<T: fmt::Debug> fmt::Debug for SExprWithoutSpans<'_, T> {
 #[derive(PartialEq, Clone, Eq, Hash, Debug)]
 pub enum Resolved {
     Bound { symbol: Symbol, binding: Symbol },
-    Unbound { symbol: Symbol },
+    Free { symbol: Symbol },
     Literal { symbol: Symbol },
 }
 
@@ -236,7 +236,7 @@ impl fmt::Display for Resolved {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
             Resolved::Bound { binding, .. } => write!(f, "{}", binding),
-            Resolved::Unbound { symbol } => write!(f, "{}", symbol),
+            Resolved::Free { symbol } => write!(f, "{}", symbol),
             Resolved::Literal { symbol } => write!(f, "{}", symbol),
         }
     }
