@@ -1,7 +1,7 @@
 use super::definition::{expand_define, expand_define_syntax, expand_set};
 use super::expression::{
-    expand_begin, expand_fn_application, expand_if, expand_lambda, expand_letrec,
-    expand_let_syntax, expand_letrec_syntax,
+    expand_begin, expand_fn_application, expand_if, expand_lambda, expand_let_syntax,
+    expand_letrec, expand_letrec_syntax,
 };
 use super::quote::{expand_quasiquote, expand_quote};
 use super::transformer::Transformer;

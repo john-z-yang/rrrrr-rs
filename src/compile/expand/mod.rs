@@ -10,8 +10,8 @@ mod tests;
 
 use std::{collections::HashMap, mem, rc::Rc};
 
-use self::transformer::Transformer;
 use self::dispatch::{apply_transformer, expand_sexpr};
+use self::transformer::Transformer;
 use super::{
     bindings::Bindings,
     compilation_error::Result,
@@ -102,4 +102,3 @@ enum SyntaxContext {
     Expression,
     Body,
 }
-
