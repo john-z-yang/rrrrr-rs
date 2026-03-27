@@ -10,7 +10,7 @@ fn test_parse_nil() {
     let src = "(    )";
     let list = SExpr::Nil(Span { lo: 0, hi: 6 });
 
-    assert!(parse(&tokenize(src).unwrap()).unwrap() == list);
+    assert!(parse(&tokenize(src).unwrap()).unwrap() == vec![list]);
 }
 
 #[test]
@@ -25,7 +25,7 @@ fn test_parse_list_of_symbol() {
         Span { lo: 0, hi: 5 },
     );
 
-    assert!(parse(&tokenize(src).unwrap()).unwrap() == list);
+    assert!(parse(&tokenize(src).unwrap()).unwrap() == vec![list]);
 }
 
 #[test]
@@ -46,7 +46,7 @@ fn test_parse_quote_datum() {
         Span { lo: 0, hi: 3 },
     );
 
-    assert!(parse(&tokenize(src).unwrap()).unwrap() == list);
+    assert!(parse(&tokenize(src).unwrap()).unwrap() == vec![list]);
 }
 
 #[test]
@@ -70,7 +70,7 @@ fn test_parse_unquote_splice_datum() {
         Span { lo: 0, hi: 4 },
     );
 
-    assert!(parse(&tokenize(src).unwrap()).unwrap() == list);
+    assert!(parse(&tokenize(src).unwrap()).unwrap() == vec![list]);
 }
 
 #[test]
@@ -111,7 +111,7 @@ fn test_parse_unquote_splice_unquote_splice_datum() {
         Span { lo: 0, hi: 6 },
     );
 
-    assert!(parse(&tokenize(src).unwrap()).unwrap() == list);
+    assert!(parse(&tokenize(src).unwrap()).unwrap() == vec![list]);
 }
 
 #[test]
@@ -149,7 +149,7 @@ fn test_parse_unquote_splice_quote_datum() {
         Span { lo: 0, hi: 5 },
     );
 
-    assert!(parse(&tokenize(src).unwrap()).unwrap() == list);
+    assert!(parse(&tokenize(src).unwrap()).unwrap() == vec![list]);
 }
 
 #[test]
@@ -187,7 +187,7 @@ fn test_parse_quote_unquote_splice_datum() {
         Span { lo: 0, hi: 5 },
     );
 
-    assert!(parse(&tokenize(src).unwrap()).unwrap() == list);
+    assert!(parse(&tokenize(src).unwrap()).unwrap() == vec![list]);
 }
 
 #[test]
@@ -201,7 +201,7 @@ fn test_parse_simple_list() {
         Span { lo: 0, hi: 7 },
     );
 
-    assert!(parse(&tokenize(src).unwrap()).unwrap() == list);
+    assert!(parse(&tokenize(src).unwrap()).unwrap() == vec![list]);
 }
 
 #[test]
@@ -234,7 +234,7 @@ fn test_parse_nested_list() {
         },
         Span { lo: 1, hi: 24 },
     );
-    assert!(parse(&tokenize(src).unwrap()).unwrap() == list);
+    assert!(parse(&tokenize(src).unwrap()).unwrap() == vec![list]);
 }
 
 #[test]
@@ -257,7 +257,7 @@ fn test_parse_nested_vector() {
 
     let list = SExpr::Vector(Vector(vec![inner_list]), Span { lo: 1, hi: 26 });
 
-    assert!(parse(&tokenize(src).unwrap()).unwrap() == list);
+    assert!(parse(&tokenize(src).unwrap()).unwrap() == vec![list]);
 }
 
 #[test]
@@ -304,7 +304,7 @@ fn test_parse_vector_in_list() {
         Span { lo: 1, hi: 46 },
     );
 
-    assert!(parse(&tokenize(src).unwrap()).unwrap() == list);
+    assert!(parse(&tokenize(src).unwrap()).unwrap() == vec![list]);
 }
 
 #[test]
@@ -324,7 +324,7 @@ fn test_parse_dotted_pair() {
         Span { lo: 1, hi: 36 },
     );
 
-    assert!(parse(&tokenize(src).unwrap()).unwrap() == pair);
+    assert!(parse(&tokenize(src).unwrap()).unwrap() == vec![pair]);
 }
 
 #[test]
@@ -353,7 +353,7 @@ fn test_parse_improper_list() {
         Span { lo: 1, hi: 46 },
     );
 
-    assert!(parse(&tokenize(src).unwrap()).unwrap() == list);
+    assert!(parse(&tokenize(src).unwrap()).unwrap() == vec![list]);
 }
 
 #[test]
@@ -383,7 +383,7 @@ fn test_parse_nested_dotted_pairs() {
         Span { lo: 9, hi: 37 },
     );
 
-    assert!(parse(&tokenize(src).unwrap()).unwrap() == outer_pair);
+    assert!(parse(&tokenize(src).unwrap()).unwrap() == vec![outer_pair]);
 }
 
 #[test]

@@ -1,4 +1,5 @@
 use rrrrr_rs::Session;
+use rrrrr_rs::compile::compilation_error::CompilationError;
 use rustyline::DefaultEditor;
 use rustyline::error::ReadlineError;
 
@@ -14,13 +15,21 @@ fn main() {
             Ok(line) => {
                 let _ = rl.add_history_entry(line.as_str());
                 if line.is_empty() {
-                    let expanded = session
+                    let res = session
                         .tokenize(&lines)
                         .and_then(|tokens| session.parse(&tokens))
-                        .and_then(|sexpr| session.expand(session.introduce(sexpr)))
-                        .map(|expanded| session.alpha_reduce(expanded));
-                    match expanded {
-                        Ok(expanded) => println!("{}", expanded),
+                        .and_then(|sexprs| {
+                            sexprs
+                                .into_iter()
+                                .map(|sexpr| {
+                                    session
+                                        .expand(session.introduce(sexpr))
+                                        .map(|expanded| session.alpha_reduce(expanded))
+                                })
+                                .collect::<Result<Vec<_>, CompilationError>>()
+                        });
+                    match res {
+                        Ok(res) => res.into_iter().for_each(|res| println!("{}", res)),
                         Err(err) => err.pprint_with_source(&lines),
                     };
                     lines.clear();

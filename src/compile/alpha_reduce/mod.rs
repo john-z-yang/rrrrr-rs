@@ -69,7 +69,7 @@ mod tests {
     fn alpha_reduce_source(source: &str) -> SExpr<Resolved> {
         let mut bindings = Bindings::new();
         let mut env = Env::default();
-        let sexpr = parse(&tokenize(source).unwrap()).unwrap();
+        let sexpr = parse(&tokenize(source).unwrap()).unwrap().pop().unwrap();
         let expanded = expand(introduce(sexpr), &mut bindings, &mut env).unwrap();
         alpha_reduce(expanded, &bindings)
     }

@@ -514,12 +514,12 @@ mod tests {
         }
     }
 
-    fn p(src: &str) -> SExpr<Id> {
-        introduce(parse(&tokenize(src).unwrap()).unwrap())
+    fn introduce_single_sexpr_src(src: &str) -> SExpr<Id> {
+        introduce(parse(&tokenize(src).unwrap()).unwrap().pop().unwrap())
     }
 
     fn one(src: &str) -> CapturedSExpr {
-        CapturedSExpr::One(p(src))
+        CapturedSExpr::One(introduce_single_sexpr_src(src))
     }
 
     fn many(vals: Vec<CapturedSExpr>) -> CapturedSExpr {
@@ -536,12 +536,12 @@ mod tests {
         literals: &[&str],
     ) -> Option<HashMap<Symbol, CapturedSExpr>> {
         let rule = SyntaxRule::new(
-            p(pattern),
+            introduce_single_sexpr_src(pattern),
             nil(),
             Rc::new(literals.iter().map(|s| Symbol::new(s)).collect()),
         )
         .expect("invalid pattern in test");
-        rule.match_pattern(&p(target), &Bindings::new())
+        rule.match_pattern(&introduce_single_sexpr_src(target), &Bindings::new())
     }
 
     fn assert_binding(
@@ -770,17 +770,21 @@ mod tests {
     // --- render tests ---
 
     fn assert_renders_to(pattern: &str, template: &str, target: &str, expected: &str) {
-        let rule = SyntaxRule::new(p(pattern), p(template), Rc::new(HashSet::new()))
-            .expect("invalid pattern in test");
+        let rule = SyntaxRule::new(
+            introduce_single_sexpr_src(pattern),
+            introduce_single_sexpr_src(template),
+            Rc::new(HashSet::new()),
+        )
+        .expect("invalid pattern in test");
         let captures = rule
-            .match_pattern(&p(target), &Bindings::new())
+            .match_pattern(&introduce_single_sexpr_src(target), &Bindings::new())
             .expect("pattern should match target");
         let result = rule
             .render_template(&captures)
             .expect("render should succeed");
         assert_eq!(
             result.without_spans(),
-            p(expected).without_spans(),
+            introduce_single_sexpr_src(expected).without_spans(),
             "render({template}, {captures:?}) = {result}, expected {expected}"
         );
     }
@@ -921,12 +925,16 @@ mod tests {
     }
 
     fn make_rule(pattern: &str) -> Result<SyntaxRule> {
-        SyntaxRule::new(p(pattern), nil(), Rc::new(HashSet::new()))
+        SyntaxRule::new(
+            introduce_single_sexpr_src(pattern),
+            nil(),
+            Rc::new(HashSet::new()),
+        )
     }
 
     fn make_rule_with_literals(pattern: &str, literals: &[&str]) -> Result<SyntaxRule> {
         SyntaxRule::new(
-            p(pattern),
+            introduce_single_sexpr_src(pattern),
             nil(),
             Rc::new(literals.iter().map(|s| Symbol::new(s)).collect()),
         )
@@ -1096,15 +1104,12 @@ mod tests {
     // --- Transformer tests ---
 
     fn make_transformer(src: &str) -> Transformer {
-        Transformer::new(&introduce(parse(&tokenize(src).unwrap()).unwrap())).unwrap()
+        Transformer::new(&introduce_single_sexpr_src(src)).unwrap()
     }
 
     fn transform(transformer: &Transformer, src: &str) -> SExpr<Id> {
         transformer
-            .transform(
-                &introduce(parse(&tokenize(src).unwrap()).unwrap()),
-                &Bindings::new(),
-            )
+            .transform(&introduce_single_sexpr_src(src), &Bindings::new())
             .unwrap()
             .unwrap()
     }
@@ -1118,7 +1123,7 @@ mod tests {
         let result = transform(&t, "(and)");
         assert_eq!(
             result.without_spans(),
-            introduce(parse(&tokenize("#f").unwrap()).unwrap()).without_spans()
+            introduce_single_sexpr_src("#f").without_spans()
         );
     }
 
@@ -1131,7 +1136,7 @@ mod tests {
         let result = transform(&t, "(mac x)");
         assert_eq!(
             result.without_spans(),
-            introduce(parse(&tokenize("x").unwrap()).unwrap()).without_spans()
+            introduce_single_sexpr_src("x").without_spans()
         );
     }
 
@@ -1143,15 +1148,15 @@ mod tests {
         );
         assert_eq!(
             transform(&t, "(and a b)").without_spans(),
-            introduce(parse(&tokenize("(if a (and b) #f)").unwrap()).unwrap()).without_spans()
+            introduce_single_sexpr_src("(if a (and b) #f)").without_spans()
         );
         assert_eq!(
             transform(&t, "(and a b c)").without_spans(),
-            introduce(parse(&tokenize("(if a (and b c) #f)").unwrap()).unwrap()).without_spans()
+            introduce_single_sexpr_src("(if a (and b c) #f)").without_spans()
         );
         assert_eq!(
             transform(&t, "(and a b c d)").without_spans(),
-            introduce(parse(&tokenize("(if a (and b c d) #f)").unwrap()).unwrap()).without_spans()
+            introduce_single_sexpr_src("(if a (and b c d) #f)").without_spans()
         );
     }
 
@@ -1165,19 +1170,19 @@ mod tests {
         );
         assert_eq!(
             transform(&t, "(and)").without_spans(),
-            introduce(parse(&tokenize("#f").unwrap()).unwrap()).without_spans()
+            introduce_single_sexpr_src("#f").without_spans()
         );
         assert_eq!(
             transform(&t, "(and x)").without_spans(),
-            introduce(parse(&tokenize("x").unwrap()).unwrap()).without_spans()
+            introduce_single_sexpr_src("x").without_spans()
         );
         assert_eq!(
             transform(&t, "(and a b)").without_spans(),
-            introduce(parse(&tokenize("(if a (and b) #f)").unwrap()).unwrap()).without_spans()
+            introduce_single_sexpr_src("(if a (and b) #f)").without_spans()
         );
         assert_eq!(
             transform(&t, "(and a b c d)").without_spans(),
-            introduce(parse(&tokenize("(if a (and b c d) #f)").unwrap()).unwrap()).without_spans()
+            introduce_single_sexpr_src("(if a (and b c d) #f)").without_spans()
         );
     }
 
@@ -1191,7 +1196,7 @@ mod tests {
         // Even though pattern says "foo", application uses "bar"
         assert_eq!(
             transform(&t, "(bar x)").without_spans(),
-            introduce(parse(&tokenize("x").unwrap()).unwrap()).without_spans()
+            introduce_single_sexpr_src("x").without_spans()
         );
     }
 
@@ -1203,11 +1208,8 @@ mod tests {
                ((_ x) x))",
         );
         assert!(
-            t.transform(
-                &introduce(parse(&tokenize("42").unwrap()).unwrap()),
-                &Bindings::new(),
-            )
-            .is_none()
+            t.transform(&introduce_single_sexpr_src("42"), &Bindings::new(),)
+                .is_none()
         );
     }
 
@@ -1220,7 +1222,7 @@ mod tests {
         );
         assert_eq!(
             transform(&t, "(mac)").without_spans(),
-            introduce(parse(&tokenize("(begin)").unwrap()).unwrap()).without_spans()
+            introduce_single_sexpr_src("(begin)").without_spans()
         );
     }
 
@@ -1232,11 +1234,11 @@ mod tests {
         );
         assert_eq!(
             transform(&t, "(mac 1 2 3)").without_spans(),
-            introduce(parse(&tokenize("#(1 2 3)").unwrap()).unwrap()).without_spans()
+            introduce_single_sexpr_src("#(1 2 3)").without_spans()
         );
         assert_eq!(
             transform(&t, "(mac)").without_spans(),
-            introduce(parse(&tokenize("#()").unwrap()).unwrap()).without_spans()
+            introduce_single_sexpr_src("#()").without_spans()
         );
     }
 
@@ -1248,11 +1250,11 @@ mod tests {
         );
         assert_eq!(
             transform(&t, "(mac #(1 2 3))").without_spans(),
-            introduce(parse(&tokenize("(1 2 3)").unwrap()).unwrap()).without_spans()
+            introduce_single_sexpr_src("(1 2 3)").without_spans()
         );
         assert!(
             t.transform(
-                &introduce(parse(&tokenize("(mac (1 2 3))").unwrap()).unwrap()),
+                &introduce_single_sexpr_src("(mac (1 2 3))"),
                 &Bindings::new(),
             )
             .is_none()
@@ -1266,11 +1268,8 @@ mod tests {
                ((_ a b) (b a)))",
         );
         assert!(
-            t.transform(
-                &introduce(parse(&tokenize("(mac x)").unwrap()).unwrap()),
-                &Bindings::new(),
-            )
-            .is_none()
+            t.transform(&introduce_single_sexpr_src("(mac x)"), &Bindings::new(),)
+                .is_none()
         );
     }
 
@@ -1283,7 +1282,7 @@ mod tests {
         );
         assert_eq!(
             transform(&t, "(mac a)").without_spans(),
-            introduce(parse(&tokenize("1").unwrap()).unwrap()).without_spans()
+            introduce_single_sexpr_src("1").without_spans()
         );
     }
 
@@ -1295,15 +1294,12 @@ mod tests {
         );
         assert_eq!(
             transform(&t, "(mac x => f)").without_spans(),
-            introduce(parse(&tokenize("(f x)").unwrap()).unwrap()).without_spans()
+            introduce_single_sexpr_src("(f x)").without_spans()
         );
         // Non-matching: `=>` in literal position doesn't match different identifier
         assert!(
-            t.transform(
-                &introduce(parse(&tokenize("(mac x y f)").unwrap()).unwrap()),
-                &Bindings::new(),
-            )
-            .is_none()
+            t.transform(&introduce_single_sexpr_src("(mac x y f)"), &Bindings::new(),)
+                .is_none()
         );
     }
 
@@ -1315,22 +1311,20 @@ mod tests {
         );
         assert_eq!(
             transform(&t, "(mac 3)").without_spans(),
-            introduce(parse(&tokenize("(1 2 . 3)").unwrap()).unwrap()).without_spans()
+            introduce_single_sexpr_src("(1 2 . 3)").without_spans()
         );
     }
 
     #[test]
     fn test_transformer_new_invalid_spec() {
-        let result = Transformer::new(&introduce(
-            parse(&tokenize("(syntax-rules)").unwrap()).unwrap(),
-        ));
+        let result = Transformer::new(&introduce_single_sexpr_src("(syntax-rules)"));
         assert!(result.is_err());
     }
 
     #[test]
     fn test_transformer_new_non_proper_list_of_rules() {
-        let result = Transformer::new(&introduce(
-            parse(&tokenize("(syntax-rules (a b c) ((_ x) x) . 3)").unwrap()).unwrap(),
+        let result = Transformer::new(&introduce_single_sexpr_src(
+            "(syntax-rules (a b c) ((_ x) x) . 3)",
         ));
         assert!(result.is_err());
         assert!(
@@ -1343,8 +1337,8 @@ mod tests {
 
     #[test]
     fn test_transformer_new_non_proper_list_of_literals() {
-        let result = Transformer::new(&introduce(
-            parse(&tokenize("(syntax-rules (a b . c) ((_ x) x))").unwrap()).unwrap(),
+        let result = Transformer::new(&introduce_single_sexpr_src(
+            "(syntax-rules (a b . c) ((_ x) x))",
         ));
         assert!(result.is_err());
         assert!(
@@ -1357,8 +1351,8 @@ mod tests {
 
     #[test]
     fn test_transformer_new_pattern_without_symbol_start() {
-        let result = Transformer::new(&introduce(
-            parse(&tokenize("(syntax-rules (a b c) ((1 x) x))").unwrap()).unwrap(),
+        let result = Transformer::new(&introduce_single_sexpr_src(
+            "(syntax-rules (a b c) ((1 x) x))",
         ));
         assert!(result.is_err());
         assert!(
@@ -1371,9 +1365,7 @@ mod tests {
 
     #[test]
     fn test_transformer_new_no_rules() {
-        let result = Transformer::new(&introduce(
-            parse(&tokenize("(syntax-rules (a b c) )").unwrap()).unwrap(),
-        ));
+        let result = Transformer::new(&introduce_single_sexpr_src("(syntax-rules (a b c) )"));
         assert!(result.is_err());
         assert!(
             result
@@ -1385,9 +1377,7 @@ mod tests {
 
     #[test]
     fn test_transformer_new_non_symbol_literal() {
-        let result = Transformer::new(&introduce(
-            parse(&tokenize("(syntax-rules (42) ((_ x) x))").unwrap()).unwrap(),
-        ));
+        let result = Transformer::new(&introduce_single_sexpr_src("(syntax-rules (42) ((_ x) x))"));
         assert!(result.is_err());
         assert!(
             result
@@ -1399,9 +1389,7 @@ mod tests {
 
     #[test]
     fn test_transformer_new_rejects_duplicate_pattern_var() {
-        let result = Transformer::new(&introduce(
-            parse(&tokenize("(syntax-rules () ((_ a a) a))").unwrap()).unwrap(),
-        ));
+        let result = Transformer::new(&introduce_single_sexpr_src("(syntax-rules () ((_ a a) a))"));
         assert!(result.is_err());
         assert!(
             result
@@ -1413,8 +1401,8 @@ mod tests {
 
     #[test]
     fn test_transformer_new_rejects_ellipsis_in_literals() {
-        let result = Transformer::new(&introduce(
-            parse(&tokenize("(syntax-rules (...) ((_ x) x))").unwrap()).unwrap(),
+        let result = Transformer::new(&introduce_single_sexpr_src(
+            "(syntax-rules (...) ((_ x) x))",
         ));
         assert!(result.is_err());
         assert!(
@@ -1427,9 +1415,7 @@ mod tests {
 
     #[test]
     fn test_transformer_new_rejects_underscore_in_literals() {
-        let result = Transformer::new(&introduce(
-            parse(&tokenize("(syntax-rules (_) ((_ x) x))").unwrap()).unwrap(),
-        ));
+        let result = Transformer::new(&introduce_single_sexpr_src("(syntax-rules (_) ((_ x) x))"));
         assert!(result.is_err());
         assert!(
             result
@@ -1442,8 +1428,8 @@ mod tests {
     // ... mixed with valid literals still rejected
     #[test]
     fn test_transformer_new_rejects_ellipsis_among_valid_literals() {
-        let result = Transformer::new(&introduce(
-            parse(&tokenize("(syntax-rules (=> ...) ((_ x) x))").unwrap()).unwrap(),
+        let result = Transformer::new(&introduce_single_sexpr_src(
+            "(syntax-rules (=> ...) ((_ x) x))",
         ));
         assert!(result.is_err());
         assert!(
@@ -1457,8 +1443,8 @@ mod tests {
     // _ mixed with valid literals still rejected
     #[test]
     fn test_transformer_new_rejects_underscore_among_valid_literals() {
-        let result = Transformer::new(&introduce(
-            parse(&tokenize("(syntax-rules (=> _) ((_ x) x))").unwrap()).unwrap(),
+        let result = Transformer::new(&introduce_single_sexpr_src(
+            "(syntax-rules (=> _) ((_ x) x))",
         ));
         assert!(result.is_err());
         assert!(
@@ -1471,8 +1457,8 @@ mod tests {
 
     #[test]
     fn test_transformer_new_rejects_ellipsis_not_at_end() {
-        let result = Transformer::new(&introduce(
-            parse(&tokenize("(syntax-rules () ((_ a ... b) a))").unwrap()).unwrap(),
+        let result = Transformer::new(&introduce_single_sexpr_src(
+            "(syntax-rules () ((_ a ... b) a))",
         ));
         assert!(result.is_err());
         assert!(

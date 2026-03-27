@@ -8,19 +8,22 @@ use crate::{
     make_sexpr, template_sexpr,
 };
 
-fn expand_source(source: &str, bindings: &mut Bindings, env: &mut Env) -> Result<SExpr<Id>> {
-    let expr = parse(&tokenize(source).unwrap()).unwrap();
-    expand(introduce(expr), bindings, env)
+fn expand_single_sexpr_src(src: &str, bindings: &mut Bindings, env: &mut Env) -> Result<SExpr<Id>> {
+    let sexpr = parse(&tokenize(src).unwrap()).unwrap().pop().unwrap();
+    expand(introduce(sexpr), bindings, env)
+}
+
+fn introduce_single_sexpr_src(src: &str) -> SExpr<Id> {
+    introduce(parse(&tokenize(src).unwrap()).unwrap().pop().unwrap())
 }
 
 use super::*;
 
 #[test]
 fn test_introduce() {
-    let list = parse(&tokenize("(cons 0 1)").unwrap()).unwrap();
     let span = Span { lo: 0, hi: 0 };
     assert_eq!(
-        introduce(list).without_spans(),
+        introduce_single_sexpr_src("(cons 0 1)").without_spans(),
         make_sexpr!(
             SExpr::Var(Id::new("cons", [Bindings::CORE_SCOPE]), span),
             SExpr::Num(Num(0.0), span),
@@ -34,8 +37,8 @@ fn test_introduce() {
 fn test_expand_lambda() {
     let mut bindings = Bindings::new();
     let mut env = Env::default();
-    let lambda_expr = parse(&tokenize("(lambda (x y) (cons x y))").unwrap()).unwrap();
-    let result = expand(introduce(lambda_expr), &mut bindings, &mut env).unwrap();
+    let result =
+        expand_single_sexpr_src("(lambda (x y) (cons x y))", &mut bindings, &mut env).unwrap();
     let span = Span { lo: 0, hi: 0 };
     let expected = make_sexpr!(
         SExpr::Var(Id::new("lambda", [Bindings::CORE_SCOPE]), span),
@@ -64,8 +67,7 @@ fn test_expand_maintains_span() {
             y
           )
         )";
-    let lambda_expr = parse(&tokenize(src).unwrap()).unwrap();
-    let result = expand(introduce(lambda_expr), &mut bindings, &mut env).unwrap();
+    let result = expand_single_sexpr_src(src, &mut bindings, &mut env).unwrap();
     let expected = template_sexpr!(
         (
             SExpr::Var(Id::new("lambda", [Bindings::CORE_SCOPE]), Span { lo: 10, hi: 16 }),
@@ -78,7 +80,7 @@ fn test_expand_maintains_span() {
                 SExpr::Var(Id::new("x", [Bindings::CORE_SCOPE, 1, 2]), Span { lo: 61, hi: 62 }),
                 SExpr::Var(Id::new("y", [Bindings::CORE_SCOPE, 1, 2]), Span { lo: 75, hi: 76 }),
             )
-        ) => &introduce(parse(&tokenize(src).unwrap()).unwrap())
+        ) => &introduce_single_sexpr_src(src)
     )
     .unwrap();
 
@@ -89,18 +91,16 @@ fn test_expand_maintains_span() {
 fn test_expand_lambda_recursive() {
     let mut bindings = Bindings::new();
     let mut env = Env::default();
-    let lambda_expr = parse(
-        &tokenize(
-            r#"
+    let result = expand_single_sexpr_src(
+        r#"
             (lambda (x)
               (lambda (y) (cons x y))
               (cons x x))
             "#,
-        )
-        .unwrap(),
+        &mut bindings,
+        &mut env,
     )
     .unwrap();
-    let result = expand(introduce(lambda_expr), &mut bindings, &mut env).unwrap();
     let span = Span { lo: 0, hi: 0 };
     let expected = make_sexpr!(
         SExpr::Var(Id::new("lambda", [Bindings::CORE_SCOPE]), span),
@@ -127,8 +127,8 @@ fn test_expand_lambda_recursive() {
 fn test_expand_lambda_dotted_params() {
     let mut bindings = Bindings::new();
     let mut env = Env::default();
-    let lambda_expr = parse(&tokenize("(lambda (x y . z) (cons x z))").unwrap()).unwrap();
-    let result = expand(introduce(lambda_expr), &mut bindings, &mut env).unwrap();
+    let result =
+        expand_single_sexpr_src("(lambda (x y . z) (cons x z))", &mut bindings, &mut env).unwrap();
     let span = Span { lo: 0, hi: 0 };
     let expected = make_sexpr!(
         SExpr::Var(Id::new("lambda", [Bindings::CORE_SCOPE]), span),
@@ -150,8 +150,7 @@ fn test_expand_lambda_dotted_params() {
 fn test_expand_lambda_symbol_param() {
     let mut bindings = Bindings::new();
     let mut env = Env::default();
-    let lambda_expr = parse(&tokenize("(lambda x (cons x x))").unwrap()).unwrap();
-    let result = expand(introduce(lambda_expr), &mut bindings, &mut env).unwrap();
+    let result = expand_single_sexpr_src("(lambda x (cons x x))", &mut bindings, &mut env).unwrap();
     let span = Span { lo: 0, hi: 0 };
     let expected = make_sexpr!(
         SExpr::Var(Id::new("lambda", [Bindings::CORE_SCOPE]), span),
@@ -169,18 +168,9 @@ fn test_expand_lambda_symbol_param() {
 fn test_expand_atoms() {
     let mut bindings = Bindings::new();
     let mut env = Env::default();
-    let sexpr = parse(
-        &tokenize(
-            r#"
-            (#f)
-            "#,
-        )
-        .unwrap(),
-    )
-    .unwrap();
     let span = Span { lo: 0, hi: 0 };
     assert_eq!(
-        expand(introduce(sexpr), &mut bindings, &mut env)
+        expand_single_sexpr_src("(#f)", &mut bindings, &mut env)
             .unwrap()
             .without_spans(),
         make_sexpr!(SExpr::Bool(Bool(false), span)).without_spans()
@@ -193,20 +183,14 @@ fn test_expand_and_macro_0_arg() {
 
     bindings.add_binding(&Id::new("and", [Bindings::CORE_SCOPE]), &Symbol::new("and"));
 
-    let transformer = Transformer::new(&introduce(
-        parse(
-            &tokenize(
-                r#"
+    let transformer = Transformer::new(&introduce_single_sexpr_src(
+        r#"
                     (syntax-rules ()
                       ((_) #f)
                       ((_ e) e)
                       ((_ e1 e2 ...)
                        (if e1 (and e2 ...) #f)))
                 "#,
-            )
-            .unwrap(),
-        )
-        .unwrap(),
     ))
     .unwrap();
 
@@ -217,9 +201,8 @@ fn test_expand_and_macro_0_arg() {
         transformer,
     )]);
 
-    let sexpr = parse(&tokenize("(and)").unwrap()).unwrap();
-    let result = expand(introduce(sexpr), &mut bindings, &mut env).unwrap();
-    let expected = introduce(parse(&tokenize("#f").unwrap()).unwrap());
+    let result = expand_single_sexpr_src("(and)", &mut bindings, &mut env).unwrap();
+    let expected = introduce_single_sexpr_src("#f");
     assert_eq!(result.without_spans(), expected.without_spans());
 }
 
@@ -229,20 +212,14 @@ fn test_expand_and_macro_1_arg() {
 
     bindings.add_binding(&Id::new("and", [Bindings::CORE_SCOPE]), &Symbol::new("and"));
 
-    let transformer = Transformer::new(&introduce(
-        parse(
-            &tokenize(
-                r#"
+    let transformer = Transformer::new(&introduce_single_sexpr_src(
+        r#"
                     (syntax-rules ()
                       ((_) #f)
                       ((_ e) e)
                       ((_ e1 e2 ...)
                        (if e1 (and e2 ...) #f)))
                 "#,
-            )
-            .unwrap(),
-        )
-        .unwrap(),
     ))
     .unwrap();
 
@@ -253,9 +230,8 @@ fn test_expand_and_macro_1_arg() {
         transformer,
     )]);
 
-    let sexpr = introduce(parse(&tokenize("(and list)").unwrap()).unwrap());
-    let result = expand(sexpr, &mut bindings, &mut env).unwrap();
-    let expected = introduce(parse(&tokenize("list").unwrap()).unwrap());
+    let result = expand_single_sexpr_src("(and list)", &mut bindings, &mut env).unwrap();
+    let expected = introduce_single_sexpr_src("list");
     assert_eq!(result.without_spans(), expected.without_spans());
 }
 
@@ -265,20 +241,14 @@ fn test_expand_and_macro_2_args() {
 
     bindings.add_binding(&Id::new("and", [Bindings::CORE_SCOPE]), &Symbol::new("and"));
 
-    let transformer = Transformer::new(&introduce(
-        parse(
-            &tokenize(
-                r#"
+    let transformer = Transformer::new(&introduce_single_sexpr_src(
+        r#"
                 (syntax-rules ()
                   ((_) #f)
                   ((_ e) e)
                   ((_ e1 e2 ...)
                    (if e1 (and e2 ...) #f)))
             "#,
-            )
-            .unwrap(),
-        )
-        .unwrap(),
     ))
     .unwrap();
 
@@ -289,8 +259,7 @@ fn test_expand_and_macro_2_args() {
         transformer,
     )]);
 
-    let sexpr = parse(&tokenize("(and list list)").unwrap()).unwrap();
-    let result = expand(introduce(sexpr), &mut bindings, &mut env).unwrap();
+    let result = expand_single_sexpr_src("(and list list)", &mut bindings, &mut env).unwrap();
     let span = Span { lo: 0, hi: 0 };
     let expected = make_sexpr!(
         SExpr::Var(Id::new("if", [Bindings::CORE_SCOPE, 1]), span),
@@ -307,20 +276,14 @@ fn test_expand_and_macro_4_args() {
 
     bindings.add_binding(&Id::new("and", [Bindings::CORE_SCOPE]), &Symbol::new("and"));
 
-    let transformer = Transformer::new(&introduce(
-        parse(
-            &tokenize(
-                r#"
+    let transformer = Transformer::new(&introduce_single_sexpr_src(
+        r#"
                 (syntax-rules ()
                   ((_) #f)
                   ((_ e) e)
                   ((_ e1 e2 ...)
                    (if e1 (and e2 ...) #f)))
             "#,
-            )
-            .unwrap(),
-        )
-        .unwrap(),
     ))
     .unwrap();
 
@@ -331,13 +294,12 @@ fn test_expand_and_macro_4_args() {
         transformer,
     )]);
 
-    let sexpr = parse(&tokenize("(and #t #t #t #t)").unwrap()).unwrap();
     // (and t t t t)
     // (if t (and t t t) f)
     // (if t (if t (and t t) f) f)
     // (if t (if t (if t (and t) f) f) f)
     // (if t (if t (if t t f) f) f) f)
-    let result = expand(introduce(sexpr), &mut bindings, &mut env).unwrap();
+    let result = expand_single_sexpr_src("(and #t #t #t #t)", &mut bindings, &mut env).unwrap();
     let span = Span { lo: 0, hi: 0 };
     let expected = make_sexpr!(
         SExpr::Var(Id::new("if", [Bindings::CORE_SCOPE, 1]), span),
@@ -374,17 +336,11 @@ fn test_expand_simple_macro_hygiene() {
         &Symbol::new("my-macro"),
     );
 
-    let transformer = Transformer::new(&introduce(
-        parse(
-            &tokenize(
-                r#"
+    let transformer = Transformer::new(&introduce_single_sexpr_src(
+        r#"
                 (syntax-rules ()
                   ((_ body) (lambda (x) body)))
             "#,
-            )
-            .unwrap(),
-        )
-        .unwrap(),
     ))
     .unwrap();
 
@@ -395,8 +351,7 @@ fn test_expand_simple_macro_hygiene() {
         transformer,
     )]);
 
-    let sexpr = parse(&tokenize("(my-macro x)").unwrap()).unwrap();
-    let result = expand(introduce(sexpr), &mut bindings, &mut env).unwrap();
+    let result = expand_single_sexpr_src("(my-macro x)", &mut bindings, &mut env).unwrap();
     let span = Span { lo: 0, hi: 0 };
     let expected = make_sexpr!(
         SExpr::Var(Id::new("lambda", [Bindings::CORE_SCOPE, 1]), span),
@@ -431,20 +386,14 @@ fn test_expand_or_macro_hygiene() {
         &Symbol::new("my-or"),
     );
 
-    let transformer = Transformer::new(&introduce(
-        parse(
-            &tokenize(
-                r#"
+    let transformer = Transformer::new(&introduce_single_sexpr_src(
+        r#"
                 (syntax-rules ()
                   ((_) #f)
                   ((_ e) e)
                   ((_ e1 e2 ...)
                    ((lambda (temp) (if temp temp (my-or e2 ...))) e1)))
             "#,
-            )
-            .unwrap(),
-        )
-        .unwrap(),
     ))
     .unwrap();
 
@@ -455,8 +404,12 @@ fn test_expand_or_macro_hygiene() {
         transformer,
     )]);
 
-    let sexpr = parse(&tokenize("((lambda (temp) (my-or #f temp)) #t)").unwrap()).unwrap();
-    let result = expand(introduce(sexpr), &mut bindings, &mut env).unwrap();
+    let result = expand_single_sexpr_src(
+        "((lambda (temp) (my-or #f temp)) #t)",
+        &mut bindings,
+        &mut env,
+    )
+    .unwrap();
     let outer_lambda = first(&result);
     let inner_application = try_nth(&outer_lambda, 2).unwrap();
     let inner_lambda = first(&inner_application);
@@ -529,9 +482,8 @@ fn test_expand_or_macro_hygiene() {
 fn test_expand_let_syntax_via_or_macro() {
     let mut bindings = Bindings::new();
     let mut env = Env::default();
-    let let_syntax_expr = parse(
-        &tokenize(
-            r#"
+    let result = expand_single_sexpr_src(
+        r#"
             (letrec-syntax
               ((or (syntax-rules ()
                         ((_) #f)
@@ -544,11 +496,10 @@ fn test_expand_let_syntax_via_or_macro() {
                           e1)))))
                ((lambda (temp) (or #f temp)) #t))
             "#,
-        )
-        .unwrap(),
+        &mut bindings,
+        &mut env,
     )
     .unwrap();
-    let result = expand(introduce(let_syntax_expr), &mut bindings, &mut env).unwrap();
     let outer_lambda = first(&result);
     let inner_application = try_nth(&outer_lambda, 2).unwrap();
     let inner_lambda = first(&inner_application);
@@ -621,20 +572,18 @@ fn test_expand_let_syntax_via_or_macro() {
 fn test_expand_let_syntax_has_body_ctx() {
     let mut bindings = Bindings::new();
     let mut env = Env::default();
-    let let_syntax_expr = parse(
-        &tokenize(
-            r#"
+    expand_single_sexpr_src(
+        r#"
             (letrec-syntax
                 ((one (syntax-rules ()
                         ((_) 1))))
             (define x 1)
             x)
             "#,
-        )
-        .unwrap(),
+        &mut bindings,
+        &mut env,
     )
     .unwrap();
-    expand(introduce(let_syntax_expr), &mut bindings, &mut env).unwrap();
     assert!(
         bindings
             .resolve(&Id::new("x", [Bindings::CORE_SCOPE]))
@@ -646,9 +595,8 @@ fn test_expand_let_syntax_has_body_ctx() {
 fn test_expand_let_syntax_multiple_body_exprs_recursive_defn() {
     let mut bindings = Bindings::new();
     let mut env = Env::default();
-    let let_syntax_expr = parse(
-        &tokenize(
-            r#"
+    let result = expand_single_sexpr_src(
+        r#"
             (letrec-syntax
                 ((one (syntax-rules ()
                         ((_) 1)))
@@ -658,11 +606,10 @@ fn test_expand_let_syntax_multiple_body_exprs_recursive_defn() {
             (define y (lambda () x))
             x)
             "#,
-        )
-        .unwrap(),
+        &mut bindings,
+        &mut env,
     )
     .unwrap();
-    let result = expand(introduce(let_syntax_expr), &mut bindings, &mut env).unwrap();
     let span = Span { lo: 0, hi: 0 };
     let expected = make_sexpr!(
         SExpr::Var(Id::new("letrec", [Bindings::CORE_SCOPE]), span),
@@ -693,9 +640,8 @@ fn test_expand_let_syntax_multiple_body_exprs_recursive_defn() {
 fn test_expand_let_syntax_multiple_body_exprs_() {
     let mut bindings = Bindings::new();
     let mut env = Env::default();
-    let let_syntax_expr = parse(
-        &tokenize(
-            r#"
+    let result = expand_single_sexpr_src(
+        r#"
             (letrec-syntax
                 ((one (syntax-rules ()
                         ((_) 1)))
@@ -704,11 +650,10 @@ fn test_expand_let_syntax_multiple_body_exprs_() {
             (one)
             (two))
             "#,
-        )
-        .unwrap(),
+        &mut bindings,
+        &mut env,
     )
     .unwrap();
-    let result = expand(introduce(let_syntax_expr), &mut bindings, &mut env).unwrap();
     let span = Span { lo: 0, hi: 0 };
     let expected = make_sexpr!(
         SExpr::Var(Id::new("begin", [Bindings::CORE_SCOPE]), span),
@@ -722,19 +667,16 @@ fn test_expand_let_syntax_multiple_body_exprs_() {
 fn test_expand_letrec_syntax_cleans_env_after_success() {
     let mut bindings = Bindings::new();
     let mut env = Env::default();
-    let expr = parse(
-        &tokenize(
-            r#"
+    let result = expand_single_sexpr_src(
+        r#"
             (letrec-syntax
               ((one (syntax-rules ()
                        ((_) 1))))
               (one))
             "#,
-        )
-        .unwrap(),
-    )
-    .unwrap();
-    let result = expand(introduce(expr), &mut bindings, &mut env);
+        &mut bindings,
+        &mut env,
+    );
     assert!(
         result.is_ok(),
         "Expected letrec-syntax expression to expand"
@@ -749,20 +691,17 @@ fn test_expand_letrec_syntax_cleans_env_after_success() {
 fn test_expand_letrec_syntax_cleans_env_on_transformer_spec_error() {
     let mut bindings = Bindings::new();
     let mut env = Env::default();
-    let expr = parse(
-        &tokenize(
-            r#"
+    let result = expand_single_sexpr_src(
+        r#"
             (letrec-syntax
               ((one (syntax-rules ()
                        ((_) 1)))
                (bad 42))
               (one))
             "#,
-        )
-        .unwrap(),
-    )
-    .unwrap();
-    let result = expand(introduce(expr), &mut bindings, &mut env);
+        &mut bindings,
+        &mut env,
+    );
     assert!(
         result.is_err(),
         "Expected invalid letrec-syntax transformer spec to fail"
@@ -777,19 +716,16 @@ fn test_expand_letrec_syntax_cleans_env_on_transformer_spec_error() {
 fn test_let_syntax_cleans_env_after_success() {
     let mut bindings = Bindings::new();
     let mut env = Env::default();
-    let expr = parse(
-        &tokenize(
-            r#"
+    let result = expand_single_sexpr_src(
+        r#"
             (let-syntax
               ((one (syntax-rules ()
                        ((_) 1))))
               (one))
             "#,
-        )
-        .unwrap(),
-    )
-    .unwrap();
-    let result = expand(introduce(expr), &mut bindings, &mut env);
+        &mut bindings,
+        &mut env,
+    );
     assert!(result.is_ok(), "Expected let-syntax expression to expand");
     assert!(
         env.is_empty(),
@@ -801,20 +737,17 @@ fn test_let_syntax_cleans_env_after_success() {
 fn test_let_syntax_cleans_env_on_transformer_spec_error() {
     let mut bindings = Bindings::new();
     let mut env = Env::default();
-    let expr = parse(
-        &tokenize(
-            r#"
+    let result = expand_single_sexpr_src(
+        r#"
             (let-syntax
               ((one (syntax-rules ()
                        ((_) 1)))
                (bad 42))
               (one))
             "#,
-        )
-        .unwrap(),
-    )
-    .unwrap();
-    let result = expand(introduce(expr), &mut bindings, &mut env);
+        &mut bindings,
+        &mut env,
+    );
     assert!(
         result.is_err(),
         "Expected invalid let-syntax transformer spec to fail"
@@ -830,7 +763,7 @@ fn test_expand_failed_expansion_does_not_affect_bindings_or_env() {
     let mut bindings = Bindings::new();
     let mut env = Env::default();
 
-    let result = expand_source("(begin (define x 1) ())", &mut bindings, &mut env);
+    let result = expand_single_sexpr_src("(begin (define x 1) ())", &mut bindings, &mut env);
 
     assert!(result.is_err());
     assert_eq!(
@@ -844,7 +777,7 @@ fn test_expand_failed_define_syntax_does_not_persist_transformer() {
     let mut bindings = Bindings::new();
     let mut env = Env::default();
 
-    let result = expand_source(
+    let result = expand_single_sexpr_src(
         "(begin (define-syntax my-id (syntax-rules () ((_ x) x))) (my-id ()))",
         &mut bindings,
         &mut env,
@@ -862,7 +795,7 @@ fn test_expand_failed_define_syntax_does_not_persist_transformer() {
 fn test_expand_if_three_arms() {
     let mut bindings = Bindings::new();
     let mut env = Env::default();
-    let result = expand_source("(if #t 1 2)", &mut bindings, &mut env).unwrap();
+    let result = expand_single_sexpr_src("(if #t 1 2)", &mut bindings, &mut env).unwrap();
     let span = Span { lo: 0, hi: 0 };
     let expected = make_sexpr!(
         SExpr::Var(Id::new("if", [Bindings::CORE_SCOPE]), span),
@@ -877,7 +810,7 @@ fn test_expand_if_three_arms() {
 fn test_expand_if_two_arms_normalizes_to_three() {
     let mut bindings = Bindings::new();
     let mut env = Env::default();
-    let result = expand_source("(if #t 1)", &mut bindings, &mut env).unwrap();
+    let result = expand_single_sexpr_src("(if #t 1)", &mut bindings, &mut env).unwrap();
     let span = Span { lo: 0, hi: 0 };
     let expected = make_sexpr!(
         SExpr::Var(Id::new("if", [Bindings::CORE_SCOPE]), span),
@@ -892,7 +825,7 @@ fn test_expand_if_two_arms_normalizes_to_three() {
 fn test_expand_quasiquote_atom() {
     let mut bindings = Bindings::new();
     let mut env = Env::default();
-    let result = expand_source("`42", &mut bindings, &mut env).unwrap();
+    let result = expand_single_sexpr_src("`42", &mut bindings, &mut env).unwrap();
     let span = Span { lo: 0, hi: 0 };
     let expected = make_sexpr!(
         SExpr::Var(Id::new("quote", [Bindings::CORE_SCOPE]), span),
@@ -905,7 +838,7 @@ fn test_expand_quasiquote_atom() {
 fn test_expand_quasiquote_empty_list() {
     let mut bindings = Bindings::new();
     let mut env = Env::default();
-    let result = expand_source("`()", &mut bindings, &mut env).unwrap();
+    let result = expand_single_sexpr_src("`()", &mut bindings, &mut env).unwrap();
     let span = Span { lo: 0, hi: 0 };
     let expected = make_sexpr!(
         SExpr::Var(Id::new("quote", [Bindings::CORE_SCOPE]), span),
@@ -918,7 +851,7 @@ fn test_expand_quasiquote_empty_list() {
 fn test_expand_quasiquote_constant_list() {
     let mut bindings = Bindings::new();
     let mut env = Env::default();
-    let result = expand_source("`(1 2)", &mut bindings, &mut env).unwrap();
+    let result = expand_single_sexpr_src("`(1 2)", &mut bindings, &mut env).unwrap();
     let span = Span { lo: 0, hi: 0 };
     let expected = make_sexpr!(
         SExpr::Var(Id::new("append", [Bindings::CORE_SCOPE]), span),
@@ -947,7 +880,7 @@ fn test_expand_quasiquote_with_unquote() {
     let mut env = Env::default();
 
     // Expands into (lambda (x) (append (quote (1)) (append (list x) (quote ()))))
-    let result = expand_source("(lambda (x) `(1 ,x))", &mut bindings, &mut env).unwrap();
+    let result = expand_single_sexpr_src("(lambda (x) `(1 ,x))", &mut bindings, &mut env).unwrap();
 
     let body = try_nth(&result, 2).unwrap();
     let head: Id = first(&body).try_into().unwrap();
@@ -978,7 +911,8 @@ fn test_expand_quasiquote_with_unquote_splicing() {
     let mut env = Env::default();
 
     // Expands into (lambda (xs) (append (quote (1)) (append (append xs) (quote ()))))
-    let result = expand_source("(lambda (xs) `(1 ,@xs))", &mut bindings, &mut env).unwrap();
+    let result =
+        expand_single_sexpr_src("(lambda (xs) `(1 ,@xs))", &mut bindings, &mut env).unwrap();
 
     let body = try_nth(&result, 2).unwrap();
     let inner_append = try_nth(&body, 2).unwrap();
@@ -998,7 +932,7 @@ fn test_expand_quasiquote_unquote_resolves_to_lambda_param() {
     let mut env = Env::default();
 
     // Expands into (lambda (x) (append (list x) (quote ())))
-    let result = expand_source("(lambda (x) `(,x))", &mut bindings, &mut env).unwrap();
+    let result = expand_single_sexpr_src("(lambda (x) `(,x))", &mut bindings, &mut env).unwrap();
 
     let param = first(&try_nth(&result, 1).unwrap());
     let param_id: Id = param.try_into().unwrap();
@@ -1019,7 +953,7 @@ fn test_expand_quasiquote_nested_preserves_inner() {
     let mut bindings = Bindings::new();
     let mut env = Env::default();
 
-    let result = expand_source("`(1 `(2 3))", &mut bindings, &mut env).unwrap();
+    let result = expand_single_sexpr_src("`(1 `(2 3))", &mut bindings, &mut env).unwrap();
     let output = format!("{result}");
     assert!(
         output.contains("(quote quasiquote)"),
@@ -1031,7 +965,7 @@ fn test_expand_quasiquote_nested_preserves_inner() {
 fn test_expand_unquote_outside_quasiquote_errors() {
     let mut bindings = Bindings::new();
     let mut env = Env::default();
-    let result = expand_source(",x", &mut bindings, &mut env);
+    let result = expand_single_sexpr_src(",x", &mut bindings, &mut env);
     assert!(result.is_err());
 }
 
@@ -1039,6 +973,6 @@ fn test_expand_unquote_outside_quasiquote_errors() {
 fn test_expand_unquote_splicing_outside_quasiquote_errors() {
     let mut bindings = Bindings::new();
     let mut env = Env::default();
-    let result = expand_source(",@x", &mut bindings, &mut env);
+    let result = expand_single_sexpr_src(",@x", &mut bindings, &mut env);
     assert!(result.is_err());
 }

@@ -7,7 +7,7 @@ use crate::compile::{
     span::Span,
 };
 
-pub fn parse(tokens: &[Token]) -> Result<SExpr<Symbol>> {
+pub fn parse(tokens: &[Token]) -> Result<Vec<SExpr<Symbol>>> {
     Parser::new(tokens)?.parse()
 }
 
@@ -36,13 +36,19 @@ impl Parser<'_> {
         }
     }
 
-    fn parse(&mut self) -> Result<SExpr<Symbol>> {
-        let res = self.parse_datum()?;
-        match self.look_ahead() {
-            Some(Token::EoF(_)) => Ok(res),
-            Some(token) => Err(self.emit_err("Expected end of input", token)),
-            None => unreachable!("parse expected token stream to end with the EoF token"),
+    fn parse(&mut self) -> Result<Vec<SExpr<Symbol>>> {
+        let mut res = vec![];
+        while let Some(token) = self.look_ahead() {
+            match token {
+                Token::EoF(_) => {
+                    return Ok(res);
+                }
+                _ => {
+                    res.push(self.parse_datum()?);
+                }
+            }
         }
+        unreachable!("parse expected token stream to end with the EoF token")
     }
 
     fn parse_datum(&mut self) -> Result<SExpr<Symbol>> {

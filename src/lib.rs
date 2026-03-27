@@ -38,7 +38,12 @@ impl Session {
     fn load_prelude(&mut self) {
         self.tokenize(DERIVED_FORMS)
             .and_then(|tokens| self.parse(&tokens))
-            .and_then(|sexpr| self.expand(self.introduce(sexpr)))
+            .and_then(|sexprs| {
+                sexprs
+                    .into_iter()
+                    .map(|sexpr| self.expand(self.introduce(sexpr)))
+                    .collect::<Result<Vec<_>>>()
+            })
             .expect("Unable to load prelude");
     }
 
@@ -46,7 +51,7 @@ impl Session {
         compile::read::lex::tokenize(source)
     }
 
-    pub fn parse(&self, tokens: &[Token]) -> Result<SExpr<Symbol>> {
+    pub fn parse(&self, tokens: &[Token]) -> Result<Vec<SExpr<Symbol>>> {
         compile::read::parse::parse(tokens)
     }
 

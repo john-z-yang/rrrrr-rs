@@ -11,7 +11,7 @@ use rrrrr_rs::{
 fn expand_source(source: &str) -> Result<SExpr<Id>> {
     let mut session = Session::new();
     let tokens = session.tokenize(source)?;
-    let parsed = session.parse(&tokens)?;
+    let parsed = session.parse(&tokens)?.pop().unwrap();
     let introduced = session.introduce(parsed);
     session.expand(introduced)
 }
@@ -20,7 +20,7 @@ fn expand_with_session(source: &str) -> (Session, Result<SExpr<Id>>) {
     let mut session = Session::new();
     let result = (|| {
         let tokens = session.tokenize(source)?;
-        let parsed = session.parse(&tokens)?;
+        let parsed = session.parse(&tokens)?.pop().unwrap();
         let introduced = session.introduce(parsed);
         session.expand(introduced)
     })();
@@ -29,7 +29,7 @@ fn expand_with_session(source: &str) -> (Session, Result<SExpr<Id>>) {
 
 fn session_expand(session: &mut Session, source: &str) -> Result<SExpr<Id>> {
     let tokens = session.tokenize(source)?;
-    let parsed = session.parse(&tokens)?;
+    let parsed = session.parse(&tokens)?.pop().unwrap();
     let introduced = session.introduce(parsed);
     session.expand(introduced)
 }
@@ -514,28 +514,21 @@ fn test_let_syntax_body_expansion() {
 fn test_expand_define_syntax_basic() {
     let mut session = Session::new();
 
-    let tokens = session
-        .tokenize(
-            r#"
+    let result = session_expand(
+        &mut session,
+        r#"
             (define-syntax one
               (syntax-rules ()
                 ((_) 1)))
             "#,
-        )
-        .unwrap();
-    let parsed = session.parse(&tokens).unwrap();
-    let introduced = session.introduce(parsed);
-    let result = session.expand(introduced);
+    );
     assert!(
         result.is_ok(),
         "Expected define-syntax to expand, got: {:?}",
         result
     );
 
-    let tokens = session.tokenize("(one)").unwrap();
-    let parsed = session.parse(&tokens).unwrap();
-    let introduced = session.introduce(parsed);
-    let result = session.expand(introduced).unwrap();
+    let result = session_expand(&mut session, "(one)").unwrap();
     assert_eq!(
         result.without_spans(),
         SExpr::Num(Num(1.0), result.get_span()).without_spans()
@@ -566,36 +559,27 @@ fn test_expand_define_syntax_returns_void() {
 fn test_expand_define_syntax_multiple_definitions() {
     let mut session = Session::new();
 
-    let tokens = session
-        .tokenize(
-            r#"
+    session_expand(
+        &mut session,
+        r#"
             (define-syntax one
               (syntax-rules ()
                 ((_) 1)))
             "#,
-        )
-        .unwrap();
-    let parsed = session.parse(&tokens).unwrap();
-    let introduced = session.introduce(parsed);
-    session.expand(introduced).unwrap();
+    )
+    .unwrap();
 
-    let tokens = session
-        .tokenize(
-            r#"
+    session_expand(
+        &mut session,
+        r#"
             (define-syntax two
               (syntax-rules ()
                 ((_) 2)))
             "#,
-        )
-        .unwrap();
-    let parsed = session.parse(&tokens).unwrap();
-    let introduced = session.introduce(parsed);
-    session.expand(introduced).unwrap();
+    )
+    .unwrap();
 
-    let tokens = session.tokenize("(list (one) (two))").unwrap();
-    let parsed = session.parse(&tokens).unwrap();
-    let introduced = session.introduce(parsed);
-    let result = session.expand(introduced).unwrap();
+    let result = session_expand(&mut session, "(list (one) (two))").unwrap();
 
     let span = Span { lo: 0, hi: 0 };
     let args = rest(&result);

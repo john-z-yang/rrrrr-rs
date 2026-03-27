@@ -1,6 +1,7 @@
+mod common;
+
 use rrrrr_rs::{
     compile::{
-        read::{lex::tokenize, parse::parse},
         sexpr::{Cons, Id, Num, SExpr, Vector},
         span::Span,
     },
@@ -116,7 +117,7 @@ fn test_add_scope_nested_vector() {
 
 #[test]
 fn test_vector_to_cons_list() {
-    let SExpr::Vector(vector, span) = parse(&tokenize("#(1 2 3)").unwrap()).unwrap() else {
+    let SExpr::Vector(vector, span) = common::parse_single_source("#(1 2 3)").unwrap() else {
         unreachable!("Expected a vector")
     };
 
