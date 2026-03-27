@@ -41,7 +41,7 @@ pub(super) fn expand_define(
     match_sexpr! {
         &sexpr;
 
-        (define, var @ SExpr::Var(..), exp) => {
+        (define, var @ SExpr::Var(id, _), exp) => {
             if matches!(ctx.syntax_ctx, SyntaxContext::Expression) {
                 return Err(CompilationError {
                     span: sexpr.get_span(),
@@ -49,6 +49,8 @@ pub(super) fn expand_define(
                 });
             }
             assert_eq!(ctx.syntax_ctx, SyntaxContext::TopLevel);
+            let binding = bindings.gen_sym(id);
+            bindings.add_binding(id, &binding);
             let exp = expand_sexpr(exp.clone(), bindings, env, ctx.with_syntax_ctx(SyntaxContext::Expression))?;
             Ok(template_sexpr!((define.clone(), var.clone(), exp) => &sexpr).unwrap())
         },

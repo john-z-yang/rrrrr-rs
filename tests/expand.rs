@@ -511,6 +511,46 @@ fn test_let_syntax_body_expansion() {
 }
 
 #[test]
+fn test_expand_top_level_begin_define_persists_binding_for_following_expand() {
+    let mut session = Session::new();
+
+    let tokens = session.tokenize("(begin (define x 1) x)").unwrap();
+    let parsed = session.parse(&tokens).unwrap();
+    let introduced = session.introduce(parsed.into_iter().next().unwrap());
+    let first_result = session.expand(introduced);
+    assert!(
+        first_result.is_ok(),
+        "Expected top-level begin with define to expand successfully"
+    );
+
+    let tokens = session.tokenize("x").unwrap();
+    let parsed = session.parse(&tokens).unwrap();
+    let introduced = session.introduce(parsed.into_iter().next().unwrap());
+    let second_result = session.expand(introduced);
+    assert!(
+        second_result.is_ok(),
+        "Expected identifier defined inside top-level begin to remain bound for later expansion"
+    );
+}
+
+#[test]
+fn test_expand_successful_expansion_persists_bindings() {
+    let mut session = Session::new();
+
+    let tokens = session.tokenize("(define x 1)").unwrap();
+    let parsed = session.parse(&tokens).unwrap();
+    let introduced = session.introduce(parsed.into_iter().next().unwrap());
+    let result = session.expand(introduced);
+    assert!(result.is_ok());
+
+    let tokens = session.tokenize("x").unwrap();
+    let parsed = session.parse(&tokens).unwrap();
+    let introduced = session.introduce(parsed.into_iter().next().unwrap());
+    let result = session.expand(introduced);
+    assert!(result.is_ok());
+}
+
+#[test]
 fn test_expand_define_syntax_basic() {
     let mut session = Session::new();
 
