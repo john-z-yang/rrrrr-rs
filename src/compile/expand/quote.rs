@@ -7,6 +7,17 @@ use crate::compile::{
 };
 use crate::{if_let_sexpr, make_sexpr, match_sexpr};
 
+pub(super) fn expand_quote(sexpr: SExpr<Id>) -> Result<SExpr<Id>> {
+    let span = sexpr.get_span();
+    if_let_sexpr! {(_, _) = &sexpr => {
+        return Ok(sexpr);
+    }}
+    Err(CompilationError {
+        span,
+        reason: "Invalid 'quote' form: expected a single argument".to_owned(),
+    })
+}
+
 pub(super) fn expand_quasiquote(
     sexpr: SExpr<Id>,
     bindings: &mut Bindings,
@@ -14,12 +25,12 @@ pub(super) fn expand_quasiquote(
     ctx: Context,
 ) -> Result<SExpr<Id>> {
     let span = sexpr.get_span();
-    if_let_sexpr! {(_, args) = sexpr => {
-        return expand_sexpr(expand_quasiquote_args(args, bindings, 0)?, bindings, env, ctx);
+    if_let_sexpr! {(_, arg) = sexpr => {
+        return expand_sexpr(expand_quasiquote_args(arg, bindings, 0)?, bindings, env, ctx);
     }};
     Err(CompilationError {
         span,
-        reason: "Invalid 'quasiquote': expected a single argument".to_owned(),
+        reason: "Invalid 'quasiquote' form: expected a single argument".to_owned(),
     })
 }
 

@@ -1,6 +1,6 @@
 mod body;
 mod letrec;
-mod quasiquote;
+mod quote;
 mod syntax_binding;
 mod transformer;
 
@@ -25,7 +25,7 @@ use crate::{
         expand::{
             body::expand_body,
             letrec::expand_letrec,
-            quasiquote::expand_quasiquote,
+            quote::{expand_quasiquote, expand_quote},
             syntax_binding::{expand_let_syntax, expand_letrec_syntax},
         },
         util::{first, is_proper_list, len, rest, try_dotted_tail, try_for_each},
@@ -191,8 +191,8 @@ fn expand_id_application(
     env: &mut Env,
     mut ctx: Context,
 ) -> Result<SExpr<Id>> {
-    let (id, binding) = match try_first(&sexpr) {
-        Some(SExpr::Var(id, _)) => match bindings.resolve_sym(&id) {
+    let (id, binding) = match first(&sexpr) {
+        SExpr::Var(id, _) => match bindings.resolve_sym(&id) {
             Some(binding) => (id, binding),
             None => {
                 return expand_fn_application(sexpr, bindings, env, ctx);
@@ -202,7 +202,7 @@ fn expand_id_application(
     };
 
     match binding.0.as_str() {
-        "quote" => Ok(sexpr),
+        "quote" => expand_quote(sexpr),
         "quasiquote" => expand_quasiquote(sexpr, bindings, env, ctx),
         "unquote" | "unquote-splicing" => Err(CompilationError {
             span: sexpr.get_span(),
@@ -238,6 +238,14 @@ fn expand_fn_application(
     env: &mut Env,
     ctx: Context,
 ) -> Result<SExpr<Id>> {
+    if let Some(tail) = try_dotted_tail(&sexpr)
+        && !matches!(tail, SExpr::Nil(_))
+    {
+        return Err(CompilationError {
+            span: tail.get_span(),
+            reason: "Invalid application form: not a proper list".to_owned(),
+        });
+    }
     try_map(sexpr, |sub_sexpr| {
         expand_sexpr(
             sub_sexpr,
@@ -258,19 +266,19 @@ fn expand_if(
     match_sexpr! {
         &sexpr;
 
-        (iif, check, consequent, alternate) => {
+        (iif, test, consequent, alternate) => {
             Ok(template_sexpr!((
                 iif.clone(),
-                expand_sexpr(check.clone(), bindings, env, expr_ctx)?,
+                expand_sexpr(test.clone(), bindings, env, expr_ctx)?,
                 expand_sexpr(consequent.clone(), bindings, env, expr_ctx)?,
                 expand_sexpr(alternate.clone(), bindings, env, expr_ctx)?,
             ) => &sexpr).unwrap())
         },
 
-        (iif, check, consequent) => {
+        (iif, test, consequent) => {
             Ok(make_sexpr!(
                 iif.clone(),
-                expand_sexpr(check.clone(), bindings, env, expr_ctx)?,
+                expand_sexpr(test.clone(), bindings, env, expr_ctx)?,
                 expand_sexpr(consequent.clone(), bindings, env, expr_ctx)?,
                 SExpr::Void(sexpr.get_span()),
             ))
@@ -322,11 +330,11 @@ fn expand_set(
     if_let_sexpr! {(set, var @ SExpr::Var(id, _), exp) = &sexpr =>
         if let Some(resolved) = bindings.resolve_sym(id)
             && (Bindings::CORE_FORMS.contains(&resolved.0.as_str()) || Bindings::CORE_PRIMITIVES.contains(&resolved.0.as_str())) {
-                return Err(CompilationError {
-                    span: sexpr.get_span(),
-                    reason: format!("Cannot mutate core forms/primatives '{}'", id),
-                })
-            }
+            return Err(CompilationError {
+                span: sexpr.get_span(),
+                reason: format!("Cannot mutate core forms/primatives '{}'", id),
+            })
+        }
         let exp = expand_sexpr(exp.clone(), bindings, env, ctx.with_syntax_ctx(SyntaxContext::Expression))?;
         return Ok(template_sexpr!((set.clone(), var.clone(), exp) => &sexpr).unwrap());
     }
