@@ -63,8 +63,8 @@ impl Session {
         compile::expand::expand(form, &mut self.bindings, &mut self.expander_env)
     }
 
-    pub fn alpha_reduce(&self, form: SExpr<Id>) -> SExpr<Resolved> {
-        compile::alpha_reduce::alpha_reduce(form, &self.bindings)
+    pub fn alpha_reduce(&mut self, form: SExpr<Id>) -> SExpr<Resolved> {
+        compile::alpha_reduce::alpha_reduce(form, &mut self.bindings)
     }
 
     pub fn resolve_sym(&self, id: &Id) -> Option<Symbol> {
