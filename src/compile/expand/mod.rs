@@ -8,7 +8,10 @@ mod transformer;
 #[cfg(test)]
 mod tests;
 
+use std::collections::BTreeSet;
 use std::{collections::HashMap, mem, rc::Rc};
+
+use crate::compile::bindings::ScopeId;
 
 use self::dispatch::{apply_transformer, expand_sexpr};
 use self::transformer::Transformer;
@@ -52,9 +55,16 @@ impl<const N: usize> From<[(Symbol, Transformer); N]> for Env {
 const MAX_MACRO_DEPTH: u16 = 1024;
 
 pub fn introduce(sexpr: SExpr<Symbol>) -> SExpr<Id> {
+    introduce_scopes(sexpr, [Bindings::CORE_SCOPE, Bindings::TOP_LEVEL_SCOPE])
+}
+
+pub(crate) fn introduce_scopes<const N: usize>(
+    sexpr: SExpr<Symbol>,
+    scopes: [ScopeId; N],
+) -> SExpr<Id> {
     sexpr.map_var(&|symbol| Id {
         symbol,
-        scopes: std::collections::BTreeSet::from([Bindings::CORE_SCOPE]),
+        scopes: BTreeSet::from(scopes),
     })
 }
 

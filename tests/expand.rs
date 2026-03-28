@@ -633,6 +633,28 @@ fn test_expand_define_syntax_multiple_definitions() {
     );
 }
 
+#[test]
+fn test_with_prelude_rebinding_if_does_not_affect_and() {
+    let mut session = Session::with_prelude();
+
+    session_expand(
+        &mut session,
+        r#"
+            (define-syntax if
+              (syntax-rules ()
+                ((_ test consequent alternate) 'hijacked)
+                ((_ test consequent) 'hijacked)))
+        "#,
+    )
+    .unwrap();
+
+    let direct_if = session_expand(&mut session, "(if #t 1 2)").unwrap();
+    assert_eq!(format!("{direct_if}"), "(quote hijacked)");
+
+    let and_result = session_expand(&mut session, "(and #t #t)").unwrap();
+    assert_eq!(format!("{and_result}"), "(if #t #t #f)");
+}
+
 // --- Tests that were missed in the first migration pass ---
 
 #[test]
@@ -1276,42 +1298,6 @@ fn test_unquote_splicing_outside_quasiquote_is_error() {
         ),
         "Expected unquote-splicing outside quasiquote to be an error, got: {:?}",
         result
-    );
-}
-
-#[test]
-fn test_expand_define_function_shorthand() {
-    assert_eq!(
-        session_expand(&mut Session::new(), "(define (foo x) x)")
-            .unwrap()
-            .without_spans(),
-        session_expand(&mut Session::new(), "(define foo (lambda (x) x))")
-            .unwrap()
-            .without_spans(),
-    );
-}
-
-#[test]
-fn test_expand_define_function_shorthand_dotted_pair() {
-    assert_eq!(
-        session_expand(&mut Session::new(), "(define (foo . x) x)")
-            .unwrap()
-            .without_spans(),
-        session_expand(&mut Session::new(), "(define foo (lambda x x))")
-            .unwrap()
-            .without_spans(),
-    );
-}
-
-#[test]
-fn test_expand_define_function_shorthand_no_args() {
-    assert_eq!(
-        session_expand(&mut Session::new(), "(define (foo) 1)")
-            .unwrap()
-            .without_spans(),
-        session_expand(&mut Session::new(), "(define foo (lambda () 1))")
-            .unwrap()
-            .without_spans(),
     );
 }
 

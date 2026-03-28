@@ -9,7 +9,10 @@ use compile::{
     sexpr::{Id, SExpr, Symbol},
 };
 
-use crate::{compile::sexpr::Resolved, prelude::DERIVED_FORMS};
+use crate::{
+    compile::{expand::introduce_scopes, sexpr::Resolved},
+    prelude::DERIVED_FORMS,
+};
 
 #[derive(Debug, Clone)]
 pub struct Session {
@@ -41,7 +44,7 @@ impl Session {
             .and_then(|sexprs| {
                 sexprs
                     .into_iter()
-                    .map(|sexpr| self.expand(self.introduce(sexpr)))
+                    .map(|sexpr| self.expand(introduce_scopes(sexpr, [Bindings::CORE_SCOPE])))
                     .collect::<Result<Vec<_>>>()
             })
             .expect("Unable to load prelude");

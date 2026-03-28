@@ -99,6 +99,7 @@ mod tests {
         compile::{
             expand::{Env, expand, introduce},
             read::{lex::tokenize, parse::parse},
+            sexpr::Num,
             span::Span,
         },
         make_sexpr,
@@ -395,6 +396,67 @@ mod tests {
                         symbol: Symbol::new("x"),
                     },
                     span,
+                ),
+            ),
+        );
+
+        assert_eq!(result.without_spans(), expected.without_spans());
+    }
+
+    #[test]
+    fn test_alpha_reduce_inserted_vars_are_not_rebound() {
+        let result = alpha_reduce_source("(begin (define lambda 1) (define (x) 1))");
+        let span = Span { lo: 0, hi: 0 };
+        let expected = make_sexpr!(
+            SExpr::Var(
+                Resolved::Bound {
+                    symbol: Symbol::new("begin"),
+                    binding: Symbol::new("begin"),
+                },
+                span,
+            ),
+            (
+                SExpr::Var(
+                    Resolved::Bound {
+                        symbol: Symbol::new("define"),
+                        binding: Symbol::new("define"),
+                    },
+                    span,
+                ),
+                SExpr::Var(
+                    Resolved::Bound {
+                        symbol: Symbol::new("lambda"),
+                        binding: Symbol::new("lambda:1"),
+                    },
+                    span,
+                ),
+                SExpr::Num(Num(1.0), span),
+            ),
+            (
+                SExpr::Var(
+                    Resolved::Bound {
+                        symbol: Symbol::new("define"),
+                        binding: Symbol::new("define"),
+                    },
+                    span,
+                ),
+                SExpr::Var(
+                    Resolved::Bound {
+                        symbol: Symbol::new("x"),
+                        binding: Symbol::new("x:2"),
+                    },
+                    span,
+                ),
+                (
+                    SExpr::Var(
+                        Resolved::Bound {
+                            symbol: Symbol::new("lambda"),
+                            binding: Symbol::new("lambda"),
+                        },
+                        span,
+                    ),
+                    SExpr::Nil(span),
+                    SExpr::Num(Num(1.0), span),
                 ),
             ),
         );

@@ -13,6 +13,7 @@ pub(crate) struct Bindings {
 
 impl Bindings {
     pub(crate) const CORE_SCOPE: ScopeId = 0;
+    pub(crate) const TOP_LEVEL_SCOPE: ScopeId = 1;
 
     pub(crate) const CORE_FORMS: &[&str] = &[
         "let-syntax",
@@ -36,7 +37,7 @@ impl Bindings {
     pub(crate) fn new() -> Self {
         let mut bindings = Bindings {
             symbols: HashMap::new(),
-            scope_counter: Self::CORE_SCOPE,
+            scope_counter: Self::TOP_LEVEL_SCOPE,
             gen_sym_counter: 0,
         };
         for symbol in Self::CORE_FORMS {
