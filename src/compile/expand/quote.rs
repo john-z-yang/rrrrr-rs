@@ -157,7 +157,7 @@ fn expand_quasiquote_args(
                         expand_quasiquote_args(cdr.clone(), bindings, depth - 1)?,
                     ))
                 } else if binding.symbol.0 == "unquote" && matches!(try_rest(cdr), Some(SExpr::Nil(..))) {
-                    Ok(first(cdr))
+                    Ok(first(cdr).clone())
                 } else {
                     Err(CompilationError {
                         span: car.get_span().combine(cdr.get_span()),

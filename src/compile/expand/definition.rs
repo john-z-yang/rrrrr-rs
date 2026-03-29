@@ -94,7 +94,7 @@ pub(super) fn expand_define_syntax(
         }
         if !matches!(
             try_first(transformer_spec),
-            Some(SExpr::Var(id, _)) if bindings.resolve_sym(&id) == Some(Symbol::new("syntax-rules"))
+            Some(SExpr::Var(id, _)) if bindings.resolve_sym(id) == Some(Symbol::new("syntax-rules"))
         ) {
             return Err(CompilationError {
                 span: transformer_spec.get_span(),

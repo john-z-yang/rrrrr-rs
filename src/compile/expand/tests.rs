@@ -548,7 +548,7 @@ fn test_expand_and_macro_4_args() {
     assert_eq!(result.without_spans(), expected.without_spans());
     assert_eq!(
         bindings
-            .resolve_sym(&(first(&result).try_into().unwrap()))
+            .resolve_sym(&(first(&result).clone().try_into().unwrap()))
             .unwrap(),
         Symbol::new("if")
     );
@@ -601,10 +601,15 @@ fn test_expand_simple_macro_hygiene() {
     assert_eq!(result.without_spans(), expected.without_spans());
     assert_ne!(
         bindings
-            .resolve_sym(&first(&try_nth(&result, 1).unwrap()).try_into().unwrap())
+            .resolve_sym(
+                &first(try_nth(&result, 1).unwrap())
+                    .clone()
+                    .try_into()
+                    .unwrap()
+            )
             .unwrap(),
         bindings
-            .resolve_sym(&try_last(&result).unwrap().try_into().unwrap())
+            .resolve_sym(&try_last(&result).unwrap().clone().try_into().unwrap())
             .unwrap(),
     );
     assert_eq!(
@@ -612,7 +617,7 @@ fn test_expand_simple_macro_hygiene() {
             .resolve_sym(&Id::new("x", [Bindings::CORE_SCOPE]))
             .unwrap(),
         bindings
-            .resolve_sym(&try_last(&result).unwrap().try_into().unwrap())
+            .resolve_sym(&try_last(&result).unwrap().clone().try_into().unwrap())
             .unwrap(),
     )
 }
@@ -651,26 +656,26 @@ fn test_expand_or_macro_hygiene() {
     )
     .unwrap();
     let outer_lambda = first(&result);
-    let inner_application = try_nth(&outer_lambda, 2).unwrap();
-    let inner_lambda = first(&inner_application);
-    let if_expr = try_nth(&inner_lambda, 2).unwrap();
+    let inner_application = try_nth(outer_lambda, 2).unwrap();
+    let inner_lambda = first(inner_application);
+    let if_expr = try_nth(inner_lambda, 2).unwrap();
 
     assert_eq!(
-        bindings.resolve_sym(&first(&outer_lambda).clone().try_into().unwrap()),
+        bindings.resolve_sym(&first(outer_lambda).clone().try_into().unwrap()),
         Some(Symbol::new("lambda"))
     );
     assert_eq!(
-        bindings.resolve_sym(&first(&inner_lambda).clone().try_into().unwrap()),
+        bindings.resolve_sym(&first(inner_lambda).clone().try_into().unwrap()),
         Some(Symbol::new("lambda"))
     );
     assert_eq!(
-        bindings.resolve_sym(&first(&if_expr).clone().try_into().unwrap()),
+        bindings.resolve_sym(&first(if_expr).clone().try_into().unwrap()),
         Some(Symbol::new("if"))
     );
 
-    let outer_temp_id = first(&try_nth(&first(&result), 1).unwrap());
-    let inner_temp_id = first(&try_nth(&first(&try_nth(&first(&result), 2).unwrap()), 1).unwrap());
-    let if_expr = try_nth(&first(&try_nth(&first(&result), 2).unwrap()), 2).unwrap();
+    let outer_temp_id = first(try_nth(first(&result), 1).unwrap());
+    let inner_temp_id = first(try_nth(first(try_nth(first(&result), 2).unwrap()), 1).unwrap());
+    let if_expr = try_nth(first(try_nth(first(&result), 2).unwrap()), 2).unwrap();
 
     assert_ne!(
         bindings
@@ -683,19 +688,19 @@ fn test_expand_or_macro_hygiene() {
 
     assert_eq!(
         bindings
-            .resolve_sym(&(try_nth(&if_expr, 1).unwrap()).try_into().unwrap())
+            .resolve_sym(&(try_nth(if_expr, 1).unwrap()).clone().try_into().unwrap())
             .unwrap(),
         bindings
-            .resolve_sym(&(try_nth(&if_expr, 2).unwrap()).try_into().unwrap())
+            .resolve_sym(&(try_nth(if_expr, 2).unwrap()).clone().try_into().unwrap())
             .unwrap(),
     );
 
     assert_ne!(
         bindings
-            .resolve_sym(&(try_nth(&if_expr, 1).unwrap()).try_into().unwrap())
+            .resolve_sym(&(try_nth(if_expr, 1).unwrap()).clone().try_into().unwrap())
             .unwrap(),
         bindings
-            .resolve_sym(&(try_nth(&if_expr, 3).unwrap()).try_into().unwrap())
+            .resolve_sym(&(try_nth(if_expr, 3).unwrap()).clone().try_into().unwrap())
             .unwrap(),
     );
 
@@ -704,7 +709,7 @@ fn test_expand_or_macro_hygiene() {
             .resolve_sym(&inner_temp_id.clone().try_into().unwrap())
             .unwrap(),
         bindings
-            .resolve_sym(&(try_nth(&if_expr, 2).unwrap()).try_into().unwrap())
+            .resolve_sym(&(try_nth(if_expr, 2).unwrap()).clone().try_into().unwrap())
             .unwrap(),
     );
 
@@ -713,7 +718,7 @@ fn test_expand_or_macro_hygiene() {
             .resolve_sym(&outer_temp_id.clone().try_into().unwrap())
             .unwrap(),
         bindings
-            .resolve_sym(&(try_nth(&if_expr, 3).unwrap()).try_into().unwrap())
+            .resolve_sym(&(try_nth(if_expr, 3).unwrap()).clone().try_into().unwrap())
             .unwrap(),
     );
 }
@@ -741,26 +746,26 @@ fn test_expand_let_syntax_via_or_macro() {
     )
     .unwrap();
     let outer_lambda = first(&result);
-    let inner_application = try_nth(&outer_lambda, 2).unwrap();
-    let inner_lambda = first(&inner_application);
-    let if_expr = try_nth(&inner_lambda, 2).unwrap();
+    let inner_application = try_nth(outer_lambda, 2).unwrap();
+    let inner_lambda = first(inner_application);
+    let if_expr = try_nth(inner_lambda, 2).unwrap();
 
     assert_eq!(
-        bindings.resolve_sym(&first(&outer_lambda).clone().try_into().unwrap()),
+        bindings.resolve_sym(&first(outer_lambda).clone().try_into().unwrap()),
         Some(Symbol::new("lambda"))
     );
     assert_eq!(
-        bindings.resolve_sym(&first(&inner_lambda).clone().try_into().unwrap()),
+        bindings.resolve_sym(&first(inner_lambda).clone().try_into().unwrap()),
         Some(Symbol::new("lambda"))
     );
     assert_eq!(
-        bindings.resolve_sym(&first(&if_expr).clone().try_into().unwrap()),
+        bindings.resolve_sym(&first(if_expr).clone().try_into().unwrap()),
         Some(Symbol::new("if"))
     );
 
-    let outer_temp_id = first(&try_nth(&first(&result), 1).unwrap());
-    let inner_temp_id = first(&try_nth(&first(&try_nth(&first(&result), 2).unwrap()), 1).unwrap());
-    let if_expr = try_nth(&first(&try_nth(&first(&result), 2).unwrap()), 2).unwrap();
+    let outer_temp_id = first(try_nth(first(&result), 1).unwrap());
+    let inner_temp_id = first(try_nth(first(try_nth(first(&result), 2).unwrap()), 1).unwrap());
+    let if_expr = try_nth(first(try_nth(first(&result), 2).unwrap()), 2).unwrap();
 
     assert_ne!(
         bindings
@@ -773,19 +778,19 @@ fn test_expand_let_syntax_via_or_macro() {
 
     assert_eq!(
         bindings
-            .resolve_sym(&(try_nth(&if_expr, 1).unwrap()).try_into().unwrap())
+            .resolve_sym(&(try_nth(if_expr, 1).unwrap()).clone().try_into().unwrap())
             .unwrap(),
         bindings
-            .resolve_sym(&(try_nth(&if_expr, 2).unwrap()).try_into().unwrap())
+            .resolve_sym(&(try_nth(if_expr, 2).unwrap()).clone().try_into().unwrap())
             .unwrap(),
     );
 
     assert_ne!(
         bindings
-            .resolve_sym(&(try_nth(&if_expr, 1).unwrap()).try_into().unwrap())
+            .resolve_sym(&(try_nth(if_expr, 1).unwrap()).clone().try_into().unwrap())
             .unwrap(),
         bindings
-            .resolve_sym(&(try_nth(&if_expr, 3).unwrap()).try_into().unwrap())
+            .resolve_sym(&(try_nth(if_expr, 3).unwrap()).clone().try_into().unwrap())
             .unwrap(),
     );
 
@@ -794,7 +799,7 @@ fn test_expand_let_syntax_via_or_macro() {
             .resolve_sym(&inner_temp_id.clone().try_into().unwrap())
             .unwrap(),
         bindings
-            .resolve_sym(&(try_nth(&if_expr, 2).unwrap()).try_into().unwrap())
+            .resolve_sym(&(try_nth(if_expr, 2).unwrap()).clone().try_into().unwrap())
             .unwrap(),
     );
 
@@ -803,7 +808,7 @@ fn test_expand_let_syntax_via_or_macro() {
             .resolve_sym(&outer_temp_id.clone().try_into().unwrap())
             .unwrap(),
         bindings
-            .resolve_sym(&(try_nth(&if_expr, 3).unwrap()).try_into().unwrap())
+            .resolve_sym(&(try_nth(if_expr, 3).unwrap()).clone().try_into().unwrap())
             .unwrap(),
     );
 }
@@ -1162,21 +1167,21 @@ fn test_expand_quasiquote_with_unquote() {
     let result = expand_single_sexpr_src("(lambda (x) `(1 ,x))", &mut bindings, &mut env).unwrap();
 
     let body = try_nth(&result, 2).unwrap();
-    let head: Id = first(&body).try_into().unwrap();
+    let head: Id = first(body).clone().try_into().unwrap();
     assert_eq!(
         bindings.resolve_sym(&head),
         Some(Symbol::new("append")),
         "Body head should resolve to 'append'"
     );
-    let quote_1 = try_nth(&body, 1).unwrap();
-    let quote_head: Id = first(&quote_1).try_into().unwrap();
+    let quote_1 = try_nth(body, 1).unwrap();
+    let quote_head: Id = first(quote_1).clone().try_into().unwrap();
     assert_eq!(
         bindings.resolve_sym(&quote_head),
         Some(Symbol::new("quote")),
     );
-    let inner_append = try_nth(&body, 2).unwrap();
-    let list_call = try_nth(&inner_append, 1).unwrap();
-    let list_head: Id = first(&list_call).try_into().unwrap();
+    let inner_append = try_nth(body, 2).unwrap();
+    let list_call = try_nth(inner_append, 1).unwrap();
+    let list_head: Id = first(list_call).clone().try_into().unwrap();
     assert_eq!(
         bindings.resolve_sym(&list_head),
         Some(Symbol::new("list")),
@@ -1194,10 +1199,10 @@ fn test_expand_quasiquote_with_unquote_splicing() {
         expand_single_sexpr_src("(lambda (xs) `(1 ,@xs))", &mut bindings, &mut env).unwrap();
 
     let body = try_nth(&result, 2).unwrap();
-    let inner_append = try_nth(&body, 2).unwrap();
+    let inner_append = try_nth(body, 2).unwrap();
 
-    let splice_call = try_nth(&inner_append, 1).unwrap();
-    let splice_head: Id = first(&splice_call).try_into().unwrap();
+    let splice_call = try_nth(inner_append, 1).unwrap();
+    let splice_head: Id = first(splice_call).clone().try_into().unwrap();
     assert_eq!(
         bindings.resolve_sym(&splice_head),
         Some(Symbol::new("append")),
@@ -1213,13 +1218,13 @@ fn test_expand_quasiquote_unquote_resolves_to_lambda_param() {
     // Expands into (lambda (x) (append (list x) (quote ())))
     let result = expand_single_sexpr_src("(lambda (x) `(,x))", &mut bindings, &mut env).unwrap();
 
-    let param = first(&try_nth(&result, 1).unwrap());
-    let param_id: Id = param.try_into().unwrap();
+    let param = first(try_nth(&result, 1).unwrap());
+    let param_id: Id = param.clone().try_into().unwrap();
     let param_sym = bindings.resolve_sym(&param_id).unwrap();
 
     let body = try_nth(&result, 2).unwrap();
-    let list_call = try_nth(&body, 1).unwrap();
-    let x_ref: Id = try_nth(&list_call, 1).unwrap().try_into().unwrap();
+    let list_call = try_nth(body, 1).unwrap();
+    let x_ref: Id = try_nth(list_call, 1).unwrap().clone().try_into().unwrap();
     let x_sym = bindings.resolve_sym(&x_ref).unwrap();
     assert_eq!(
         param_sym, x_sym,

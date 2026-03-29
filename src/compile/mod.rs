@@ -1,7 +1,9 @@
 pub mod alpha_reduce;
+pub mod ast;
 pub mod bindings;
 pub mod compilation_error;
 pub mod expand;
+pub mod lower;
 pub mod read;
 pub mod sexpr;
 pub mod span;

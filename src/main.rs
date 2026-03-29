@@ -25,6 +25,7 @@ fn main() {
                                     session
                                         .expand(session.introduce(sexpr))
                                         .map(|expanded| session.alpha_reduce(expanded))
+                                        .map(|reduced| session.lower(reduced))
                                 })
                                 .collect::<Result<Vec<_>, CompilationError>>()
                         });

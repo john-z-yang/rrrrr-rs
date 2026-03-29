@@ -1,3 +1,5 @@
+use crate::compile::sexpr::ListAccess;
+
 use super::sexpr::{Cons, SExpr};
 
 #[macro_export]
@@ -59,8 +61,7 @@ macro_rules! if_let_sexpr {
     (
         (($($inner:tt)*), $id:ident @ ..) = $targ:expr => $($handler:tt)*
     ) => {
-        if let $crate::compile::sexpr::SExpr::Cons(cons, _) = $targ {
-            let (car, cdr) = cons.into();
+        if let Some((car, cdr)) = $crate::compile::sexpr::ListAccess::try_destruct($targ) {
             $crate::if_let_sexpr! {($($inner)*) = car => {
                 $crate::if_let_sexpr! {@tail_pos ($id @ ..) = cdr =>
                     $($handler)*
@@ -73,8 +74,7 @@ macro_rules! if_let_sexpr {
     (
         (($($inner:tt)*) $(, $($rest:tt)*)?) = $targ:expr => $($handler:tt)*
     ) => {
-        if let $crate::compile::sexpr::SExpr::Cons(cons, _) = $targ {
-            let (car, cdr) = cons.into();
+        if let Some((car, cdr)) = $crate::compile::sexpr::ListAccess::try_destruct($targ) {
             $crate::if_let_sexpr! {($($inner)*) = car => {
                 $crate::if_let_sexpr! {($($($rest)*)?) = cdr =>
                     $($handler)*
@@ -87,8 +87,7 @@ macro_rules! if_let_sexpr {
     (
         ($id:ident @ ($($pat:tt)*), $tail:ident @ ..) = $targ:expr => $($handler:tt)*
     ) => {
-        if let $crate::compile::sexpr::SExpr::Cons(cons, _) = $targ {
-            let (car, cdr) = cons.into();
+        if let Some((car, cdr)) = $crate::compile::sexpr::ListAccess::try_destruct($targ) {
             let $id = car;
             $crate::if_let_sexpr! {($($pat)*) = &$id =>
                 $crate::if_let_sexpr! {@tail_pos ($tail @ ..) = cdr =>
@@ -102,8 +101,7 @@ macro_rules! if_let_sexpr {
     (
         ($id:ident @ ($($pat:tt)*) $(, $($rest:tt)*)?) = $targ:expr => $($handler:tt)*
     ) => {
-        if let $crate::compile::sexpr::SExpr::Cons(cons, _) = $targ {
-            let (car, cdr) = cons.into();
+        if let Some((car, cdr)) = $crate::compile::sexpr::ListAccess::try_destruct($targ) {
             let $id = car;
             $crate::if_let_sexpr! {($($pat)*) = &$id =>
                 $crate::if_let_sexpr! {($($($rest)*)?) = cdr =>
@@ -117,13 +115,11 @@ macro_rules! if_let_sexpr {
     (
         ($pat:pat, $id:ident @ ..) = $targ:expr => $($handler:tt)*
     ) => {
-        if let $crate::compile::sexpr::SExpr::Cons(cons, _) = $targ {
-            let (car, cdr) = cons.into();
-            #[allow(irrefutable_let_patterns)]
-            if let $pat = car {
-                $crate::if_let_sexpr! {@tail_pos ($id @ ..) = cdr =>
-                    $($handler)*
-                }
+        #[allow(irrefutable_let_patterns)]
+        if let Some((car, cdr)) = $crate::compile::sexpr::ListAccess::try_destruct($targ)
+            && let $pat = car {
+            $crate::if_let_sexpr! {@tail_pos ($id @ ..) = cdr =>
+                $($handler)*
             }
         };
     };
@@ -132,13 +128,11 @@ macro_rules! if_let_sexpr {
     (
         ($pat:pat $(, $($rest:tt)*)?) = $targ:expr => $($handler:tt)*
     ) => {
-        if let $crate::compile::sexpr::SExpr::Cons(cons, _) = $targ {
-            let (car, cdr) = cons.into();
-            #[allow(irrefutable_let_patterns)]
-            if let $pat = car {
-                $crate::if_let_sexpr! {($($($rest)*)?) = cdr =>
-                    $($handler)*
-                }
+        #[allow(irrefutable_let_patterns)]
+        if let Some((car, cdr)) = $crate::compile::sexpr::ListAccess::try_destruct($targ)
+            && let $pat = car {
+            $crate::if_let_sexpr! {($($($rest)*)?) = cdr =>
+                $($handler)*
             }
         };
     };
@@ -268,25 +262,19 @@ macro_rules! template_sexpr {
     }};
 }
 
-pub fn try_first<T: Clone>(sexpr: &SExpr<T>) -> Option<SExpr<T>> {
-    match sexpr {
-        SExpr::Cons(cons, _) => Some(*cons.car.clone()),
-        _ => None,
-    }
+pub fn try_first<S: ListAccess>(sexpr: S) -> Option<S> {
+    sexpr.try_destruct().map(|(car, _)| car)
 }
 
-pub fn first<T: Clone>(sexpr: &SExpr<T>) -> SExpr<T> {
+pub fn first<S: ListAccess>(sexpr: S) -> S {
     try_first(sexpr).expect("first expected parameter to be a cons")
 }
 
-pub fn try_rest<T: Clone>(sexpr: &SExpr<T>) -> Option<SExpr<T>> {
-    match sexpr {
-        SExpr::Cons(cons, _) => Some(*cons.cdr.clone()),
-        _ => None,
-    }
+pub fn try_rest<S: ListAccess>(sexpr: S) -> Option<S> {
+    sexpr.try_destruct().map(|(_, cdr)| cdr)
 }
 
-pub fn rest<T: Clone>(sexpr: &SExpr<T>) -> SExpr<T> {
+pub fn rest<S: ListAccess>(sexpr: S) -> S {
     try_rest(sexpr).expect("rest expected parameter to be a cons")
 }
 
@@ -300,7 +288,7 @@ pub fn len<T>(sexpr: &SExpr<T>) -> usize {
     res
 }
 
-pub fn try_dotted_tail<T: Clone>(sexpr: &SExpr<T>) -> Option<SExpr<T>> {
+pub fn try_dotted_tail<T>(sexpr: &SExpr<T>) -> Option<&SExpr<T>> {
     let SExpr::Cons(Cons { cdr: cur, .. }, _) = sexpr else {
         return None;
     };
@@ -308,10 +296,10 @@ pub fn try_dotted_tail<T: Clone>(sexpr: &SExpr<T>) -> Option<SExpr<T>> {
     while let SExpr::Cons(Cons { cdr, .. }, _) = cur {
         cur = cdr;
     }
-    Some(cur.clone())
+    Some(cur)
 }
 
-pub fn is_proper_list<T: Clone>(sexpr: &SExpr<T>) -> bool {
+pub fn is_proper_list<T>(sexpr: &SExpr<T>) -> bool {
     if let SExpr::Nil(_) = sexpr {
         return true;
     }
@@ -333,33 +321,42 @@ pub fn append<T>(head: SExpr<T>, tail: SExpr<T>) -> SExpr<T> {
     SExpr::Cons(cons, span)
 }
 
-pub fn try_nth<T: Clone>(sexpr: &SExpr<T>, idx: usize) -> Option<SExpr<T>> {
-    let SExpr::Cons(cons, _) = sexpr else {
-        return None;
-    };
+pub fn try_nth<S: ListAccess>(sexpr: S, idx: usize) -> Option<S> {
+    let (car, cdr) = sexpr.try_destruct()?;
     if idx == 0 {
-        Some(cons.car.as_ref().clone())
+        Some(car)
     } else {
-        try_nth(&cons.cdr, idx - 1)
+        try_nth(cdr, idx - 1)
     }
 }
 
-pub fn try_last<T: Clone>(sexpr: &SExpr<T>) -> Option<SExpr<T>> {
-    match sexpr {
-        SExpr::Cons(cons, _) if matches!(*cons.cdr, SExpr::Nil(_)) => {
-            Some(cons.car.as_ref().clone())
-        }
-        SExpr::Cons(cons, _) => try_last(&cons.cdr),
-        _ => None,
+pub fn try_last<S: ListAccess>(sexpr: S) -> Option<S> {
+    let (mut last, mut cur) = sexpr.try_destruct()?;
+    while let Some((car, cdr)) = cur.try_destruct() {
+        last = car;
+        cur = cdr;
     }
+    Some(last)
 }
 
-pub fn try_for_each<T, F, E>(sexpr: &SExpr<T>, mut op: F) -> Result<(), E>
+pub fn for_each<S, F>(sexpr: S, mut op: F)
 where
-    F: FnMut(&SExpr<T>) -> Result<(), E>,
+    S: ListAccess,
+    F: FnMut(S),
 {
     let mut cur = sexpr;
-    while let SExpr::Cons(Cons { car, cdr }, _) = cur {
+    while let Some((car, cdr)) = cur.try_destruct() {
+        op(car);
+        cur = cdr;
+    }
+}
+
+pub fn try_for_each<S: ListAccess, F, E>(sexpr: S, mut op: F) -> Result<(), E>
+where
+    F: FnMut(S) -> Result<(), E>,
+{
+    let mut cur = sexpr;
+    while let Some((car, cdr)) = cur.try_destruct() {
         op(car)?;
         cur = cdr;
     }

@@ -179,8 +179,8 @@ fn match_subpatterns(
             SExpr::Cons(pattern, _) if consume_ellipsis(&pattern.cdr).0 > 0 => {
                 match_repetition(&pattern.car, cur_target, literals, bindings, captures)?;
                 return match_subpattern(
-                    &try_dotted_tail(cur_pattern).expect("pattern is a list"),
-                    &try_dotted_tail(cur_target).unwrap_or_else(|| cur_target.clone()),
+                    try_dotted_tail(cur_pattern).expect("pattern is a list"),
+                    try_dotted_tail(cur_target).unwrap_or(cur_target),
                     literals,
                     bindings,
                     captures,
@@ -562,7 +562,6 @@ mod tests {
         );
     }
 
-    // match(1, 1) == {}
     #[test]
     fn test_match_literal_equal() {
         let result = do_match("1", "1");
@@ -570,13 +569,11 @@ mod tests {
         assert!(captures.is_empty());
     }
 
-    // match(2, 1) is None
     #[test]
     fn test_match_literal_not_equal() {
         assert!(do_match("2", "1").is_none());
     }
 
-    // match("x", "a") == {"x": One("a")}
     #[test]
     fn test_match_pattern_variable() {
         let captures = do_match("x", "a").expect("should match");
@@ -584,7 +581,6 @@ mod tests {
         assert_binding(&captures, "x", &one("a"));
     }
 
-    // match([1, "x", 1], [1, "a", 1]) == {"x": One("a")}
     #[test]
     fn test_match_list_with_literals() {
         let captures = do_match("(1 x 1)", "(1 a 1)").expect("should match");
@@ -592,25 +588,21 @@ mod tests {
         assert_binding(&captures, "x", &one("a"));
     }
 
-    // match([1, "x", 2], [1, "a", 1]) is None
     #[test]
     fn test_match_list_literal_mismatch() {
         assert!(do_match("(1 x 2)", "(1 a 1)").is_none());
     }
 
-    // match([1, "x"], [1, "a", 1]) is None — length mismatch
     #[test]
     fn test_match_list_too_short_pattern() {
         assert!(do_match("(1 x)", "(1 a 1)").is_none());
     }
 
-    // match([1, "x", 1], [1, "a"]) is None — length mismatch
     #[test]
     fn test_match_list_too_long_pattern() {
         assert!(do_match("(1 x 1)", "(1 a)").is_none());
     }
 
-    // match(["a", "..."], ["x", "y"]) == {"a": Many([One("x"), One("y")])}
     #[test]
     fn test_match_simple_ellipsis() {
         let captures = do_match("(a ...)", "(x y)").expect("should match");
@@ -618,7 +610,6 @@ mod tests {
         assert_binding(&captures, "a", &many(vec![one("x"), one("y")]));
     }
 
-    // match(["a", "..."], []) — zero repetitions, variable tracked as empty Many
     #[test]
     fn test_match_ellipsis_zero() {
         let captures = do_match("(a ...)", "()").expect("should match");
@@ -626,7 +617,6 @@ mod tests {
         assert_binding(&captures, "a", &many(vec![]));
     }
 
-    // match(["_", "a", "..."], ["mac"]) — ellipsis with prefix, zero reps
     #[test]
     fn test_match_ellipsis_with_prefix() {
         let captures = do_match("(_ a ...)", "(mac)").expect("should match");
@@ -634,7 +624,6 @@ mod tests {
         assert_binding(&captures, "a", &many(vec![]));
     }
 
-    // Zero repetitions with multiple variables in repeat pattern
     #[test]
     fn test_match_ellipsis_zero_multi_var() {
         let captures = do_match("((a b) ...)", "()").expect("should match");
@@ -643,7 +632,6 @@ mod tests {
         assert_binding(&captures, "b", &many(vec![]));
     }
 
-    // Zero repetitions with nested ellipsis
     #[test]
     fn test_match_nested_ellipsis_zero() {
         let captures = do_match("((a ...) ...)", "()").expect("should match");
@@ -651,7 +639,6 @@ mod tests {
         assert_binding(&captures, "a", &many(vec![]));
     }
 
-    // match(["_", "e1", "e2", "..."], ["and", "a", "b", "c"])
     #[test]
     fn test_match_ellipsis_with_prefix_and_elements() {
         let captures = do_match("(_ e1 e2 ...)", "(and a b c)").expect("should match");
@@ -660,8 +647,6 @@ mod tests {
         assert_binding(&captures, "e2", &many(vec![one("b"), one("c")]));
     }
 
-    // match([["a", "..."], "..."], [["x", "y"], ["z"]])
-    //   == {"a": Many([Many([One("x"), One("y")]), Many([One("z")])])}
     #[test]
     fn test_match_nested_ellipsis() {
         let captures = do_match("((a ...) ...)", "((x y) (z))").expect("should match");
@@ -673,7 +658,6 @@ mod tests {
         );
     }
 
-    // match([[[1, "a"], "..."], "..."], [[[1, "x"], [1, "y"]], [[1, "z"]]])
     #[test]
     fn test_match_nested_ellipsis_with_literals() {
         let captures =
@@ -686,13 +670,11 @@ mod tests {
         );
     }
 
-    // match([[[1, "a"], "..."], "..."], [[[2, "x"], [1, "y"]], [[1, "z"]]]) is None
     #[test]
     fn test_match_nested_ellipsis_literal_mismatch() {
         assert!(do_match("(((1 a) ...) ...)", "(((2 x) (1 y)) ((1 z)))").is_none());
     }
 
-    // Wildcard captures anything
     #[test]
     fn test_match_wildcard() {
         let captures = do_match("_", "42").expect("should match");
@@ -702,7 +684,6 @@ mod tests {
         assert!(captures.is_empty());
     }
 
-    // Pattern variable captures a list
     #[test]
     fn test_match_variable_captures_list() {
         let captures = do_match("x", "(a b)").expect("should match");
@@ -710,7 +691,6 @@ mod tests {
         assert_binding(&captures, "x", &one("(a b)"));
     }
 
-    // Ellipsis with complex repeat pattern
     #[test]
     fn test_match_ellipsis_complex_repeat() {
         let captures = do_match("((a b) ...)", "((1 2) (3 4))").expect("should match");
@@ -719,7 +699,6 @@ mod tests {
         assert_binding(&captures, "b", &many(vec![one("2"), one("4")]));
     }
 
-    // The `and` macro pattern from existing tests
     #[test]
     fn test_match_and_macro_pattern() {
         // (_ e1 e2 ...) against (and a b)
@@ -735,13 +714,11 @@ mod tests {
         assert_binding(&captures, "e2", &many(vec![one("b"), one("c"), one("d")]));
     }
 
-    // Non-list target against list pattern
     #[test]
     fn test_match_list_pattern_atom_target() {
         assert!(do_match("(a b)", "42").is_none());
     }
 
-    // Ellipsis pattern against non-list target
     #[test]
     fn test_match_ellipsis_pattern_atom_target() {
         assert!(do_match("(a ...)", "42").is_none());
@@ -766,8 +743,6 @@ mod tests {
         assert!(do_match("#(a b)", "(1 2)").is_none());
         assert!(do_match("(a b)", "#(1 2)").is_none());
     }
-
-    // --- render tests ---
 
     fn assert_renders_to(pattern: &str, template: &str, target: &str, expected: &str) {
         let rule = SyntaxRule::new(
@@ -918,8 +893,6 @@ mod tests {
         assert_renders_to("(_ (a ...) ...)", "(a ... ...)", "(mac)", "()");
     }
 
-    // --- validation tests (SyntaxRule::new) ---
-
     fn nil() -> SExpr<Id> {
         SExpr::Nil(Span { lo: 0, hi: 0 })
     }
@@ -1043,9 +1016,6 @@ mod tests {
         assert!(err.reason.contains("Multiple consecutive '...' in pattern"));
     }
 
-    // --- literal identifier tests ---
-
-    // Unbound literal in pattern captures same unbound literal in target
     #[test]
     fn test_match_literal_identifier_same_name() {
         let captures =
@@ -1054,25 +1024,21 @@ mod tests {
         assert_binding(&captures, "e", &one("42"));
     }
 
-    // Unbound literal in pattern does not match different unbound identifier
     #[test]
     fn test_match_literal_identifier_different_name() {
         assert!(do_match_with_literals("(_ foo e)", "(mac bar 42)", &["foo"]).is_none());
     }
 
-    // Literal in pattern does not match non-identifier target
     #[test]
     fn test_match_literal_identifier_vs_non_identifier() {
         assert!(do_match_with_literals("(_ foo e)", "(mac 42 x)", &["foo"]).is_none());
     }
 
-    // Literal in pattern does not match list target
     #[test]
     fn test_match_literal_identifier_vs_list() {
         assert!(do_match_with_literals("(_ foo e)", "(mac (a b) x)", &["foo"]).is_none());
     }
 
-    // Non-literal identifier is still captured as a pattern variable
     #[test]
     fn test_match_non_literal_still_captures() {
         let captures =
@@ -1082,7 +1048,6 @@ mod tests {
         assert_binding(&captures, "e", &one("42"));
     }
 
-    // Literal with ellipsis — only matching identifiers are consumed
     #[test]
     fn test_match_literal_in_ellipsis_subpattern() {
         let captures =
@@ -1092,7 +1057,6 @@ mod tests {
         assert_binding(&captures, "e", &many(vec![one("1"), one("2")]));
     }
 
-    // Literal with ellipsis — mismatch in one repetition fails the whole match
     #[test]
     fn test_match_literal_in_ellipsis_mismatch() {
         assert!(
@@ -1100,8 +1064,6 @@ mod tests {
                 .is_none()
         );
     }
-
-    // --- Transformer tests ---
 
     fn make_transformer(src: &str) -> Transformer {
         Transformer::new(&introduce_single_sexpr_src(src)).unwrap()
@@ -1186,7 +1148,6 @@ mod tests {
         );
     }
 
-    // Keyword name in the pattern is ignored — any name at application head works
     #[test]
     fn test_transformer_keyword_ignored() {
         let t = make_transformer(
@@ -1200,7 +1161,6 @@ mod tests {
         );
     }
 
-    // Non-list application returns None
     #[test]
     fn test_transformer_non_list_application() {
         let t = make_transformer(
@@ -1213,7 +1173,6 @@ mod tests {
         );
     }
 
-    // Zero-rep ellipsis through the Transformer (end-to-end)
     #[test]
     fn test_transformer_zero_repetition_ellipsis() {
         let t = make_transformer(
@@ -1425,7 +1384,6 @@ mod tests {
         );
     }
 
-    // ... mixed with valid literals still rejected
     #[test]
     fn test_transformer_new_rejects_ellipsis_among_valid_literals() {
         let result = Transformer::new(&introduce_single_sexpr_src(
@@ -1440,7 +1398,6 @@ mod tests {
         );
     }
 
-    // _ mixed with valid literals still rejected
     #[test]
     fn test_transformer_new_rejects_underscore_among_valid_literals() {
         let result = Transformer::new(&introduce_single_sexpr_src(

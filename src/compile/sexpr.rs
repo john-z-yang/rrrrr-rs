@@ -163,6 +163,31 @@ impl<T: fmt::Display> fmt::Display for SExpr<T> {
     }
 }
 
+pub trait ListAccess
+where
+    Self: std::marker::Sized,
+{
+    fn try_destruct(self) -> Option<(Self, Self)>;
+}
+
+impl<T> ListAccess for SExpr<T> {
+    fn try_destruct(self) -> Option<(Self, Self)> {
+        match self {
+            SExpr::Cons(Cons { car, cdr }, _) => Some((*car, *cdr)),
+            _ => None,
+        }
+    }
+}
+
+impl<T> ListAccess for &SExpr<T> {
+    fn try_destruct(self) -> Option<(Self, Self)> {
+        match self {
+            SExpr::Cons(Cons { car, cdr }, _) => Some((car, cdr)),
+            _ => None,
+        }
+    }
+}
+
 #[derive(Clone, Copy)]
 pub struct SExprWithoutSpans<'a, T>(&'a SExpr<T>);
 
@@ -299,6 +324,16 @@ pub struct Symbol(pub String);
 impl Symbol {
     pub fn new(symbol: &str) -> Self {
         Symbol(symbol.to_string())
+    }
+}
+
+impl From<Resolved> for Symbol {
+    fn from(value: Resolved) -> Self {
+        match value {
+            Resolved::Bound { symbol, .. } => symbol,
+            Resolved::Free { symbol } => symbol,
+            Resolved::Literal { symbol } => symbol,
+        }
     }
 }
 

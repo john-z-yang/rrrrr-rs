@@ -92,13 +92,14 @@ pub(super) fn expand_begin(
             reason: "Invalid 'begin' form: expected at least one expression".to_owned(),
         });
     }
+    let span = sexpr.get_span();
     let mut res = SExpr::cons(
-        first(&sexpr),
-        try_map(rest(&sexpr), |sub_sexpr| {
+        first(&sexpr).clone(),
+        try_map(rest(sexpr), |sub_sexpr| {
             expand_sexpr(sub_sexpr, bindings, env, ctx)
         })?,
     );
-    res.update_span(sexpr.get_span());
+    res.update_span(span);
     Ok(res)
 }
 
@@ -148,8 +149,8 @@ pub(super) fn expand_lambda(
                             reason: format!("Duplicate parameter: '{}'", id),
                         });
                     }
-                    let binding = bindings.gen_sym(&id);
-                    bindings.add_binding(&id, &binding);
+                    let binding = bindings.gen_sym(id);
+                    bindings.add_binding(id, &binding);
                 }
                 Some(tail) => {
                     return Err(CompilationError {
@@ -333,7 +334,7 @@ fn expand_syntax_binding(
 
                 if !matches!(
                     try_first(transformer_spec),
-                    Some(SExpr::Var(id, _)) if bindings.resolve_sym(&id) == Some(Symbol::new("syntax-rules"))
+                    Some(SExpr::Var(id, _)) if bindings.resolve_sym(id) == Some(Symbol::new("syntax-rules"))
                 ) {
                     return Err(CompilationError {
                         span: transformer_spec.get_span(),
@@ -352,7 +353,7 @@ fn expand_syntax_binding(
 
         let body = expand_body(body.clone().add_scope(scope_id), bindings, env, ctx).map(|body| {
             if len(&body) == 1 {
-                first(&body)
+                first(body)
             } else {
                 SExpr::cons(
                     SExpr::Var(Id::new("begin", [Bindings::CORE_SCOPE]), body.get_span()),

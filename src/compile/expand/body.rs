@@ -87,7 +87,7 @@ fn normalize_body(
                         .to_owned(),
                 });
             }
-            let spliced = normalize_body(rest(&expanded_car), bindings, env, ctx)?;
+            let spliced = normalize_body(rest(expanded_car), bindings, env, ctx)?;
             let remaining = normalize_body(*cons.cdr, bindings, env, ctx)?;
             Ok(append(spliced, remaining))
         }
@@ -129,6 +129,7 @@ fn partial_expand_sexpr(
         let Some(SExpr::Var(id, _)) = try_first(&form) else {
             return Ok((form, BodySExprKind::Other));
         };
+        let id = id.clone();
         let Some(binding) = bindings.resolve_sym(&id) else {
             return Ok((form, BodySExprKind::Other));
         };
@@ -154,7 +155,7 @@ fn extract_initializers(
 
     let body = try_map(body, |sexpr| {
         if let Some(SExpr::Var(id, _)) = try_first(&sexpr)
-            && bindings.resolve_sym(&id).is_some_and(|s| s.0 == "define")
+            && bindings.resolve_sym(id).is_some_and(|s| s.0 == "define")
         {
             if num_expressions > 0 {
                 return Err(CompilationError {

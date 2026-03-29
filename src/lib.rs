@@ -10,7 +10,8 @@ use compile::{
 };
 
 use crate::{
-    compile::{expand::introduce_scopes, sexpr::Resolved},
+    compile::expand::introduce_scopes,
+    compile::{ast::Expr, sexpr::Resolved},
     prelude::DERIVED_FORMS,
 };
 
@@ -72,6 +73,10 @@ impl Session {
 
     pub fn resolve_sym(&self, id: &Id) -> Option<Symbol> {
         self.bindings.resolve_sym(id)
+    }
+
+    pub fn lower(&self, form: SExpr<Resolved>) -> Expr {
+        compile::lower::lower(form)
     }
 }
 

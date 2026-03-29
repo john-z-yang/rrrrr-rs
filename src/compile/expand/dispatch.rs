@@ -88,8 +88,8 @@ fn expand_id_application(
     mut ctx: Context,
 ) -> Result<SExpr<Id>> {
     let (id, binding) = match first(&sexpr) {
-        SExpr::Var(id, _) => match bindings.resolve_sym(&id) {
-            Some(binding) => (id, binding),
+        SExpr::Var(id, _) => match bindings.resolve_sym(id) {
+            Some(binding) => (id.clone(), binding),
             None => {
                 return expand_fn_application(sexpr, bindings, env, ctx);
             }
