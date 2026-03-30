@@ -2,7 +2,8 @@ use rrrrr_rs::{
     Session,
     compile::{
         ast::{Application, Begin, Define, Expr, If, Lambda, Letrec, Set},
-        sexpr::{Bool, Cons, Num, Resolved, SExpr, Str, Symbol},
+        ident::{Resolved, Symbol},
+        sexpr::{Bool, Cons, Num, SExpr, Str},
         span::Span,
     },
 };
@@ -37,10 +38,7 @@ fn test_lower_boolean_literal() {
 fn test_lower_string_literal() {
     assert_eq!(
         lower_source("\"hello\""),
-        Expr::Literal(SExpr::Str(
-            Str("hello".to_string()),
-            Span { lo: 0, hi: 7 }
-        ))
+        Expr::Literal(SExpr::Str(Str("hello".to_string()), Span { lo: 0, hi: 7 }))
     );
 }
 
@@ -194,14 +192,8 @@ fn test_lower_if() {
                     Bool(true),
                     Span { lo: 4, hi: 6 }
                 ))),
-                conseq: Box::new(Expr::Literal(SExpr::Num(
-                    Num(1.0),
-                    Span { lo: 7, hi: 8 }
-                ))),
-                alt: Box::new(Expr::Literal(SExpr::Num(
-                    Num(2.0),
-                    Span { lo: 9, hi: 10 }
-                ))),
+                conseq: Box::new(Expr::Literal(SExpr::Num(Num(1.0), Span { lo: 7, hi: 8 }))),
+                alt: Box::new(Expr::Literal(SExpr::Num(Num(2.0), Span { lo: 9, hi: 10 }))),
             },
             Span { lo: 1, hi: 11 },
         )
@@ -237,10 +229,7 @@ fn test_lower_set() {
                 var: Resolved::Free {
                     symbol: Symbol::new("x"),
                 },
-                expr: Box::new(Expr::Literal(SExpr::Num(
-                    Num(2.0),
-                    Span { lo: 8, hi: 9 }
-                ))),
+                expr: Box::new(Expr::Literal(SExpr::Num(Num(2.0), Span { lo: 8, hi: 9 }))),
             },
             Span { lo: 1, hi: 10 },
         )

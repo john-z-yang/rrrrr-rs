@@ -1,7 +1,8 @@
 use std::fmt;
 
 use crate::compile::{
-    sexpr::{Bool, Char, Num, Str, Symbol},
+    ident::Symbol,
+    sexpr::{Bool, Char, Num, Str},
     span::Span,
 };
 

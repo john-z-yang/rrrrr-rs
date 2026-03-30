@@ -2,7 +2,8 @@ mod common;
 
 use rrrrr_rs::{
     compile::{
-        sexpr::{Num, SExpr, Str, Symbol},
+        ident::Symbol,
+        sexpr::{Num, SExpr, Str},
         span::Span,
         util::{is_proper_list, len},
     },

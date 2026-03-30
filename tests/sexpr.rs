@@ -2,7 +2,8 @@ mod common;
 
 use rrrrr_rs::{
     compile::{
-        sexpr::{Cons, Id, Num, SExpr, Vector},
+        bindings::Id,
+        sexpr::{Cons, Num, SExpr, Vector},
         span::Span,
     },
     make_sexpr,

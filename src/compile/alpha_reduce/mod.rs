@@ -1,7 +1,8 @@
 use crate::{
     compile::{
-        bindings::Bindings,
-        sexpr::{Id, Resolved, SExpr, Symbol},
+        bindings::{Bindings, Id},
+        ident::{Resolved, Symbol},
+        sexpr::SExpr,
     },
     if_let_sexpr, make_sexpr, match_sexpr,
 };

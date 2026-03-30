@@ -1,7 +1,8 @@
 use rrrrr_rs::compile::{
     compilation_error::Result,
+    ident::Symbol,
     read::{lex::tokenize, parse::parse},
-    sexpr::{SExpr, Symbol},
+    sexpr::SExpr,
 };
 
 pub fn parse_single_source(src: &str) -> Result<SExpr<Symbol>> {

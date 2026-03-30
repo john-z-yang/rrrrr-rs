@@ -1,10 +1,12 @@
 use std::collections::{HashMap, HashSet};
 use std::rc::Rc;
 
+use crate::compile::bindings::Id;
+use crate::compile::ident::Symbol;
 use crate::compile::{
     bindings::Bindings,
     compilation_error::{CompilationError, Result},
-    sexpr::{Id, SExpr, Symbol, Vector},
+    sexpr::{SExpr, Vector},
     util::{is_proper_list, len, try_dotted_tail, try_for_each},
 };
 use crate::if_let_sexpr;

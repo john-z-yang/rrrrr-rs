@@ -3,6 +3,7 @@ pub mod ast;
 pub mod bindings;
 pub mod compilation_error;
 pub mod expand;
+pub mod ident;
 pub mod lower;
 pub mod read;
 pub mod sexpr;

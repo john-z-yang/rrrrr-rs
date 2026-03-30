@@ -2,16 +2,16 @@ pub mod compile;
 pub mod prelude;
 
 use compile::{
-    bindings::Bindings,
-    compilation_error::Result,
-    expand::Env,
-    read::token::Token,
-    sexpr::{Id, SExpr, Symbol},
+    bindings::Bindings, compilation_error::Result, expand::Env, read::token::Token, sexpr::SExpr,
 };
 
 use crate::{
-    compile::expand::introduce_scopes,
-    compile::{ast::Expr, sexpr::Resolved},
+    compile::{
+        ast::Expr,
+        bindings::Id,
+        expand::introduce_scopes,
+        ident::{Resolved, Symbol},
+    },
     prelude::DERIVED_FORMS,
 };
 

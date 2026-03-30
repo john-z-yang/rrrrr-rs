@@ -6,10 +6,11 @@ use super::expression::{
 use super::quote::{expand_quasiquote, expand_quote};
 use super::transformer::Transformer;
 use super::{Context, Env, MAX_MACRO_DEPTH};
+use crate::compile::bindings::Id;
 use crate::compile::{
     bindings::Bindings,
     compilation_error::{CompilationError, Result},
-    sexpr::{Id, SExpr},
+    sexpr::SExpr,
     util::first,
 };
 use crate::if_let_sexpr;

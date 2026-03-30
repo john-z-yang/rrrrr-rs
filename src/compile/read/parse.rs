@@ -3,7 +3,8 @@ use std::{iter::Peekable, slice::Iter};
 use super::token::Token;
 use crate::compile::{
     compilation_error::{CompilationError, Result},
-    sexpr::{SExpr, Symbol, Vector},
+    ident::Symbol,
+    sexpr::{SExpr, Vector},
     span::Span,
 };
 

@@ -1,5 +1,6 @@
-use std::collections::BTreeSet;
 use std::fmt;
+
+use crate::compile::bindings::Id;
 
 use super::{
     bindings::{ScopeId, Scopes},
@@ -129,6 +130,17 @@ impl SExpr<Id> {
     }
 }
 
+impl TryFrom<SExpr<Id>> for Id {
+    type Error = ();
+    fn try_from(value: SExpr<Id>) -> Result<Self, Self::Error> {
+        if let SExpr::Var(id, _) = value {
+            Ok(id)
+        } else {
+            Err(())
+        }
+    }
+}
+
 impl<T: fmt::Display> fmt::Display for SExpr<T> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
@@ -250,99 +262,6 @@ impl<T: fmt::Debug> fmt::Debug for SExprWithoutSpans<'_, T> {
     }
 }
 
-#[derive(PartialEq, Clone, Eq, Hash, Debug)]
-pub enum Resolved {
-    Bound { symbol: Symbol, binding: Symbol },
-    Free { symbol: Symbol },
-    Literal { symbol: Symbol },
-}
-
-impl fmt::Display for Resolved {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        match self {
-            Resolved::Bound { binding, .. } => write!(f, "{}", binding),
-            Resolved::Free { symbol } => write!(f, "{}", symbol),
-            Resolved::Literal { symbol } => write!(f, "{}", symbol),
-        }
-    }
-}
-
-#[derive(PartialEq, Clone, Eq, Hash, Debug)]
-pub struct Id {
-    pub symbol: Symbol,
-    pub scopes: Scopes,
-}
-
-impl Id {
-    pub fn new<const N: usize>(symbol: &str, scopes: [ScopeId; N]) -> Self {
-        Id {
-            symbol: Symbol::new(symbol),
-            scopes: BTreeSet::from(scopes),
-        }
-    }
-
-    pub fn adjust_scope<F>(&self, op: &F) -> Self
-    where
-        F: Fn(&Scopes) -> Scopes,
-    {
-        Id {
-            symbol: self.symbol.clone(),
-            scopes: op(&self.scopes),
-        }
-    }
-
-    pub fn add_scope(&self, scope: ScopeId) -> Self {
-        let op = |scopes: &Scopes| {
-            let mut scopes = scopes.clone();
-            scopes.insert(scope);
-            scopes
-        };
-        self.adjust_scope(&op)
-    }
-}
-
-impl fmt::Display for Id {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "{}", self.symbol)
-    }
-}
-
-impl TryFrom<SExpr<Id>> for Id {
-    type Error = ();
-    fn try_from(value: SExpr<Id>) -> Result<Self, Self::Error> {
-        if let SExpr::Var(id, _) = value {
-            Ok(id)
-        } else {
-            Err(())
-        }
-    }
-}
-
-#[derive(Debug, PartialEq, Eq, Clone, Hash)]
-pub struct Symbol(pub String);
-
-impl Symbol {
-    pub fn new(symbol: &str) -> Self {
-        Symbol(symbol.to_string())
-    }
-}
-
-impl From<Resolved> for Symbol {
-    fn from(value: Resolved) -> Self {
-        match value {
-            Resolved::Bound { symbol, .. } => symbol,
-            Resolved::Free { symbol } => symbol,
-            Resolved::Literal { symbol } => symbol,
-        }
-    }
-}
-
-impl fmt::Display for Symbol {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "{}", self.0)
-    }
-}
-
 #[derive(PartialEq, Clone, Debug)]
 pub struct Cons<T> {
     pub car: Box<SExpr<T>>,
@@ -409,34 +328,12 @@ impl<T: fmt::Display> fmt::Display for Cons<T> {
     }
 }
 
-impl<T> TryFrom<SExpr<T>> for Cons<T> {
-    type Error = ();
-    fn try_from(value: SExpr<T>) -> Result<Self, Self::Error> {
-        if let SExpr::Cons(cons, _) = value {
-            Ok(cons)
-        } else {
-            Err(())
-        }
-    }
-}
-
 #[derive(Debug, PartialEq, Clone)]
 pub struct Bool(pub bool);
 
 impl fmt::Display for Bool {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "{}", if self.0 { "#t" } else { "#f" })
-    }
-}
-
-impl<T> TryFrom<SExpr<T>> for Bool {
-    type Error = ();
-    fn try_from(value: SExpr<T>) -> Result<Self, Self::Error> {
-        if let SExpr::Bool(bool, _) = value {
-            Ok(bool)
-        } else {
-            Err(())
-        }
     }
 }
 

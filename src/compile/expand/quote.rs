@@ -1,8 +1,8 @@
 use super::{Context, Env, expand_sexpr};
 use crate::compile::{
-    bindings::Bindings,
+    bindings::{Bindings, Id},
     compilation_error::{CompilationError, Result},
-    sexpr::{Id, SExpr},
+    sexpr::SExpr,
     util::{first, try_rest},
 };
 use crate::{if_let_sexpr, make_sexpr, match_sexpr};

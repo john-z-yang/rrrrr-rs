@@ -1,7 +1,7 @@
 use crate::{
     compile::{
         read::{lex::tokenize, parse::parse},
-        sexpr::{Bool, Id, Num},
+        sexpr::{Bool, Num},
         span::Span,
         util::{first, try_last, try_nth},
     },

@@ -1,7 +1,8 @@
 use crate::{
     compile::{
         ast::{Application, Begin, Define, Expr, If, Lambda, Letrec, Set},
-        sexpr::{Resolved, SExpr},
+        ident::Resolved,
+        sexpr::SExpr,
         util::{first, for_each, rest, try_dotted_tail},
     },
     if_let_sexpr,

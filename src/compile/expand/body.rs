@@ -1,9 +1,9 @@
 use super::{Context, Env, SyntaxContext, apply_transformer, expand_sexpr};
 use crate::{
     compile::{
-        bindings::Bindings,
+        bindings::{Bindings, Id},
         compilation_error::{CompilationError, Result},
-        sexpr::{Cons, Id, SExpr},
+        sexpr::{Cons, SExpr},
         span::Span,
         util::{append, is_proper_list, len, rest, split, try_first, try_map},
     },

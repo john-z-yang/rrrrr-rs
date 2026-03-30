@@ -1,7 +1,8 @@
 use rrrrr_rs::compile::{
     compilation_error::CompilationError,
+    ident::Symbol,
     read::{lex::tokenize, token::Token},
-    sexpr::{Bool, Char, Num, Str, Symbol},
+    sexpr::{Bool, Char, Num, Str},
     span::Span,
 };
 

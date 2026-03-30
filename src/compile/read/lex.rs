@@ -2,7 +2,8 @@ use std::{iter::Peekable, str::Chars};
 
 use crate::compile::{
     compilation_error::{CompilationError, Result},
-    sexpr::{Bool, Char, Num, Str, Symbol},
+    ident::Symbol,
+    sexpr::{Bool, Char, Num, Str},
     span::Span,
 };
 

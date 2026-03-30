@@ -1,7 +1,8 @@
 use std::fmt::{Debug, Display};
 
 use crate::compile::{
-    sexpr::{Resolved, SExpr, Symbol},
+    ident::{Resolved, Symbol},
+    sexpr::SExpr,
     span::Span,
 };
 

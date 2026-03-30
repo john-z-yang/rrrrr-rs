@@ -1,8 +1,52 @@
-use super::sexpr::{Id, Symbol};
-use std::collections::{BTreeSet, HashMap};
+use crate::compile::ident::Symbol;
+
+use std::{
+    collections::{BTreeSet, HashMap},
+    fmt,
+};
 
 pub type ScopeId = u64;
 pub type Scopes = BTreeSet<ScopeId>;
+
+#[derive(PartialEq, Clone, Eq, Hash, Debug)]
+pub struct Id {
+    pub symbol: Symbol,
+    pub scopes: Scopes,
+}
+
+impl Id {
+    pub fn new<const N: usize>(symbol: &str, scopes: [ScopeId; N]) -> Self {
+        Id {
+            symbol: Symbol::new(symbol),
+            scopes: BTreeSet::from(scopes),
+        }
+    }
+
+    pub fn adjust_scope<F>(&self, op: &F) -> Self
+    where
+        F: Fn(&Scopes) -> Scopes,
+    {
+        Id {
+            symbol: self.symbol.clone(),
+            scopes: op(&self.scopes),
+        }
+    }
+
+    pub fn add_scope(&self, scope: ScopeId) -> Self {
+        let op = |scopes: &Scopes| {
+            let mut scopes = scopes.clone();
+            scopes.insert(scope);
+            scopes
+        };
+        self.adjust_scope(&op)
+    }
+}
+
+impl fmt::Display for Id {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "{}", self.symbol)
+    }
+}
 
 #[derive(Debug, Clone)]
 pub(crate) struct Bindings {

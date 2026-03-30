@@ -1,10 +1,12 @@
 use super::dispatch::expand_sexpr;
 use super::transformer::Transformer;
 use super::{Context, Env, SyntaxContext};
+use crate::compile::bindings::Id;
+use crate::compile::ident::Symbol;
 use crate::compile::{
     bindings::Bindings,
     compilation_error::{CompilationError, Result},
-    sexpr::{Id, SExpr, Symbol},
+    sexpr::SExpr,
     util::try_first,
 };
 use crate::{if_let_sexpr, make_sexpr, match_sexpr, template_sexpr};

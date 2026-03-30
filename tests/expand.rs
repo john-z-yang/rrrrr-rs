@@ -1,8 +1,10 @@
 use rrrrr_rs::{
     Session,
     compile::{
+        bindings::Id,
         compilation_error::{CompilationError, Result},
-        sexpr::{Id, Num, SExpr, Symbol},
+        ident::Symbol,
+        sexpr::{Num, SExpr},
         span::Span,
         util::{first, rest, try_nth},
     },
