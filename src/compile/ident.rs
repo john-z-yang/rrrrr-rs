@@ -36,7 +36,7 @@ impl fmt::Display for Resolved {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
             Resolved::Bound { binding, .. } => write!(f, "{}", binding),
-            Resolved::Free { symbol } => write!(f, "{}", symbol),
+            Resolved::Free { symbol } => write!(f, "{}:free", symbol),
             Resolved::Literal { symbol } => write!(f, "{}", symbol),
         }
     }

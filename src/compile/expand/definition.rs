@@ -19,7 +19,7 @@ pub(super) fn expand_set(
 ) -> Result<SExpr<Id>> {
     if_let_sexpr! {(set, var @ SExpr::Var(id, _), exp) = &sexpr =>
         if let Some(resolved) = bindings.resolve_sym(id)
-            && (Bindings::CORE_FORMS.contains(&resolved.0.as_str()) || Bindings::CORE_PRIMITIVES.contains(&resolved.0.as_str())) {
+            && Bindings::CORE_FORMS.contains(&resolved.0.as_str()) {
             return Err(CompilationError {
                 span: sexpr.get_span(),
                 reason: format!("Cannot mutate core forms/primatives '{}'", id),

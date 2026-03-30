@@ -68,7 +68,7 @@ impl Session {
     }
 
     pub fn alpha_reduce(&mut self, form: SExpr<Id>) -> SExpr<Resolved> {
-        compile::alpha_reduce::alpha_reduce(form, &mut self.bindings)
+        compile::alpha_reduce::alpha_reduce(form, &self.bindings)
     }
 
     pub fn resolve_sym(&self, id: &Id) -> Option<Symbol> {

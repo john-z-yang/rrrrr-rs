@@ -119,20 +119,6 @@ fn test_expand_set_unbound_identifier_is_allowed() {
 }
 
 #[test]
-fn test_expand_set_core_binding_rejected_with_form_span() {
-    assert!(
-        matches!(
-            expand_source("(set! cons 1)"),
-            Err(CompilationError {
-                span: Span { lo: 0, hi: 13 },
-                reason: _
-            })
-        ),
-        "Expected set! on core binding to report whole-form span"
-    );
-}
-
-#[test]
 fn test_expand_define_rhs_rejects_nested_define_in_expression_context() {
     assert!(
         matches!(

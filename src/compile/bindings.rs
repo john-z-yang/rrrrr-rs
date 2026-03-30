@@ -76,7 +76,7 @@ impl Bindings {
         "begin",
     ];
 
-    pub(crate) const CORE_PRIMITIVES: &[&str] = &["cons", "list", "append", "list->vector"];
+    pub(crate) const Q_QUOTE_PRIMITIVES: &[&str] = &["cons", "list", "append", "list->vector"];
 
     pub(crate) fn new() -> Self {
         let mut bindings = Bindings {
@@ -87,7 +87,7 @@ impl Bindings {
         for symbol in Self::CORE_FORMS {
             bindings.add_binding(&Id::new(symbol, [Self::CORE_SCOPE]), &Symbol::new(symbol))
         }
-        for symbol in Self::CORE_PRIMITIVES {
+        for symbol in Self::Q_QUOTE_PRIMITIVES {
             bindings.add_binding(&Id::new(symbol, [Self::CORE_SCOPE]), &Symbol::new(symbol))
         }
         bindings
@@ -213,7 +213,7 @@ mod tests {
     #[test]
     fn test_resolve_with_core_bindings() {
         let bindings = Bindings::new();
-        for core_binding in Bindings::CORE_PRIMITIVES {
+        for core_binding in Bindings::Q_QUOTE_PRIMITIVES {
             assert_eq!(
                 bindings.resolve_sym(&Id::new(core_binding, [Bindings::CORE_SCOPE])),
                 Some(Symbol::new(core_binding))

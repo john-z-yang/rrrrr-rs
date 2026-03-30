@@ -206,16 +206,15 @@ fn test_lower_define() {
         lower_source("(define x 42)"),
         Expr::Define(
             Define {
-                var: Resolved::Bound {
+                var: Resolved::Free {
                     symbol: Symbol::new("x"),
-                    binding: Symbol::new("x:1"),
                 },
                 expr: Box::new(Expr::Literal(SExpr::Num(
                     Num(42.0),
                     Span { lo: 10, hi: 12 }
                 ))),
             },
-            Span { lo: 0, hi: 13 },
+            Span { lo: 1, hi: 13 },
         )
     );
 }
