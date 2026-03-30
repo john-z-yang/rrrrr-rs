@@ -14,8 +14,8 @@ fn lower_source(source: &str) -> Expr {
     let parsed = session.parse(&tokens).unwrap().pop().unwrap();
     let introduced = session.introduce(parsed);
     let expanded = session.expand(introduced).unwrap();
-    let reduced = session.alpha_reduce(expanded);
-    session.lower(reduced)
+    let converted = session.alpha_convert(expanded);
+    session.lower(converted)
 }
 
 #[test]

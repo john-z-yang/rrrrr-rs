@@ -1,4 +1,4 @@
-pub mod alpha_reduce;
+pub mod alpha_convert;
 pub mod ast;
 pub mod bindings;
 pub mod compilation_error;

@@ -9,29 +9,29 @@ use crate::{
     if_let_sexpr, make_sexpr, match_sexpr,
 };
 
-pub(crate) fn alpha_reduce(sexpr: SExpr<Id>, bindings: &mut Bindings) -> SExpr<Resolved> {
+pub(crate) fn alpha_convert(sexpr: SExpr<Id>, bindings: &mut Bindings) -> SExpr<Resolved> {
     match_sexpr! {
         &sexpr;
 
         (var @ SExpr::Var(id, _), rest @ ..) => {
             let resolved = bindings.resolve_sym(id);
             if resolved.as_ref().is_some_and(|resolved| resolved.0 == "define") {
-                alpha_reduce_define(sexpr.clone(), bindings)
+                alpha_convert_define(sexpr.clone(), bindings)
             } else if resolved.as_ref().is_some_and(|resolved| resolved.0 == "quote") {
-                alpha_reduce_quote(sexpr.clone())
+                alpha_convert_quote(sexpr.clone())
             } else {
                 let var = var.clone().map_var(&make_resolver(bindings));
                 make_sexpr!(
                     var,
-                    ..alpha_reduce(rest.clone(), bindings),
+                    ..alpha_convert(rest.clone(), bindings),
                 )
             }
         },
 
         SExpr::Cons(cons, _) => {
             SExpr::cons(
-                alpha_reduce(*cons.car.clone(), bindings),
-                alpha_reduce(*cons.cdr.clone(), bindings),
+                alpha_convert(*cons.car.clone(), bindings),
+                alpha_convert(*cons.cdr.clone(), bindings),
             )
         },
 
@@ -61,10 +61,10 @@ fn make_resolver(bindings: &Bindings) -> impl Fn(Id) -> Resolved {
     }
 }
 
-fn alpha_reduce_define(sexpr: SExpr<Id>, bindings: &mut Bindings) -> SExpr<Resolved> {
+fn alpha_convert_define(sexpr: SExpr<Id>, bindings: &mut Bindings) -> SExpr<Resolved> {
     let span = sexpr.get_span();
     if_let_sexpr! {(SExpr::Var(_, define_span), SExpr::Var(id, _), expr) = sexpr => {
-        let reduced_expr = alpha_reduce(expr, bindings);
+        let converted_expr = alpha_convert(expr, bindings);
         let binding = bindings.gen_sym(&id);
         bindings.add_binding(&id, &binding);
         return make_sexpr!(
@@ -81,13 +81,13 @@ fn alpha_reduce_define(sexpr: SExpr<Id>, bindings: &mut Bindings) -> SExpr<Resol
                 },
                 span,
             ),
-            reduced_expr,
+            converted_expr,
         );
     }}
     unreachable!("Invalid define form")
 }
 
-fn alpha_reduce_quote(sexpr: SExpr<Id>) -> SExpr<Resolved> {
+fn alpha_convert_quote(sexpr: SExpr<Id>) -> SExpr<Resolved> {
     let span = sexpr.get_span();
     if_let_sexpr! {(_, sexpr) = sexpr => {
         return make_sexpr!(
@@ -119,17 +119,17 @@ mod tests {
         make_sexpr,
     };
 
-    fn alpha_reduce_source(source: &str) -> SExpr<Resolved> {
+    fn alpha_convert_source(source: &str) -> SExpr<Resolved> {
         let mut bindings = Bindings::new();
         let mut env = Env::default();
         let sexpr = parse(&tokenize(source).unwrap()).unwrap().pop().unwrap();
         let expanded = expand(introduce(sexpr), &mut bindings, &mut env).unwrap();
-        alpha_reduce(expanded, &mut bindings)
+        alpha_convert(expanded, &mut bindings)
     }
 
     #[test]
-    fn test_alpha_reduce_quote_keeps_quote_bound() {
-        let result = alpha_reduce_source("'x");
+    fn test_alpha_convert_quote_keeps_quote_bound() {
+        let result = alpha_convert_source("'x");
         let span = Span { lo: 0, hi: 0 };
         let expected = make_sexpr!(
             SExpr::Var(
@@ -151,8 +151,8 @@ mod tests {
     }
 
     #[test]
-    fn test_alpha_reduce_quote_literalizes_nested_payload_identifiers() {
-        let result = alpha_reduce_source("'(x y)");
+    fn test_alpha_convert_quote_literalizes_nested_payload_identifiers() {
+        let result = alpha_convert_source("'(x y)");
         let span = Span { lo: 0, hi: 0 };
         let expected = make_sexpr!(
             SExpr::Var(
@@ -182,8 +182,8 @@ mod tests {
     }
 
     #[test]
-    fn test_alpha_reduce_define_only_affects_later_references() {
-        let result = alpha_reduce_source("(begin (list 1 2) (define list append) (list 1 2))");
+    fn test_alpha_convert_define_only_affects_later_references() {
+        let result = alpha_convert_source("(begin (list 1 2) (define list append) (list 1 2))");
         let span = Span { lo: 0, hi: 0 };
 
         let core_list = Resolved::Bound {
@@ -234,8 +234,8 @@ mod tests {
     }
 
     #[test]
-    fn test_alpha_reduce_first_define_init_expr_has_free_self_reference() {
-        let result = alpha_reduce_source("(define x x)");
+    fn test_alpha_convert_first_define_init_expr_has_free_self_reference() {
+        let result = alpha_convert_source("(define x x)");
         let span = Span { lo: 0, hi: 0 };
         let expected = make_sexpr!(
             SExpr::Var(
@@ -262,8 +262,8 @@ mod tests {
     }
 
     #[test]
-    fn test_alpha_reduce_set_after_define_uses_same_binding() {
-        let result = alpha_reduce_source("(begin (define x 1) (set! x 2))");
+    fn test_alpha_convert_set_after_define_uses_same_binding() {
+        let result = alpha_convert_source("(begin (define x 1) (set! x 2))");
         let span = Span { lo: 0, hi: 0 };
         let x_binding = Resolved::Free {
             symbol: Symbol::new("x"),
@@ -303,8 +303,8 @@ mod tests {
     }
 
     #[test]
-    fn test_alpha_reduce_shadowed_quote_is_not_treated_as_literal_form() {
-        let result = alpha_reduce_source("(lambda (quote) (quote x))");
+    fn test_alpha_convert_shadowed_quote_is_not_treated_as_literal_form() {
+        let result = alpha_convert_source("(lambda (quote) (quote x))");
         let span = Span { lo: 0, hi: 0 };
         let expected = make_sexpr!(
             SExpr::Var(
@@ -342,8 +342,8 @@ mod tests {
     }
 
     #[test]
-    fn test_alpha_reduce_inserted_vars_are_not_rebound() {
-        let result = alpha_reduce_source("(begin (define lambda 1) (define (x) 1))");
+    fn test_alpha_convert_inserted_vars_are_not_rebound() {
+        let result = alpha_convert_source("(begin (define lambda 1) (define (x) 1))");
         let span = Span { lo: 0, hi: 0 };
         let expected = make_sexpr!(
             SExpr::Var(
