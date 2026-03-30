@@ -214,7 +214,7 @@ fn test_lower_define() {
                     Span { lo: 10, hi: 12 }
                 ))),
             },
-            Span { lo: 1, hi: 13 },
+            Span { lo: 0, hi: 13 },
         )
     );
 }

@@ -1,3 +1,5 @@
+use std::collections::BTreeSet;
+
 use crate::{
     compile::{
         bindings::{Bindings, Id},
@@ -7,23 +9,20 @@ use crate::{
     if_let_sexpr, make_sexpr, match_sexpr,
 };
 
-pub(crate) fn alpha_reduce(sexpr: SExpr<Id>, bindings: &Bindings) -> SExpr<Resolved> {
+pub(crate) fn alpha_reduce(sexpr: SExpr<Id>, bindings: &mut Bindings) -> SExpr<Resolved> {
     match_sexpr! {
         &sexpr;
 
         (var @ SExpr::Var(id, _), rest @ ..) => {
             let resolved = bindings.resolve_sym(id);
-            if resolved.as_ref().is_some_and(|resolved| resolved.0 == "quote") {
+            if resolved.as_ref().is_some_and(|resolved| resolved.0 == "define") {
+                alpha_reduce_define(sexpr.clone(), bindings)
+            } else if resolved.as_ref().is_some_and(|resolved| resolved.0 == "quote") {
                 alpha_reduce_quote(sexpr.clone())
             } else {
+                let var = var.clone().map_var(&make_resolver(bindings));
                 make_sexpr!(
-                    var.clone().map_var(&|id| match bindings.resolve_sym(&id) {
-                        Some(binding) => Resolved::Bound {
-                            symbol: id.symbol,
-                            binding,
-                        },
-                        None => Resolved::Free { symbol: id.symbol },
-                    }),
+                    var,
                     ..alpha_reduce(rest.clone(), bindings),
                 )
             }
@@ -37,12 +36,55 @@ pub(crate) fn alpha_reduce(sexpr: SExpr<Id>, bindings: &Bindings) -> SExpr<Resol
         },
 
         _ => {
-            sexpr.clone().map_var(&|id| match bindings.resolve_sym(&id) {
-                Some(binding) => Resolved::Bound { symbol: id.symbol, binding },
-                None => Resolved::Free { symbol: id.symbol }
-            })
+            sexpr.clone().map_var(&make_resolver(bindings))
         },
     }
+}
+
+fn make_resolver(bindings: &Bindings) -> impl Fn(Id) -> Resolved {
+    |id| {
+        let Some(Id {
+            symbol: binding,
+            scopes,
+        }) = bindings.resolve(&id)
+        else {
+            return Resolved::Free { symbol: id.symbol };
+        };
+        if scopes == BTreeSet::from([Bindings::CORE_SCOPE, Bindings::TOP_LEVEL_SCOPE]) {
+            Resolved::Free { symbol: id.symbol }
+        } else {
+            Resolved::Bound {
+                symbol: id.symbol,
+                binding,
+            }
+        }
+    }
+}
+
+fn alpha_reduce_define(sexpr: SExpr<Id>, bindings: &mut Bindings) -> SExpr<Resolved> {
+    let span = sexpr.get_span();
+    if_let_sexpr! {(SExpr::Var(_, define_span), SExpr::Var(id, _), expr) = sexpr => {
+        let reduced_expr = alpha_reduce(expr, bindings);
+        let binding = bindings.gen_sym(&id);
+        bindings.add_binding(&id, &binding);
+        return make_sexpr!(
+            SExpr::Var(
+                Resolved::Bound {
+                    symbol: Symbol::new("define"),
+                    binding: Symbol::new("define"),
+                },
+                define_span,
+            ),
+            SExpr::Var(
+                Resolved::Free {
+                    symbol: id.symbol,
+                },
+                span,
+            ),
+            reduced_expr,
+        );
+    }}
+    unreachable!("Invalid define form")
 }
 
 fn alpha_reduce_quote(sexpr: SExpr<Id>) -> SExpr<Resolved> {
@@ -82,7 +124,7 @@ mod tests {
         let mut env = Env::default();
         let sexpr = parse(&tokenize(source).unwrap()).unwrap().pop().unwrap();
         let expanded = expand(introduce(sexpr), &mut bindings, &mut env).unwrap();
-        alpha_reduce(expanded, &bindings)
+        alpha_reduce(expanded, &mut bindings)
     }
 
     #[test]
@@ -136,6 +178,127 @@ mod tests {
             ),
         );
 
+        assert_eq!(result.without_spans(), expected.without_spans());
+    }
+
+    #[test]
+    fn test_alpha_reduce_define_only_affects_later_references() {
+        let result = alpha_reduce_source("(begin (list 1 2) (define list append) (list 1 2))");
+        let span = Span { lo: 0, hi: 0 };
+
+        let core_list = Resolved::Bound {
+            symbol: Symbol::new("list"),
+            binding: Symbol::new("list"),
+        };
+        let rebound_list = Resolved::Free {
+            symbol: Symbol::new("list"),
+        };
+
+        let expected = make_sexpr!(
+            SExpr::Var(
+                Resolved::Bound {
+                    symbol: Symbol::new("begin"),
+                    binding: Symbol::new("begin"),
+                },
+                span,
+            ),
+            (
+                SExpr::Var(core_list, span),
+                SExpr::Num(crate::compile::sexpr::Num(1.0), span),
+                SExpr::Num(crate::compile::sexpr::Num(2.0), span),
+            ),
+            (
+                SExpr::Var(
+                    Resolved::Bound {
+                        symbol: Symbol::new("define"),
+                        binding: Symbol::new("define"),
+                    },
+                    span,
+                ),
+                SExpr::Var(rebound_list.clone(), span),
+                SExpr::Var(
+                    Resolved::Bound {
+                        symbol: Symbol::new("append"),
+                        binding: Symbol::new("append"),
+                    },
+                    span,
+                ),
+            ),
+            (
+                SExpr::Var(rebound_list, span),
+                SExpr::Num(crate::compile::sexpr::Num(1.0), span),
+                SExpr::Num(crate::compile::sexpr::Num(2.0), span),
+            ),
+        );
+        assert_eq!(result.without_spans(), expected.without_spans());
+    }
+
+    #[test]
+    fn test_alpha_reduce_first_define_init_expr_has_free_self_reference() {
+        let result = alpha_reduce_source("(define x x)");
+        let span = Span { lo: 0, hi: 0 };
+        let expected = make_sexpr!(
+            SExpr::Var(
+                Resolved::Bound {
+                    symbol: Symbol::new("define"),
+                    binding: Symbol::new("define"),
+                },
+                span,
+            ),
+            SExpr::Var(
+                Resolved::Free {
+                    symbol: Symbol::new("x"),
+                },
+                span,
+            ),
+            SExpr::Var(
+                Resolved::Free {
+                    symbol: Symbol::new("x"),
+                },
+                span,
+            ),
+        );
+        assert_eq!(result.without_spans(), expected.without_spans());
+    }
+
+    #[test]
+    fn test_alpha_reduce_set_after_define_uses_same_binding() {
+        let result = alpha_reduce_source("(begin (define x 1) (set! x 2))");
+        let span = Span { lo: 0, hi: 0 };
+        let x_binding = Resolved::Free {
+            symbol: Symbol::new("x"),
+        };
+        let expected = make_sexpr!(
+            SExpr::Var(
+                Resolved::Bound {
+                    symbol: Symbol::new("begin"),
+                    binding: Symbol::new("begin"),
+                },
+                span,
+            ),
+            (
+                SExpr::Var(
+                    Resolved::Bound {
+                        symbol: Symbol::new("define"),
+                        binding: Symbol::new("define"),
+                    },
+                    span,
+                ),
+                SExpr::Var(x_binding.clone(), span),
+                SExpr::Num(crate::compile::sexpr::Num(1.0), span),
+            ),
+            (
+                SExpr::Var(
+                    Resolved::Bound {
+                        symbol: Symbol::new("set!"),
+                        binding: Symbol::new("set!"),
+                    },
+                    span,
+                ),
+                SExpr::Var(x_binding, span),
+                SExpr::Num(crate::compile::sexpr::Num(2.0), span),
+            ),
+        );
         assert_eq!(result.without_spans(), expected.without_spans());
     }
 
@@ -199,9 +362,8 @@ mod tests {
                     span,
                 ),
                 SExpr::Var(
-                    Resolved::Bound {
-                        symbol: Symbol::new("lambda"),
-                        binding: Symbol::new("lambda"),
+                    Resolved::Free {
+                        symbol: Symbol::new("lambda")
                     },
                     span,
                 ),
@@ -217,7 +379,7 @@ mod tests {
                 ),
                 SExpr::Var(
                     Resolved::Free {
-                        symbol: Symbol::new("x")
+                        symbol: Symbol::new("x"),
                     },
                     span,
                 ),
