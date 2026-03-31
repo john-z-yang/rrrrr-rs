@@ -9,8 +9,8 @@ use crate::{
 };
 
 pub(crate) fn lower(sexpr: SExpr<Resolved>) -> Expr {
-    if let SExpr::Var(resolved, span) = &sexpr {
-        return Expr::Var(resolved.clone(), *span);
+    if let SExpr::Var(resolved, span) = sexpr {
+        return Expr::Var(resolved, span);
     }
     if_let_sexpr! {(SExpr::Var(..), ..) = &sexpr =>
         return lower_id_application(sexpr);
@@ -49,12 +49,6 @@ fn lower_lambda(sexpr: SExpr<Resolved>) -> Expr {
         match sexpr_arg {
             SExpr::Var(Resolved::Bound { binding, .. }, _) => var_arg = Some(binding),
             SExpr::Cons(..) => {
-                for_each(&sexpr_arg, |arg| {
-                    let SExpr::Var(Resolved::Bound { binding, .. }, _) = arg else {
-                        unreachable!("Bad parameter")
-                    };
-                    args.push(binding.clone());
-                });
                 var_arg = try_dotted_tail(&sexpr_arg).and_then(|tail| {
                     match tail {
                         SExpr::Var(Resolved::Bound { binding, .. }, _) => Some(binding.clone()),
@@ -62,12 +56,18 @@ fn lower_lambda(sexpr: SExpr<Resolved>) -> Expr {
                         _ => unreachable!("Bad rest parameter")
                     }
                 });
+                for_each(sexpr_arg, |arg| {
+                    let SExpr::Var(Resolved::Bound { binding, .. }, _) = arg else {
+                        unreachable!("Bad parameter")
+                    };
+                    args.push(binding);
+                });
             }
             SExpr::Nil(_) => {}
             _ => unreachable!("Invalid lambda form"),
         };
-        for_each(&sexpr_body, |sexpr| {
-            body.push(lower(sexpr.clone()));
+        for_each(sexpr_body, |sexpr| {
+            body.push(lower(sexpr));
         });
         return Expr::Lambda(
             Lambda {
@@ -86,15 +86,15 @@ fn lower_letrec(sexpr: SExpr<Resolved>) -> Expr {
     if_let_sexpr! {(_, sexpr_initializers @ (..), sexpr_body @ ..) = sexpr => {
         let mut initializers = vec![];
         let mut body = vec![];
-        for_each(&sexpr_initializers, |initializer| {
+        for_each(sexpr_initializers, |initializer| {
             if_let_sexpr! {(SExpr::Var(Resolved::Bound { binding, .. }, _), exp) = initializer => {
-                initializers.push((binding.clone(), lower(exp.clone())));
+                initializers.push((binding, lower(exp)));
                 return;
             }};
             unreachable!("Invalid letrec initializer")
         });
-        for_each(&sexpr_body, |sexpr| {
-            body.push(lower(sexpr.clone()));
+        for_each(sexpr_body, |sexpr| {
+            body.push(lower(sexpr));
         });
         return Expr::Letrec(
             Letrec {
@@ -112,8 +112,8 @@ fn lower_fn_application(sexpr: SExpr<Resolved>) -> Expr {
     if_let_sexpr! {(first, rest @ ..) = sexpr => {
         let operand = lower(first);
         let mut args = vec![];
-        for_each(&rest, |sexpr| {
-            args.push(lower(sexpr.clone()));
+        for_each(rest, |sexpr| {
+            args.push(lower(sexpr));
         });
 
         return Expr::Application(
@@ -174,8 +174,8 @@ fn lower_begin(sexpr: SExpr<Resolved>) -> Expr {
     let span = sexpr.get_span();
     if_let_sexpr! {(_,  rest @ ..) = sexpr => {
         let mut body = vec![];
-        for_each(&rest, |sexpr| {
-            body.push(lower(sexpr.clone()));
+        for_each(rest, |sexpr| {
+            body.push(lower(sexpr));
         });
         return Expr::Begin(
             Begin { body },
