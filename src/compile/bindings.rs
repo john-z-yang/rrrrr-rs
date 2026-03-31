@@ -5,7 +5,7 @@ use std::{
     fmt,
 };
 
-pub type ScopeId = u64;
+pub type ScopeId = i64;
 pub type Scopes = BTreeSet<ScopeId>;
 
 #[derive(PartialEq, Clone, Eq, Hash, Debug)]
@@ -56,6 +56,7 @@ pub(crate) struct Bindings {
 }
 
 impl Bindings {
+    pub(crate) const Q_QUOTE_SCOPE: ScopeId = -1;
     pub(crate) const CORE_SCOPE: ScopeId = 0;
     pub(crate) const TOP_LEVEL_SCOPE: ScopeId = 1;
 
@@ -88,7 +89,10 @@ impl Bindings {
             bindings.add_binding(&Id::new(symbol, [Self::CORE_SCOPE]), &Symbol::new(symbol))
         }
         for symbol in Self::Q_QUOTE_PRIMITIVES {
-            bindings.add_binding(&Id::new(symbol, [Self::CORE_SCOPE]), &Symbol::new(symbol))
+            bindings.add_binding(
+                &Id::new(symbol, [Self::Q_QUOTE_SCOPE]),
+                &Symbol::new(symbol),
+            )
         }
         bindings
     }
@@ -208,16 +212,5 @@ mod tests {
             bindings.resolve_sym(&Id::new("a", [1, 2])),
             Some(Symbol::new("second"))
         );
-    }
-
-    #[test]
-    fn test_resolve_with_core_bindings() {
-        let bindings = Bindings::new();
-        for core_binding in Bindings::Q_QUOTE_PRIMITIVES {
-            assert_eq!(
-                bindings.resolve_sym(&Id::new(core_binding, [Bindings::CORE_SCOPE])),
-                Some(Symbol::new(core_binding))
-            );
-        }
     }
 }

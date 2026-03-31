@@ -1,3 +1,5 @@
+use std::collections::BTreeSet;
+
 use super::definition::{expand_define, expand_define_syntax, expand_set};
 use super::expression::{
     expand_begin, expand_fn_application, expand_if, expand_lambda, expand_let_syntax,
@@ -7,6 +9,7 @@ use super::quote::{expand_quasiquote, expand_quote};
 use super::transformer::Transformer;
 use super::{Context, Env, MAX_MACRO_DEPTH};
 use crate::compile::bindings::Id;
+use crate::compile::sexpr::Cons;
 use crate::compile::{
     bindings::Bindings,
     compilation_error::{CompilationError, Result},
@@ -99,21 +102,30 @@ fn expand_id_application(
     };
 
     match binding.0.as_str() {
-        "quote" => expand_quote(sexpr),
+        "quote" => Ok(canonize_core_form(expand_quote(sexpr)?)),
+        "lambda" => Ok(canonize_core_form(expand_lambda(
+            sexpr, bindings, env, ctx,
+        )?)),
+        "letrec" => Ok(canonize_core_form(expand_letrec(
+            sexpr, bindings, env, ctx,
+        )?)),
+        "define" => Ok(canonize_core_form(expand_define(
+            sexpr, bindings, env, ctx,
+        )?)),
+        "set!" => Ok(canonize_core_form(expand_set(sexpr, bindings, env, ctx)?)),
+        "begin" => Ok(canonize_core_form(expand_begin(sexpr, bindings, env, ctx)?)),
+        "if" => Ok(canonize_core_form(expand_if(sexpr, bindings, env, ctx)?)),
+
+        "define-syntax" => expand_define_syntax(sexpr, bindings, env, ctx),
+        "let-syntax" => expand_let_syntax(sexpr, bindings, env, ctx),
+        "letrec-syntax" => expand_letrec_syntax(sexpr, bindings, env, ctx),
+
         "quasiquote" => expand_quasiquote(sexpr, bindings, env, ctx),
         "unquote" | "unquote-splicing" => Err(CompilationError {
             span: sexpr.get_span(),
             reason: format!("Invalid '{}' form: not in 'quasiquote'", binding),
         }),
-        "let-syntax" => expand_let_syntax(sexpr, bindings, env, ctx),
-        "letrec-syntax" => expand_letrec_syntax(sexpr, bindings, env, ctx),
-        "lambda" => expand_lambda(sexpr, bindings, env, ctx),
-        "define" => expand_define(sexpr, bindings, env, ctx),
-        "define-syntax" => expand_define_syntax(sexpr, bindings, env, ctx),
-        "letrec" => expand_letrec(sexpr, bindings, env, ctx),
-        "set!" => expand_set(sexpr, bindings, env, ctx),
-        "begin" => expand_begin(sexpr, bindings, env, ctx),
-        "if" => expand_if(sexpr, bindings, env, ctx),
+
         _ => {
             if let Some(transformer) = env.get(&binding) {
                 expand_sexpr(
@@ -127,4 +139,15 @@ fn expand_id_application(
             }
         }
     }
+}
+
+fn canonize_core_form(mut sexpr: SExpr<Id>) -> SExpr<Id> {
+    let SExpr::Cons(Cons { ref mut car, .. }, _) = sexpr else {
+        unreachable!("canonize_core_form expected sexpr to be a cons");
+    };
+    let SExpr::Var(ref mut id, ..) = **car else {
+        unreachable!("canonize_core_form expected car of sexpr to be a var");
+    };
+    id.scopes = BTreeSet::from([Bindings::CORE_SCOPE]);
+    sexpr
 }

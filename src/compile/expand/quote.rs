@@ -48,9 +48,9 @@ fn expand_quasiquote_args_list(
                 && binding.symbol.0 == "quasiquote"
             {
                 Ok(make_sexpr!(
-                    SExpr::Var(Id::new("list", [Bindings::CORE_SCOPE]), sexpr.get_span()),
+                    SExpr::Var(Id::new("list", [Bindings::Q_QUOTE_SCOPE]), sexpr.get_span()),
                     (
-                        SExpr::Var(Id::new("cons", [Bindings::CORE_SCOPE]), sexpr.get_span()),
+                        SExpr::Var(Id::new("cons", [Bindings::Q_QUOTE_SCOPE]), sexpr.get_span()),
                         (
                             SExpr::Var(Id::new("quote", [Bindings::CORE_SCOPE]), sexpr.get_span()),
                             SExpr::Var(Id::new("quasiquote", [Bindings::CORE_SCOPE]), sexpr.get_span()),
@@ -64,9 +64,9 @@ fn expand_quasiquote_args_list(
             {
                 if depth > 0 {
                     Ok(make_sexpr!(
-                        SExpr::Var(Id::new("list", [Bindings::CORE_SCOPE]), sexpr.get_span()),
+                        SExpr::Var(Id::new("list", [Bindings::Q_QUOTE_SCOPE]), sexpr.get_span()),
                         (
-                            SExpr::Var(Id::new("cons", [Bindings::CORE_SCOPE]), sexpr.get_span()),
+                            SExpr::Var(Id::new("cons", [Bindings::Q_QUOTE_SCOPE]), sexpr.get_span()),
                             (
                                 SExpr::Var(Id::new("quote", [Bindings::CORE_SCOPE]), sexpr.get_span()),
                                 car.clone(),
@@ -76,20 +76,20 @@ fn expand_quasiquote_args_list(
                     ))
                 } else if binding.symbol.0 == "unquote" {
                     Ok(make_sexpr!(
-                        SExpr::Var(Id::new("list", [Bindings::CORE_SCOPE]), sexpr.get_span()),
+                        SExpr::Var(Id::new("list", [Bindings::Q_QUOTE_SCOPE]), sexpr.get_span()),
                         ..cdr.clone(),
                     ))
                 } else {
                     Ok(make_sexpr!(
-                        SExpr::Var(Id::new("append", [Bindings::CORE_SCOPE]), sexpr.get_span()),
+                        SExpr::Var(Id::new("append", [Bindings::Q_QUOTE_SCOPE]), sexpr.get_span()),
                         ..cdr.clone(),
                     ))
                 }
             } else {
                 Ok(make_sexpr!(
-                    SExpr::Var(Id::new("list", [Bindings::CORE_SCOPE]), sexpr.get_span()),
+                    SExpr::Var(Id::new("list", [Bindings::Q_QUOTE_SCOPE]), sexpr.get_span()),
                     (
-                        SExpr::Var(Id::new("append", [Bindings::CORE_SCOPE]), sexpr.get_span()),
+                        SExpr::Var(Id::new("append", [Bindings::Q_QUOTE_SCOPE]), sexpr.get_span()),
                         expand_quasiquote_args_list(car.clone(), bindings, depth)?,
                         expand_quasiquote_args(cdr.clone(), bindings, depth)?,
                     ),
@@ -99,9 +99,9 @@ fn expand_quasiquote_args_list(
 
         SExpr::Vector(vector, span) => {
             Ok(make_sexpr!(
-                SExpr::Var(Id::new("list", [Bindings::CORE_SCOPE]), sexpr.get_span()),
+                SExpr::Var(Id::new("list", [Bindings::Q_QUOTE_SCOPE]), sexpr.get_span()),
                 (
-                    SExpr::Var(Id::new("list->vector", [Bindings::CORE_SCOPE]), sexpr.get_span()),
+                    SExpr::Var(Id::new("list->vector", [Bindings::Q_QUOTE_SCOPE]), sexpr.get_span()),
                     expand_quasiquote_args(vector.clone().into_cons_list(*span), bindings, depth)?,
                 ),
             ))
@@ -130,7 +130,7 @@ fn expand_quasiquote_args(
                 && binding.symbol.0 == "quasiquote"
             {
                 Ok(make_sexpr!(
-                    SExpr::Var(Id::new("cons", [Bindings::CORE_SCOPE]), sexpr.get_span()),
+                    SExpr::Var(Id::new("cons", [Bindings::Q_QUOTE_SCOPE]), sexpr.get_span()),
                     (
                         SExpr::Var(
                             Id::new("quote", [Bindings::CORE_SCOPE]),
@@ -149,7 +149,7 @@ fn expand_quasiquote_args(
             {
                 if depth > 0 {
                     Ok(make_sexpr!(
-                        SExpr::Var(Id::new("cons", [Bindings::CORE_SCOPE]), sexpr.get_span()),
+                        SExpr::Var(Id::new("cons", [Bindings::Q_QUOTE_SCOPE]), sexpr.get_span()),
                         (
                             SExpr::Var(Id::new("quote", [Bindings::CORE_SCOPE]), sexpr.get_span()),
                             car.clone(),
@@ -166,7 +166,7 @@ fn expand_quasiquote_args(
                 }
             } else {
                 Ok(make_sexpr!(
-                    SExpr::Var(Id::new("append", [Bindings::CORE_SCOPE]), sexpr.get_span()),
+                    SExpr::Var(Id::new("append", [Bindings::Q_QUOTE_SCOPE]), sexpr.get_span()),
                     expand_quasiquote_args_list(car.clone(), bindings, depth)?,
                     expand_quasiquote_args(cdr.clone(), bindings, depth)?,
                 ))
@@ -175,7 +175,7 @@ fn expand_quasiquote_args(
 
         SExpr::Vector(vector, span) => {
             Ok(make_sexpr!(
-                SExpr::Var(Id::new("list->vector", [Bindings::CORE_SCOPE]), sexpr.get_span()),
+                SExpr::Var(Id::new("list->vector", [Bindings::Q_QUOTE_SCOPE]), sexpr.get_span()),
                 expand_quasiquote_args(vector.clone().into_cons_list(*span), bindings, depth)?,
             ))
         },

@@ -15,9 +15,7 @@ pub(crate) fn alpha_convert(sexpr: SExpr<Id>, bindings: &mut Bindings) -> SExpr<
 
         (var @ SExpr::Var(id, _), rest @ ..) => {
             let resolved = bindings.resolve_sym(id);
-            if resolved.as_ref().is_some_and(|resolved| resolved.0 == "define") {
-                alpha_convert_define(sexpr.clone(), bindings)
-            } else if resolved.as_ref().is_some_and(|resolved| resolved.0 == "quote") {
+            if resolved.as_ref().is_some_and(|resolved| resolved.0 == "quote") {
                 alpha_convert_quote(sexpr.clone())
             } else {
                 let var = var.clone().map_var(&make_resolver(bindings));
@@ -59,32 +57,6 @@ fn make_resolver(bindings: &Bindings) -> impl Fn(Id) -> Resolved {
             }
         }
     }
-}
-
-fn alpha_convert_define(sexpr: SExpr<Id>, bindings: &mut Bindings) -> SExpr<Resolved> {
-    let span = sexpr.get_span();
-    if_let_sexpr! {(SExpr::Var(_, define_span), SExpr::Var(id, _), expr) = sexpr => {
-        let converted_expr = alpha_convert(expr, bindings);
-        let binding = bindings.gen_sym(&id);
-        bindings.add_binding(&id, &binding);
-        return make_sexpr!(
-            SExpr::Var(
-                Resolved::Bound {
-                    symbol: Symbol::new("define"),
-                    binding: Symbol::new("define"),
-                },
-                define_span,
-            ),
-            SExpr::Var(
-                Resolved::Free {
-                    symbol: id.symbol,
-                },
-                span,
-            ),
-            converted_expr,
-        );
-    }}
-    unreachable!("Invalid define form")
 }
 
 fn alpha_convert_quote(sexpr: SExpr<Id>) -> SExpr<Resolved> {
@@ -178,58 +150,6 @@ mod tests {
             ),
         );
 
-        assert_eq!(result.without_spans(), expected.without_spans());
-    }
-
-    #[test]
-    fn test_alpha_convert_define_only_affects_later_references() {
-        let result = alpha_convert_source("(begin (list 1 2) (define list append) (list 1 2))");
-        let span = Span { lo: 0, hi: 0 };
-
-        let core_list = Resolved::Bound {
-            symbol: Symbol::new("list"),
-            binding: Symbol::new("list"),
-        };
-        let rebound_list = Resolved::Free {
-            symbol: Symbol::new("list"),
-        };
-
-        let expected = make_sexpr!(
-            SExpr::Var(
-                Resolved::Bound {
-                    symbol: Symbol::new("begin"),
-                    binding: Symbol::new("begin"),
-                },
-                span,
-            ),
-            (
-                SExpr::Var(core_list, span),
-                SExpr::Num(crate::compile::sexpr::Num(1.0), span),
-                SExpr::Num(crate::compile::sexpr::Num(2.0), span),
-            ),
-            (
-                SExpr::Var(
-                    Resolved::Bound {
-                        symbol: Symbol::new("define"),
-                        binding: Symbol::new("define"),
-                    },
-                    span,
-                ),
-                SExpr::Var(rebound_list.clone(), span),
-                SExpr::Var(
-                    Resolved::Bound {
-                        symbol: Symbol::new("append"),
-                        binding: Symbol::new("append"),
-                    },
-                    span,
-                ),
-            ),
-            (
-                SExpr::Var(rebound_list, span),
-                SExpr::Num(crate::compile::sexpr::Num(1.0), span),
-                SExpr::Num(crate::compile::sexpr::Num(2.0), span),
-            ),
-        );
         assert_eq!(result.without_spans(), expected.without_spans());
     }
 
@@ -394,6 +314,56 @@ mod tests {
                     SExpr::Nil(span),
                     SExpr::Num(Num(1.0), span),
                 ),
+            ),
+        );
+
+        assert_eq!(result.without_spans(), expected.without_spans());
+    }
+
+    #[test]
+    fn test_alpha_convert_rebind_lambda_in_begin() {
+        let result = alpha_convert_source("(begin (lambda () 1) (define lambda 1) lambda)");
+        let span = Span { lo: 0, hi: 0 };
+        let expected = make_sexpr!(
+            SExpr::Var(
+                Resolved::Bound {
+                    symbol: Symbol::new("begin"),
+                    binding: Symbol::new("begin"),
+                },
+                span,
+            ),
+            (
+                SExpr::Var(
+                    Resolved::Bound {
+                        symbol: Symbol::new("lambda"),
+                        binding: Symbol::new("lambda"),
+                    },
+                    span,
+                ),
+                SExpr::Nil(span),
+                SExpr::Num(Num(1.0), span),
+            ),
+            (
+                SExpr::Var(
+                    Resolved::Bound {
+                        symbol: Symbol::new("define"),
+                        binding: Symbol::new("define"),
+                    },
+                    span,
+                ),
+                SExpr::Var(
+                    Resolved::Free {
+                        symbol: Symbol::new("lambda"),
+                    },
+                    span,
+                ),
+                SExpr::Num(Num(1.0), span),
+            ),
+            SExpr::Var(
+                Resolved::Free {
+                    symbol: Symbol::new("lambda"),
+                },
+                span,
             ),
         );
 

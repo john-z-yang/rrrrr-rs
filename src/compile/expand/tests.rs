@@ -44,10 +44,7 @@ fn test_expand_lambda() {
         expand_single_sexpr_src("(lambda (x y) (cons x y))", &mut bindings, &mut env).unwrap();
     let span = Span { lo: 0, hi: 0 };
     let expected = make_sexpr!(
-        SExpr::Var(
-            Id::new("lambda", [Bindings::CORE_SCOPE, Bindings::TOP_LEVEL_SCOPE]),
-            span
-        ),
+        SExpr::Var(Id::new("lambda", [Bindings::CORE_SCOPE]), span),
         (
             SExpr::Var(
                 Id::new("x", [Bindings::CORE_SCOPE, Bindings::TOP_LEVEL_SCOPE, 2]),
@@ -94,7 +91,7 @@ fn test_expand_maintains_span() {
     let result = expand_single_sexpr_src(src, &mut bindings, &mut env).unwrap();
     let expected = template_sexpr!(
         (
-            SExpr::Var(Id::new("lambda", [Bindings::CORE_SCOPE, Bindings::TOP_LEVEL_SCOPE]), Span { lo: 10, hi: 16 }),
+            SExpr::Var(Id::new("lambda", [Bindings::CORE_SCOPE]), Span { lo: 10, hi: 16 }),
             (
                 SExpr::Var(Id::new("x", [Bindings::CORE_SCOPE, Bindings::TOP_LEVEL_SCOPE, 2]), Span { lo: 28, hi: 29 }),
                 SExpr::Var(Id::new("y", [Bindings::CORE_SCOPE, Bindings::TOP_LEVEL_SCOPE, 2]), Span { lo: 30, hi: 31 }),
@@ -127,22 +124,13 @@ fn test_expand_lambda_recursive() {
     .unwrap();
     let span = Span { lo: 0, hi: 0 };
     let expected = make_sexpr!(
-        SExpr::Var(
-            Id::new("lambda", [Bindings::CORE_SCOPE, Bindings::TOP_LEVEL_SCOPE,]),
-            span
-        ),
+        SExpr::Var(Id::new("lambda", [Bindings::CORE_SCOPE]), span),
         (SExpr::Var(
             Id::new("x", [Bindings::CORE_SCOPE, Bindings::TOP_LEVEL_SCOPE, 2]),
             span
         )),
         (
-            SExpr::Var(
-                Id::new(
-                    "lambda",
-                    [Bindings::CORE_SCOPE, Bindings::TOP_LEVEL_SCOPE, 2, 3]
-                ),
-                span
-            ),
+            SExpr::Var(Id::new("lambda", [Bindings::CORE_SCOPE]), span),
             (SExpr::Var(
                 Id::new(
                     "y",
@@ -203,10 +191,7 @@ fn test_expand_lambda_dotted_params() {
         expand_single_sexpr_src("(lambda (x y . z) (cons x z))", &mut bindings, &mut env).unwrap();
     let span = Span { lo: 0, hi: 0 };
     let expected = make_sexpr!(
-        SExpr::Var(
-            Id::new("lambda", [Bindings::CORE_SCOPE, Bindings::TOP_LEVEL_SCOPE]),
-            span
-        ),
+        SExpr::Var(Id::new("lambda", [Bindings::CORE_SCOPE]), span),
         (
             SExpr::Var(
                 Id::new("x", [Bindings::CORE_SCOPE, Bindings::TOP_LEVEL_SCOPE, 2]),
@@ -249,10 +234,7 @@ fn test_expand_lambda_symbol_param() {
     let result = expand_single_sexpr_src("(lambda x (cons x x))", &mut bindings, &mut env).unwrap();
     let span = Span { lo: 0, hi: 0 };
     let expected = make_sexpr!(
-        SExpr::Var(
-            Id::new("lambda", [Bindings::CORE_SCOPE, Bindings::TOP_LEVEL_SCOPE]),
-            span
-        ),
+        SExpr::Var(Id::new("lambda", [Bindings::CORE_SCOPE]), span),
         SExpr::Var(
             Id::new("x", [Bindings::CORE_SCOPE, Bindings::TOP_LEVEL_SCOPE, 2]),
             span
@@ -301,10 +283,7 @@ fn test_expand_define_function_shorthand() {
             .unwrap()
             .without_spans(),
         make_sexpr!(
-            SExpr::Var(
-                Id::new("define", [Bindings::CORE_SCOPE, Bindings::TOP_LEVEL_SCOPE]),
-                span
-            ),
+            SExpr::Var(Id::new("define", [Bindings::CORE_SCOPE]), span),
             SExpr::Var(
                 Id::new("foo", [Bindings::CORE_SCOPE, Bindings::TOP_LEVEL_SCOPE]),
                 span
@@ -335,10 +314,7 @@ fn test_expand_define_function_shorthand_dotted_pair() {
             .unwrap()
             .without_spans(),
         make_sexpr!(
-            SExpr::Var(
-                Id::new("define", [Bindings::CORE_SCOPE, Bindings::TOP_LEVEL_SCOPE]),
-                span
-            ),
+            SExpr::Var(Id::new("define", [Bindings::CORE_SCOPE]), span),
             SExpr::Var(
                 Id::new("foo", [Bindings::CORE_SCOPE, Bindings::TOP_LEVEL_SCOPE]),
                 span
@@ -369,10 +345,7 @@ fn test_expand_define_function_shorthand_no_args() {
             .unwrap()
             .without_spans(),
         make_sexpr!(
-            SExpr::Var(
-                Id::new("define", [Bindings::CORE_SCOPE, Bindings::TOP_LEVEL_SCOPE]),
-                span
-            ),
+            SExpr::Var(Id::new("define", [Bindings::CORE_SCOPE]), span),
             SExpr::Var(
                 Id::new("foo", [Bindings::CORE_SCOPE, Bindings::TOP_LEVEL_SCOPE]),
                 span
@@ -472,10 +445,7 @@ fn test_expand_and_macro_2_args() {
     let result = expand_single_sexpr_src("(and list list)", &mut bindings, &mut env).unwrap();
     let span = Span { lo: 0, hi: 0 };
     let expected = make_sexpr!(
-        SExpr::Var(
-            Id::new("if", [Bindings::CORE_SCOPE, Bindings::TOP_LEVEL_SCOPE, 2]),
-            span
-        ),
+        SExpr::Var(Id::new("if", [Bindings::CORE_SCOPE]), span),
         SExpr::Var(
             Id::new("list", [Bindings::CORE_SCOPE, Bindings::TOP_LEVEL_SCOPE,]),
             span
@@ -521,22 +491,13 @@ fn test_expand_and_macro_4_args() {
     let result = expand_single_sexpr_src("(and #t #t #t #t)", &mut bindings, &mut env).unwrap();
     let span = Span { lo: 0, hi: 0 };
     let expected = make_sexpr!(
-        SExpr::Var(
-            Id::new("if", [Bindings::CORE_SCOPE, Bindings::TOP_LEVEL_SCOPE, 2]),
-            span
-        ),
+        SExpr::Var(Id::new("if", [Bindings::CORE_SCOPE]), span),
         SExpr::Bool(Bool(true), span),
         (
-            SExpr::Var(
-                Id::new("if", [Bindings::CORE_SCOPE, Bindings::TOP_LEVEL_SCOPE, 3]),
-                span
-            ),
+            SExpr::Var(Id::new("if", [Bindings::CORE_SCOPE]), span),
             SExpr::Bool(Bool(true), span),
             (
-                SExpr::Var(
-                    Id::new("if", [Bindings::CORE_SCOPE, Bindings::TOP_LEVEL_SCOPE, 4]),
-                    span
-                ),
+                SExpr::Var(Id::new("if", [Bindings::CORE_SCOPE]), span),
                 SExpr::Bool(Bool(true), span),
                 SExpr::Bool(Bool(true), span),
                 SExpr::Bool(Bool(false), span),
@@ -582,13 +543,7 @@ fn test_expand_simple_macro_hygiene() {
     let result = expand_single_sexpr_src("(my-macro x)", &mut bindings, &mut env).unwrap();
     let span = Span { lo: 0, hi: 0 };
     let expected = make_sexpr!(
-        SExpr::Var(
-            Id::new(
-                "lambda",
-                [Bindings::CORE_SCOPE, Bindings::TOP_LEVEL_SCOPE, 2]
-            ),
-            span
-        ),
+        SExpr::Var(Id::new("lambda", [Bindings::CORE_SCOPE]), span),
         (SExpr::Var(
             Id::new("x", [Bindings::CORE_SCOPE, Bindings::TOP_LEVEL_SCOPE, 2, 3]),
             span
@@ -865,13 +820,7 @@ fn test_expand_let_syntax_multiple_body_exprs_recursive_defn() {
                     span
                 ),
                 (
-                    SExpr::Var(
-                        Id::new(
-                            "lambda",
-                            [Bindings::CORE_SCOPE, Bindings::TOP_LEVEL_SCOPE, 2, 3]
-                        ),
-                        span
-                    ),
+                    SExpr::Var(Id::new("lambda", [Bindings::CORE_SCOPE]), span),
                     SExpr::Nil(span),
                     SExpr::Var(
                         Id::new(
@@ -888,13 +837,7 @@ fn test_expand_let_syntax_multiple_body_exprs_recursive_defn() {
                     span
                 ),
                 (
-                    SExpr::Var(
-                        Id::new(
-                            "lambda",
-                            [Bindings::CORE_SCOPE, Bindings::TOP_LEVEL_SCOPE, 2, 3]
-                        ),
-                        span
-                    ),
+                    SExpr::Var(Id::new("lambda", [Bindings::CORE_SCOPE]), span),
                     SExpr::Nil(span),
                     SExpr::Var(
                         Id::new(
@@ -1076,10 +1019,7 @@ fn test_expand_if_three_arms() {
     let result = expand_single_sexpr_src("(if #t 1 2)", &mut bindings, &mut env).unwrap();
     let span = Span { lo: 0, hi: 0 };
     let expected = make_sexpr!(
-        SExpr::Var(
-            Id::new("if", [Bindings::CORE_SCOPE, Bindings::TOP_LEVEL_SCOPE]),
-            span
-        ),
+        SExpr::Var(Id::new("if", [Bindings::CORE_SCOPE]), span),
         SExpr::Bool(Bool(true), span),
         SExpr::Num(Num(1.0), span),
         SExpr::Num(Num(2.0), span),
@@ -1094,10 +1034,7 @@ fn test_expand_if_two_arms_normalizes_to_three() {
     let result = expand_single_sexpr_src("(if #t 1)", &mut bindings, &mut env).unwrap();
     let span = Span { lo: 0, hi: 0 };
     let expected = make_sexpr!(
-        SExpr::Var(
-            Id::new("if", [Bindings::CORE_SCOPE, Bindings::TOP_LEVEL_SCOPE]),
-            span
-        ),
+        SExpr::Var(Id::new("if", [Bindings::CORE_SCOPE]), span),
         SExpr::Bool(Bool(true), span),
         SExpr::Num(Num(1.0), span),
         SExpr::Void(span),
@@ -1138,13 +1075,13 @@ fn test_expand_quasiquote_constant_list() {
     let result = expand_single_sexpr_src("`(1 2)", &mut bindings, &mut env).unwrap();
     let span = Span { lo: 0, hi: 0 };
     let expected = make_sexpr!(
-        SExpr::Var(Id::new("append", [Bindings::CORE_SCOPE]), span),
+        SExpr::Var(Id::new("append", [Bindings::Q_QUOTE_SCOPE]), span),
         (
             SExpr::Var(Id::new("quote", [Bindings::CORE_SCOPE]), span),
             (SExpr::Num(Num(1.0), span)),
         ),
         (
-            SExpr::Var(Id::new("append", [Bindings::CORE_SCOPE]), span),
+            SExpr::Var(Id::new("append", [Bindings::Q_QUOTE_SCOPE]), span),
             (
                 SExpr::Var(Id::new("quote", [Bindings::CORE_SCOPE]), span),
                 (SExpr::Num(Num(2.0), span)),

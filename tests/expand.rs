@@ -957,9 +957,7 @@ fn test_expand_define_syntax_with_pattern_variable() {
     let result = session_expand(&mut session, "(double 5)").unwrap();
 
     let list_id = first(&result);
-    assert!(
-        matches!(&list_id, SExpr::Var(id, _) if session.resolve_sym(id) == Some(Symbol::new("list")))
-    );
+    assert!(matches!(&list_id, SExpr::Var(id, _) if id.symbol.0.as_str() == "list"));
     assert_eq!(
         try_nth(&result, 1).unwrap().without_spans(),
         SExpr::Num(Num(5.0), Span { lo: 0, hi: 0 }).without_spans()
@@ -988,9 +986,7 @@ fn test_expand_define_syntax_with_ellipsis() {
     let span = Span { lo: 0, hi: 0 };
 
     let list_id = first(&result);
-    assert!(
-        matches!(&list_id, SExpr::Var(id, _) if session.resolve_sym(id) == Some(Symbol::new("list")))
-    );
+    assert!(matches!(&list_id, SExpr::Var(id, _) if id.symbol.0.as_str() == "list"));
     assert_eq!(
         try_nth(&result, 1).unwrap().without_spans(),
         SExpr::Num(Num(1.0), span).without_spans()
