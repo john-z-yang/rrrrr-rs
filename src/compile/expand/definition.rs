@@ -22,7 +22,7 @@ pub(super) fn expand_set(
             && Bindings::CORE_FORMS.contains(&resolved.0.as_str()) {
             return Err(CompilationError {
                 span: sexpr.get_span(),
-                reason: format!("Cannot mutate core forms/primatives '{}'", id),
+                reason: format!("Cannot mutate core form '{}'", id),
             })
         }
         let exp = expand_sexpr(exp.clone(), bindings, env, ctx.with_syntax_ctx(SyntaxContext::Expression))?;
