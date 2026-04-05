@@ -211,11 +211,11 @@ pub(super) fn expand_letrec(
         let initializers = initializers.clone().add_scope(scope_id);
         let body = body.clone().add_scope(scope_id);
 
-        let mut initializer_symbols = HashSet::new();
+        let mut initializers_seen = HashSet::new();
 
         try_for_each(&initializers, |initializer| {
             if_let_sexpr! {(SExpr::Var(id, span), _) = initializer => {
-                if !initializer_symbols.insert(id.symbol.clone()) {
+                if !initializers_seen.insert(id.clone()) {
                     return Err(CompilationError {
                         span: *span,
                         reason: format!("Duplicate id: '{}'", id),
