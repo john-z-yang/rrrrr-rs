@@ -1,11 +1,8 @@
-pub mod alpha_convert;
 pub mod ast;
 pub mod bindings;
 pub mod compilation_error;
-pub mod expand;
 pub mod ident;
-pub mod lower;
-pub mod read;
+pub mod pass;
 pub mod sexpr;
 pub mod span;
 pub mod util;

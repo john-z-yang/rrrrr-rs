@@ -1,6 +1,6 @@
 use crate::{
     compile::{
-        read::{lex::tokenize, parse::parse},
+        pass::read::{lex::tokenize, parse::parse},
         sexpr::{Bool, Num},
         span::Span,
         util::{first, try_last, try_nth},

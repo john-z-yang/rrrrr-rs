@@ -83,8 +83,8 @@ mod tests {
     use super::*;
     use crate::{
         compile::{
-            expand::{Env, expand, introduce},
-            read::{lex::tokenize, parse::parse},
+            pass::expand::{Env, expand, introduce},
+            pass::read::{lex::tokenize, parse::parse},
             sexpr::Num,
             span::Span,
         },

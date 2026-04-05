@@ -2,15 +2,16 @@ pub mod compile;
 pub mod prelude;
 
 use compile::{
-    bindings::Bindings, compilation_error::Result, expand::Env, read::token::Token, sexpr::SExpr,
+    bindings::Bindings, compilation_error::Result, pass::expand::Env, pass::read::token::Token,
+    sexpr::SExpr,
 };
 
 use crate::{
     compile::{
         ast::Expr,
         bindings::Id,
-        expand::introduce_scopes,
         ident::{Resolved, Symbol},
+        pass::expand::introduce_scopes,
     },
     prelude::DERIVED_FORMS,
 };
@@ -52,23 +53,23 @@ impl Session {
     }
 
     pub fn tokenize(&self, source: &str) -> Result<Vec<Token>> {
-        compile::read::lex::tokenize(source)
+        compile::pass::read::lex::tokenize(source)
     }
 
     pub fn parse(&self, tokens: &[Token]) -> Result<Vec<SExpr<Symbol>>> {
-        compile::read::parse::parse(tokens)
+        compile::pass::read::parse::parse(tokens)
     }
 
     pub fn introduce(&self, form: SExpr<Symbol>) -> SExpr<Id> {
-        compile::expand::introduce(form)
+        compile::pass::expand::introduce(form)
     }
 
     pub fn expand(&mut self, form: SExpr<Id>) -> Result<SExpr<Id>> {
-        compile::expand::expand(form, &mut self.bindings, &mut self.expander_env)
+        compile::pass::expand::expand(form, &mut self.bindings, &mut self.expander_env)
     }
 
     pub fn alpha_convert(&mut self, form: SExpr<Id>) -> SExpr<Resolved> {
-        compile::alpha_convert::alpha_convert(form, &mut self.bindings)
+        compile::pass::alpha_convert::alpha_convert(form, &mut self.bindings)
     }
 
     pub fn resolve_sym(&self, id: &Id) -> Option<Symbol> {
@@ -76,7 +77,7 @@ impl Session {
     }
 
     pub fn lower(&self, form: SExpr<Resolved>) -> Expr {
-        compile::lower::lower(form)
+        compile::pass::lower::lower(form)
     }
 }
 

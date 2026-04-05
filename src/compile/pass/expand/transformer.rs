@@ -495,8 +495,10 @@ mod tests {
     use std::collections::HashSet;
 
     use crate::compile::{
-        expand::introduce,
-        read::{lex::tokenize, parse::parse},
+        pass::{
+            expand::introduce,
+            read::{lex::tokenize, parse::parse},
+        },
         span::Span,
     };
 

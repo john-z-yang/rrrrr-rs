@@ -16,7 +16,7 @@ use crate::compile::ident::Symbol;
 
 use self::dispatch::{apply_transformer, expand_sexpr};
 use self::transformer::Transformer;
-use super::{bindings::Bindings, compilation_error::Result, sexpr::SExpr};
+use super::super::{bindings::Bindings, compilation_error::Result, sexpr::SExpr};
 
 #[derive(Debug, Clone, Default)]
 pub(crate) struct Env {

@@ -1,7 +1,7 @@
 use rrrrr_rs::compile::{
     compilation_error::Result,
     ident::Symbol,
-    read::{lex::tokenize, parse::parse},
+    pass::read::{lex::tokenize, parse::parse},
     sexpr::SExpr,
 };
 
