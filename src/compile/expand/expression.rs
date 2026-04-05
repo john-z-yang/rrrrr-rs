@@ -119,7 +119,7 @@ pub(super) fn expand_lambda(
             let args = args.clone().add_scope(scope_id);
             let body = body.clone().add_scope(scope_id);
 
-            let mut arg_symbols = HashSet::new();
+            let mut args_seen = HashSet::new();
 
             try_for_each(&args, |arg| {
                 let SExpr::Var(id, _) = arg else {
@@ -131,7 +131,7 @@ pub(super) fn expand_lambda(
                         ),
                     });
                 };
-                if !arg_symbols.insert(id.symbol.clone()) {
+                if !args_seen.insert(id.clone()) {
                     return Err(CompilationError {
                         span: arg.get_span(),
                         reason: format!("Duplicate parameter: '{}'", id),
@@ -145,7 +145,7 @@ pub(super) fn expand_lambda(
             match try_dotted_tail(&args) {
                 None | Some(SExpr::Nil(_)) => {}
                 Some(SExpr::Var(id, _)) => {
-                    if !arg_symbols.insert(id.symbol.clone()) {
+                    if !args_seen.insert(id.clone()) {
                         return Err(CompilationError {
                             span: sexpr.get_span(),
                             reason: format!("Duplicate parameter: '{}'", id),
