@@ -1,7 +1,7 @@
 use rrrrr_rs::{
     Session,
     compile::{
-        ast::{Application, Begin, Define, Expr, If, Lambda, Letrec, Set},
+        core_expr::{Application, Begin, Define, Expr, If, Lambda, Letrec, Set},
         ident::{Resolved, Symbol},
         sexpr::{Bool, Cons, Num, SExpr, Str},
         span::Span,

@@ -1,6 +1,6 @@
-pub mod ast;
 pub mod bindings;
 pub mod compilation_error;
+pub mod core_expr;
 pub mod ident;
 pub mod pass;
 pub mod sexpr;

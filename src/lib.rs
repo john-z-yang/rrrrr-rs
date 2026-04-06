@@ -8,8 +8,8 @@ use compile::{
 
 use crate::{
     compile::{
-        ast::Expr,
         bindings::Id,
+        core_expr::Expr,
         ident::{Resolved, Symbol},
         pass::expand::introduce_scopes,
     },

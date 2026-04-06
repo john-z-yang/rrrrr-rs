@@ -1,6 +1,6 @@
 use crate::{
     compile::{
-        ast::{Application, Begin, Define, Expr, If, Lambda, Letrec, Set},
+        core_expr::{Application, Begin, Define, Expr, If, Lambda, Letrec, Set},
         ident::Resolved,
         sexpr::SExpr,
         util::{first, for_each, rest, try_dotted_tail},
