@@ -3,7 +3,7 @@ use crate::{
         core_expr::{Application, Begin, Define, Expr, If, Lambda, Letrec, Set},
         ident::Resolved,
         sexpr::SExpr,
-        util::{first, for_each, rest, try_dotted_tail},
+        util::{first, for_each, len, rest, try_dotted_tail},
     },
     if_let_sexpr,
 };
@@ -45,7 +45,6 @@ fn lower_lambda(sexpr: SExpr<Resolved>) -> Expr {
     if_let_sexpr! {(_, sexpr_arg, sexpr_body @ ..) = sexpr => {
         let mut args = vec![];
         let mut var_arg = None;
-        let mut body = vec![];
         match sexpr_arg {
             SExpr::Var(Resolved::Bound { binding, .. }, _) => var_arg = Some(binding),
             SExpr::Cons(..) => {
@@ -66,14 +65,12 @@ fn lower_lambda(sexpr: SExpr<Resolved>) -> Expr {
             SExpr::Nil(_) => {}
             _ => unreachable!("Invalid lambda form"),
         };
-        for_each(sexpr_body, |sexpr| {
-            body.push(lower(sexpr));
-        });
+
         return Expr::Lambda(
             Lambda {
                 args,
                 var_arg,
-                body,
+                body: Box::new(lower_body(sexpr_body)),
             },
             span,
         );
@@ -85,7 +82,6 @@ fn lower_letrec(sexpr: SExpr<Resolved>) -> Expr {
     let span = sexpr.get_span();
     if_let_sexpr! {(_, sexpr_initializers @ (..), sexpr_body @ ..) = sexpr => {
         let mut initializers = vec![];
-        let mut body = vec![];
         for_each(sexpr_initializers, |initializer| {
             if_let_sexpr! {(SExpr::Var(Resolved::Bound { binding, .. }, _), exp) = initializer => {
                 initializers.push((binding, lower(exp)));
@@ -93,18 +89,28 @@ fn lower_letrec(sexpr: SExpr<Resolved>) -> Expr {
             }};
             unreachable!("Invalid letrec initializer")
         });
-        for_each(sexpr_body, |sexpr| {
-            body.push(lower(sexpr));
-        });
         return Expr::Letrec(
             Letrec {
                 initializers,
-                body,
+                body: Box::new(lower_body(sexpr_body)),
             },
             span,
         );
     }}
     unreachable!("Invalid letrec form")
+}
+
+fn lower_body(sexpr: SExpr<Resolved>) -> Expr {
+    let span = sexpr.get_span();
+    if len(&sexpr) > 1 {
+        let mut body = vec![];
+        for_each(sexpr, |sexpr| {
+            body.push(lower(sexpr));
+        });
+        Expr::Begin(Begin { body }, span)
+    } else {
+        lower(first(sexpr))
+    }
 }
 
 fn lower_fn_application(sexpr: SExpr<Resolved>) -> Expr {

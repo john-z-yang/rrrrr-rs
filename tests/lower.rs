@@ -105,13 +105,13 @@ fn test_lower_lambda() {
             Lambda {
                 args: vec![Symbol::new("x:1"), Symbol::new("y:2")],
                 var_arg: None,
-                body: vec![Expr::Var(
+                body: Box::new(Expr::Var(
                     Resolved::Bound {
                         symbol: Symbol::new("x"),
                         binding: Symbol::new("x:1"),
                     },
                     Span { lo: 14, hi: 15 },
-                )],
+                )),
             },
             Span { lo: 1, hi: 16 },
         )
@@ -126,13 +126,13 @@ fn test_lower_lambda_rest_param() {
             Lambda {
                 args: vec![Symbol::new("x:1")],
                 var_arg: Some(Symbol::new("rest:2")),
-                body: vec![Expr::Var(
+                body: Box::new(Expr::Var(
                     Resolved::Bound {
                         symbol: Symbol::new("x"),
                         binding: Symbol::new("x:1"),
                     },
                     Span { lo: 19, hi: 20 },
-                )],
+                )),
             },
             Span { lo: 1, hi: 21 },
         )
@@ -147,13 +147,13 @@ fn test_lower_lambda_single_rest_param() {
             Lambda {
                 args: vec![],
                 var_arg: Some(Symbol::new("args:1")),
-                body: vec![Expr::Var(
+                body: Box::new(Expr::Var(
                     Resolved::Bound {
                         symbol: Symbol::new("args"),
                         binding: Symbol::new("args:1"),
                     },
                     Span { lo: 13, hi: 17 },
-                )],
+                )),
             },
             Span { lo: 1, hi: 18 },
         )
@@ -268,13 +268,13 @@ fn test_lower_letrec() {
                         Expr::Literal(SExpr::Num(Num(2.0), Span { lo: 18, hi: 19 })),
                     ),
                 ],
-                body: vec![Expr::Var(
+                body: Box::new(Expr::Var(
                     Resolved::Bound {
                         symbol: Symbol::new("x"),
                         binding: Symbol::new("x:1"),
                     },
                     Span { lo: 22, hi: 23 },
-                )],
+                )),
             },
             Span { lo: 1, hi: 24 },
         )
@@ -288,7 +288,7 @@ fn test_lower_lambda_with_internal_defines() {
         Lambda {
             args,
             var_arg,
-            mut body,
+            body,
         },
         _,
     ) = result
@@ -297,11 +297,10 @@ fn test_lower_lambda_with_internal_defines() {
     };
     assert!(args.is_empty());
     assert!(var_arg.is_none());
-    assert_eq!(body.len(), 1);
-    let Some(Expr::Letrec(Letrec { initializers, body }, _)) = body.pop() else {
+    let Expr::Letrec(Letrec { initializers, body }, _) = *body else {
         panic!(
             "Expected Lambda to be transformed into Letrec, got {:?}",
-            body[0]
+            body
         )
     };
     assert_eq!(
@@ -319,7 +318,7 @@ fn test_lower_lambda_with_internal_defines() {
     );
     assert_eq!(
         body,
-        vec![Expr::Application(
+        Box::new(Expr::Application(
             Application {
                 operand: Box::new(Expr::Var(
                     Resolved::Free {
@@ -345,6 +344,6 @@ fn test_lower_lambda_with_internal_defines() {
                 ],
             },
             Span { lo: 38, hi: 44 }
-        )]
+        )),
     )
 }

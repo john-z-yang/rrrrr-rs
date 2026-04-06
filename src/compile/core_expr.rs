@@ -64,7 +64,7 @@ impl Debug for Expr {
 pub struct Lambda {
     pub args: Vec<Symbol>,
     pub var_arg: Option<Symbol>,
-    pub body: Vec<Expr>,
+    pub body: Box<Expr>,
 }
 
 impl Display for Lambda {
@@ -88,10 +88,7 @@ impl Display for Lambda {
                 }
             }
         }
-        for expr in self.body.iter() {
-            write!(f, " {}", expr)?;
-        }
-        write!(f, ")")
+        write!(f, " {})", self.body)
     }
 }
 
@@ -114,7 +111,7 @@ impl Display for Application {
 #[derive(Clone, PartialEq, Debug)]
 pub struct Letrec {
     pub initializers: Vec<(Symbol, Expr)>,
-    pub body: Vec<Expr>,
+    pub body: Box<Expr>,
 }
 
 impl Display for Letrec {
@@ -126,11 +123,7 @@ impl Display for Letrec {
             }
             write!(f, "({} {})", symbol, expr)?;
         }
-        write!(f, ")")?;
-        for expr in self.body.iter() {
-            write!(f, " {}", expr)?;
-        }
-        write!(f, ")")
+        write!(f, ") {})", self.body)
     }
 }
 
