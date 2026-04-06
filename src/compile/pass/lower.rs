@@ -1,6 +1,6 @@
 use crate::{
     compile::{
-        core_expr::{Application, Begin, Define, Expr, If, Lambda, Letrec, Set},
+        core_expr::{Application, Begin, Expr, If, Lambda, Letrec, Set},
         ident::Resolved,
         sexpr::SExpr,
         util::{first, for_each, len, rest, try_dotted_tail},
@@ -165,8 +165,9 @@ fn lower_set(sexpr: SExpr<Resolved>) -> Expr {
 fn lower_define(sexpr: SExpr<Resolved>) -> Expr {
     let span = sexpr.get_span();
     if_let_sexpr! {(_, SExpr::Var(var, _), exp) = sexpr => {
-        return Expr::Define(
-            Define {
+        assert!(matches!(var, Resolved::Free { .. }));
+        return Expr::Set(
+            Set {
                 var,
                 expr: Box::new(lower(exp)),
             },

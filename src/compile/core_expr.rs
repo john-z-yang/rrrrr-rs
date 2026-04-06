@@ -14,7 +14,6 @@ pub enum Expr {
     Application(Application, Span),
     Letrec(Letrec, Span),
     If(If, Span),
-    Define(Define, Span),
     Set(Set, Span),
     Begin(Begin, Span),
 }
@@ -33,7 +32,6 @@ impl Display for Expr {
             Expr::Application(application, _) => write!(f, "{}", application),
             Expr::Letrec(letrec, _) => write!(f, "{}", letrec),
             Expr::If(iff, _) => write!(f, "{}", iff),
-            Expr::Define(define, _) => write!(f, "{}", define),
             Expr::Set(set, _) => write!(f, "{}", set),
             Expr::Begin(begin, _) => write!(f, "{}", begin),
         }
@@ -53,7 +51,6 @@ impl Debug for Expr {
                 .finish(),
             Self::Letrec(arg0, arg1) => f.debug_tuple("Letrec").field(arg0).field(arg1).finish(),
             Self::If(arg0, arg1) => f.debug_tuple("If").field(arg0).field(arg1).finish(),
-            Self::Define(arg0, arg1) => f.debug_tuple("Define").field(arg0).field(arg1).finish(),
             Self::Set(arg0, arg1) => f.debug_tuple("Set").field(arg0).field(arg1).finish(),
             Self::Begin(arg0, arg1) => f.debug_tuple("Begin").field(arg0).field(arg1).finish(),
         }
@@ -137,18 +134,6 @@ pub struct If {
 impl Display for If {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "(if {} {} {})", self.test, self.conseq, self.alt)
-    }
-}
-
-#[derive(Clone, PartialEq, Debug)]
-pub struct Define {
-    pub var: Resolved,
-    pub expr: Box<Expr>,
-}
-
-impl Display for Define {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "(define {} {})", self.var, self.expr)
     }
 }
 

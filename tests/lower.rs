@@ -1,7 +1,7 @@
 use rrrrr_rs::{
     Session,
     compile::{
-        core_expr::{Application, Begin, Define, Expr, If, Lambda, Letrec, Set},
+        core_expr::{Application, Begin, Expr, If, Lambda, Letrec, Set},
         ident::{Resolved, Symbol},
         sexpr::{Bool, Cons, Num, SExpr, Str},
         span::Span,
@@ -204,8 +204,8 @@ fn test_lower_if() {
 fn test_lower_define() {
     assert_eq!(
         lower_source("(define x 42)"),
-        Expr::Define(
-            Define {
+        Expr::Set(
+            Set {
                 var: Resolved::Free {
                     symbol: Symbol::new("x"),
                 },
