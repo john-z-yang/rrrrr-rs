@@ -38,7 +38,7 @@ fn test_introduce() {
 
 #[test]
 fn test_expand_lambda() {
-    let mut bindings = Bindings::new();
+    let mut bindings = Bindings::new(Default::default());
     let mut env = Env::default();
     let result =
         expand_single_sexpr_src("(lambda (x y) (cons x y))", &mut bindings, &mut env).unwrap();
@@ -78,7 +78,7 @@ fn test_expand_lambda() {
 
 #[test]
 fn test_expand_maintains_span() {
-    let mut bindings = Bindings::new();
+    let mut bindings = Bindings::new(Default::default());
     let mut env = Env::default();
     let src = "
         (lambda
@@ -110,7 +110,7 @@ fn test_expand_maintains_span() {
 
 #[test]
 fn test_expand_lambda_recursive() {
-    let mut bindings = Bindings::new();
+    let mut bindings = Bindings::new(Default::default());
     let mut env = Env::default();
     let result = expand_single_sexpr_src(
         r#"
@@ -185,7 +185,7 @@ fn test_expand_lambda_recursive() {
 
 #[test]
 fn test_expand_lambda_dotted_params() {
-    let mut bindings = Bindings::new();
+    let mut bindings = Bindings::new(Default::default());
     let mut env = Env::default();
     let result =
         expand_single_sexpr_src("(lambda (x y . z) (cons x z))", &mut bindings, &mut env).unwrap();
@@ -229,7 +229,7 @@ fn test_expand_lambda_dotted_params() {
 
 #[test]
 fn test_expand_lambda_symbol_param() {
-    let mut bindings = Bindings::new();
+    let mut bindings = Bindings::new(Default::default());
     let mut env = Env::default();
     let result = expand_single_sexpr_src("(lambda x (cons x x))", &mut bindings, &mut env).unwrap();
     let span = Span { lo: 0, hi: 0 };
@@ -262,7 +262,7 @@ fn test_expand_lambda_symbol_param() {
 
 #[test]
 fn test_expand_atoms() {
-    let mut bindings = Bindings::new();
+    let mut bindings = Bindings::new(Default::default());
     let mut env = Env::default();
     let span = Span { lo: 0, hi: 0 };
     assert_eq!(
@@ -275,7 +275,7 @@ fn test_expand_atoms() {
 
 #[test]
 fn test_expand_define_function_shorthand() {
-    let mut bindings = Bindings::new();
+    let mut bindings = Bindings::new(Default::default());
     let mut env = Env::default();
     let span = Span { lo: 0, hi: 0 };
     assert_eq!(
@@ -306,7 +306,7 @@ fn test_expand_define_function_shorthand() {
 
 #[test]
 fn test_expand_define_function_shorthand_dotted_pair() {
-    let mut bindings = Bindings::new();
+    let mut bindings = Bindings::new(Default::default());
     let mut env = Env::default();
     let span = Span { lo: 0, hi: 0 };
     assert_eq!(
@@ -337,7 +337,7 @@ fn test_expand_define_function_shorthand_dotted_pair() {
 
 #[test]
 fn test_expand_define_function_shorthand_no_args() {
-    let mut bindings = Bindings::new();
+    let mut bindings = Bindings::new(Default::default());
     let mut env = Env::default();
     let span = Span { lo: 0, hi: 0 };
     assert_eq!(
@@ -362,7 +362,7 @@ fn test_expand_define_function_shorthand_no_args() {
 
 #[test]
 fn test_expand_and_macro_0_arg() {
-    let mut bindings = Bindings::new();
+    let mut bindings = Bindings::new(Default::default());
 
     bindings.add_binding(&Id::new("and", [Bindings::CORE_SCOPE]), &Symbol::new("and"));
 
@@ -391,7 +391,7 @@ fn test_expand_and_macro_0_arg() {
 
 #[test]
 fn test_expand_and_macro_1_arg() {
-    let mut bindings = Bindings::new();
+    let mut bindings = Bindings::new(Default::default());
 
     bindings.add_binding(&Id::new("and", [Bindings::CORE_SCOPE]), &Symbol::new("and"));
 
@@ -420,7 +420,7 @@ fn test_expand_and_macro_1_arg() {
 
 #[test]
 fn test_expand_and_macro_2_args() {
-    let mut bindings = Bindings::new();
+    let mut bindings = Bindings::new(Default::default());
 
     bindings.add_binding(&Id::new("and", [Bindings::CORE_SCOPE]), &Symbol::new("and"));
 
@@ -461,7 +461,7 @@ fn test_expand_and_macro_2_args() {
 
 #[test]
 fn test_expand_and_macro_4_args() {
-    let mut bindings = Bindings::new();
+    let mut bindings = Bindings::new(Default::default());
 
     bindings.add_binding(&Id::new("and", [Bindings::CORE_SCOPE]), &Symbol::new("and"));
 
@@ -517,7 +517,7 @@ fn test_expand_and_macro_4_args() {
 
 #[test]
 fn test_expand_simple_macro_hygiene() {
-    let mut bindings = Bindings::new();
+    let mut bindings = Bindings::new(Default::default());
 
     bindings.add_binding(&Id::new("x", [Bindings::CORE_SCOPE]), &Symbol::new("x"));
     bindings.add_binding(
@@ -579,7 +579,7 @@ fn test_expand_simple_macro_hygiene() {
 
 #[test]
 fn test_expand_or_macro_hygiene() {
-    let mut bindings = Bindings::new();
+    let mut bindings = Bindings::new(Default::default());
 
     bindings.add_binding(
         &Id::new("my-or", [Bindings::CORE_SCOPE]),
@@ -680,7 +680,7 @@ fn test_expand_or_macro_hygiene() {
 
 #[test]
 fn test_expand_let_syntax_via_or_macro() {
-    let mut bindings = Bindings::new();
+    let mut bindings = Bindings::new(Default::default());
     let mut env = Env::default();
     let result = expand_single_sexpr_src(
         r#"
@@ -770,7 +770,7 @@ fn test_expand_let_syntax_via_or_macro() {
 
 #[test]
 fn test_expand_let_syntax_has_body_ctx() {
-    let mut bindings = Bindings::new();
+    let mut bindings = Bindings::new(Default::default());
     let mut env = Env::default();
     expand_single_sexpr_src(
         r#"
@@ -793,7 +793,7 @@ fn test_expand_let_syntax_has_body_ctx() {
 
 #[test]
 fn test_expand_let_syntax_multiple_body_exprs_recursive_defn() {
-    let mut bindings = Bindings::new();
+    let mut bindings = Bindings::new(Default::default());
     let mut env = Env::default();
     let result = expand_single_sexpr_src(
         r#"
@@ -859,7 +859,7 @@ fn test_expand_let_syntax_multiple_body_exprs_recursive_defn() {
 
 #[test]
 fn test_expand_let_syntax_multiple_body_exprs_() {
-    let mut bindings = Bindings::new();
+    let mut bindings = Bindings::new(Default::default());
     let mut env = Env::default();
     let result = expand_single_sexpr_src(
         r#"
@@ -886,7 +886,7 @@ fn test_expand_let_syntax_multiple_body_exprs_() {
 
 #[test]
 fn test_expand_letrec_syntax_cleans_env_after_success() {
-    let mut bindings = Bindings::new();
+    let mut bindings = Bindings::new(Default::default());
     let mut env = Env::default();
     let result = expand_single_sexpr_src(
         r#"
@@ -910,7 +910,7 @@ fn test_expand_letrec_syntax_cleans_env_after_success() {
 
 #[test]
 fn test_expand_letrec_syntax_cleans_env_on_transformer_spec_error() {
-    let mut bindings = Bindings::new();
+    let mut bindings = Bindings::new(Default::default());
     let mut env = Env::default();
     let result = expand_single_sexpr_src(
         r#"
@@ -935,7 +935,7 @@ fn test_expand_letrec_syntax_cleans_env_on_transformer_spec_error() {
 
 #[test]
 fn test_let_syntax_cleans_env_after_success() {
-    let mut bindings = Bindings::new();
+    let mut bindings = Bindings::new(Default::default());
     let mut env = Env::default();
     let result = expand_single_sexpr_src(
         r#"
@@ -956,7 +956,7 @@ fn test_let_syntax_cleans_env_after_success() {
 
 #[test]
 fn test_let_syntax_cleans_env_on_transformer_spec_error() {
-    let mut bindings = Bindings::new();
+    let mut bindings = Bindings::new(Default::default());
     let mut env = Env::default();
     let result = expand_single_sexpr_src(
         r#"
@@ -981,7 +981,7 @@ fn test_let_syntax_cleans_env_on_transformer_spec_error() {
 
 #[test]
 fn test_expand_failed_expansion_does_not_affect_bindings_or_env() {
-    let mut bindings = Bindings::new();
+    let mut bindings = Bindings::new(Default::default());
     let mut env = Env::default();
 
     let result = expand_single_sexpr_src("(begin (define x 1) ())", &mut bindings, &mut env);
@@ -995,7 +995,7 @@ fn test_expand_failed_expansion_does_not_affect_bindings_or_env() {
 
 #[test]
 fn test_expand_failed_define_syntax_does_not_persist_transformer() {
-    let mut bindings = Bindings::new();
+    let mut bindings = Bindings::new(Default::default());
     let mut env = Env::default();
 
     let result = expand_single_sexpr_src(
@@ -1014,7 +1014,7 @@ fn test_expand_failed_define_syntax_does_not_persist_transformer() {
 
 #[test]
 fn test_expand_if_three_arms() {
-    let mut bindings = Bindings::new();
+    let mut bindings = Bindings::new(Default::default());
     let mut env = Env::default();
     let result = expand_single_sexpr_src("(if #t 1 2)", &mut bindings, &mut env).unwrap();
     let span = Span { lo: 0, hi: 0 };
@@ -1029,7 +1029,7 @@ fn test_expand_if_three_arms() {
 
 #[test]
 fn test_expand_if_two_arms_normalizes_to_three() {
-    let mut bindings = Bindings::new();
+    let mut bindings = Bindings::new(Default::default());
     let mut env = Env::default();
     let result = expand_single_sexpr_src("(if #t 1)", &mut bindings, &mut env).unwrap();
     let span = Span { lo: 0, hi: 0 };
@@ -1044,7 +1044,7 @@ fn test_expand_if_two_arms_normalizes_to_three() {
 
 #[test]
 fn test_expand_quasiquote_atom() {
-    let mut bindings = Bindings::new();
+    let mut bindings = Bindings::new(Default::default());
     let mut env = Env::default();
     let result = expand_single_sexpr_src("`42", &mut bindings, &mut env).unwrap();
     let span = Span { lo: 0, hi: 0 };
@@ -1057,7 +1057,7 @@ fn test_expand_quasiquote_atom() {
 
 #[test]
 fn test_expand_quasiquote_empty_list() {
-    let mut bindings = Bindings::new();
+    let mut bindings = Bindings::new(Default::default());
     let mut env = Env::default();
     let result = expand_single_sexpr_src("`()", &mut bindings, &mut env).unwrap();
     let span = Span { lo: 0, hi: 0 };
@@ -1070,7 +1070,7 @@ fn test_expand_quasiquote_empty_list() {
 
 #[test]
 fn test_expand_quasiquote_constant_list() {
-    let mut bindings = Bindings::new();
+    let mut bindings = Bindings::new(Default::default());
     let mut env = Env::default();
     let result = expand_single_sexpr_src("`(1 2)", &mut bindings, &mut env).unwrap();
     let span = Span { lo: 0, hi: 0 };
@@ -1097,7 +1097,7 @@ fn test_expand_quasiquote_constant_list() {
 
 #[test]
 fn test_expand_quasiquote_with_unquote() {
-    let mut bindings = Bindings::new();
+    let mut bindings = Bindings::new(Default::default());
     let mut env = Env::default();
 
     // Expands into (lambda (x) (append (quote (1)) (append (list x) (quote ()))))
@@ -1128,7 +1128,7 @@ fn test_expand_quasiquote_with_unquote() {
 
 #[test]
 fn test_expand_quasiquote_with_unquote_splicing() {
-    let mut bindings = Bindings::new();
+    let mut bindings = Bindings::new(Default::default());
     let mut env = Env::default();
 
     // Expands into (lambda (xs) (append (quote (1)) (append (append xs) (quote ()))))
@@ -1149,7 +1149,7 @@ fn test_expand_quasiquote_with_unquote_splicing() {
 
 #[test]
 fn test_expand_quasiquote_unquote_resolves_to_lambda_param() {
-    let mut bindings = Bindings::new();
+    let mut bindings = Bindings::new(Default::default());
     let mut env = Env::default();
 
     // Expands into (lambda (x) (append (list x) (quote ())))
@@ -1171,7 +1171,7 @@ fn test_expand_quasiquote_unquote_resolves_to_lambda_param() {
 
 #[test]
 fn test_expand_quasiquote_nested_preserves_inner() {
-    let mut bindings = Bindings::new();
+    let mut bindings = Bindings::new(Default::default());
     let mut env = Env::default();
 
     let result = expand_single_sexpr_src("`(1 `(2 3))", &mut bindings, &mut env).unwrap();
@@ -1184,7 +1184,7 @@ fn test_expand_quasiquote_nested_preserves_inner() {
 
 #[test]
 fn test_expand_unquote_outside_quasiquote_errors() {
-    let mut bindings = Bindings::new();
+    let mut bindings = Bindings::new(Default::default());
     let mut env = Env::default();
     let result = expand_single_sexpr_src(",x", &mut bindings, &mut env);
     assert!(result.is_err());
@@ -1192,7 +1192,7 @@ fn test_expand_unquote_outside_quasiquote_errors() {
 
 #[test]
 fn test_expand_unquote_splicing_outside_quasiquote_errors() {
-    let mut bindings = Bindings::new();
+    let mut bindings = Bindings::new(Default::default());
     let mut env = Env::default();
     let result = expand_single_sexpr_src(",@x", &mut bindings, &mut env);
     assert!(result.is_err());

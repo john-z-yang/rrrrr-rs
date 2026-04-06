@@ -545,7 +545,10 @@ mod tests {
             Rc::new(literals.iter().map(|s| Symbol::new(s)).collect()),
         )
         .expect("invalid pattern in test");
-        rule.match_pattern(&introduce_single_sexpr_src(target), &Bindings::new())
+        rule.match_pattern(
+            &introduce_single_sexpr_src(target),
+            &Bindings::new(Default::default()),
+        )
     }
 
     fn assert_binding(
@@ -756,7 +759,10 @@ mod tests {
         )
         .expect("invalid pattern in test");
         let captures = rule
-            .match_pattern(&introduce_single_sexpr_src(target), &Bindings::new())
+            .match_pattern(
+                &introduce_single_sexpr_src(target),
+                &Bindings::new(Default::default()),
+            )
             .expect("pattern should match target");
         let result = rule
             .render_template(&captures)
@@ -1075,7 +1081,10 @@ mod tests {
 
     fn transform(transformer: &Transformer, src: &str) -> SExpr<Id> {
         transformer
-            .transform(&introduce_single_sexpr_src(src), &Bindings::new())
+            .transform(
+                &introduce_single_sexpr_src(src),
+                &Bindings::new(Default::default()),
+            )
             .unwrap()
             .unwrap()
     }
@@ -1172,8 +1181,11 @@ mod tests {
                ((_ x) x))",
         );
         assert!(
-            t.transform(&introduce_single_sexpr_src("42"), &Bindings::new(),)
-                .is_none()
+            t.transform(
+                &introduce_single_sexpr_src("42"),
+                &Bindings::new(Default::default()),
+            )
+            .is_none()
         );
     }
 
@@ -1218,7 +1230,7 @@ mod tests {
         assert!(
             t.transform(
                 &introduce_single_sexpr_src("(mac (1 2 3))"),
-                &Bindings::new(),
+                &Bindings::new(Default::default()),
             )
             .is_none()
         );
@@ -1231,8 +1243,11 @@ mod tests {
                ((_ a b) (b a)))",
         );
         assert!(
-            t.transform(&introduce_single_sexpr_src("(mac x)"), &Bindings::new(),)
-                .is_none()
+            t.transform(
+                &introduce_single_sexpr_src("(mac x)"),
+                &Bindings::new(Default::default()),
+            )
+            .is_none()
         );
     }
 
@@ -1261,8 +1276,11 @@ mod tests {
         );
         // Non-matching: `=>` in literal position doesn't match different identifier
         assert!(
-            t.transform(&introduce_single_sexpr_src("(mac x y f)"), &Bindings::new(),)
-                .is_none()
+            t.transform(
+                &introduce_single_sexpr_src("(mac x y f)"),
+                &Bindings::new(Default::default()),
+            )
+            .is_none()
         );
     }
 

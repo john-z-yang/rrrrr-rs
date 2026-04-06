@@ -12,7 +12,6 @@ pub enum Expr {
     Var(Resolved, Span),
     Lambda(Lambda, Span),
     Application(Application, Span),
-    Letrec(Letrec, Span),
     If(If, Span),
     Set(Set, Span),
     Begin(Begin, Span),
@@ -30,7 +29,6 @@ impl Display for Expr {
             Expr::Var(resolved, _) => write!(f, "{}", resolved),
             Expr::Lambda(lambda, _) => write!(f, "{}", lambda),
             Expr::Application(application, _) => write!(f, "{}", application),
-            Expr::Letrec(letrec, _) => write!(f, "{}", letrec),
             Expr::If(iff, _) => write!(f, "{}", iff),
             Expr::Set(set, _) => write!(f, "{}", set),
             Expr::Begin(begin, _) => write!(f, "{}", begin),
@@ -49,7 +47,6 @@ impl Debug for Expr {
                 .field(arg0)
                 .field(arg1)
                 .finish(),
-            Self::Letrec(arg0, arg1) => f.debug_tuple("Letrec").field(arg0).field(arg1).finish(),
             Self::If(arg0, arg1) => f.debug_tuple("If").field(arg0).field(arg1).finish(),
             Self::Set(arg0, arg1) => f.debug_tuple("Set").field(arg0).field(arg1).finish(),
             Self::Begin(arg0, arg1) => f.debug_tuple("Begin").field(arg0).field(arg1).finish(),
@@ -102,25 +99,6 @@ impl Display for Application {
             write!(f, " {}", arg)?;
         }
         write!(f, ")")
-    }
-}
-
-#[derive(Clone, PartialEq, Debug)]
-pub struct Letrec {
-    pub initializers: Vec<(Symbol, Expr)>,
-    pub body: Box<Expr>,
-}
-
-impl Display for Letrec {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "(letrec (")?;
-        for (i, (symbol, expr)) in self.initializers.iter().enumerate() {
-            if i > 0 {
-                write!(f, " ")?;
-            }
-            write!(f, "({} {})", symbol, expr)?;
-        }
-        write!(f, ") {})", self.body)
     }
 }
 

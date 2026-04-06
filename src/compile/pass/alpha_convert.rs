@@ -92,7 +92,7 @@ mod tests {
     };
 
     fn alpha_convert_source(source: &str) -> SExpr<Resolved> {
-        let mut bindings = Bindings::new();
+        let mut bindings = Bindings::new(Default::default());
         let mut env = Env::default();
         let sexpr = parse(&tokenize(source).unwrap()).unwrap().pop().unwrap();
         let expanded = expand(introduce(sexpr), &mut bindings, &mut env).unwrap();

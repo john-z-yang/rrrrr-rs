@@ -6,3 +6,5 @@ pub mod pass;
 pub mod sexpr;
 pub mod span;
 pub mod util;
+
+pub(crate) mod gensym;

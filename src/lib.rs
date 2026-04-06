@@ -10,6 +10,7 @@ use crate::{
     compile::{
         bindings::Id,
         core_expr::Expr,
+        gensym::GenSym,
         ident::{Resolved, Symbol},
         pass::expand::introduce_scopes,
     },
@@ -18,14 +19,17 @@ use crate::{
 
 #[derive(Debug, Clone)]
 pub struct Session {
+    gen_sym: GenSym,
     bindings: Bindings,
     expander_env: Env,
 }
 
 impl Session {
     pub fn new() -> Self {
+        let gen_sym = GenSym::default();
         Self {
-            bindings: Bindings::new(),
+            bindings: Bindings::new(gen_sym.clone()),
+            gen_sym,
             expander_env: Env::default(),
         }
     }
@@ -77,7 +81,7 @@ impl Session {
     }
 
     pub fn lower(&self, form: SExpr<Resolved>) -> Expr {
-        compile::pass::lower::lower(form)
+        compile::pass::lower::lower(&self.gen_sym, form)
     }
 }
 

@@ -1,4 +1,4 @@
-use crate::compile::ident::Symbol;
+use crate::compile::{gensym::GenSym, ident::Symbol};
 
 use std::{
     collections::{BTreeSet, HashMap},
@@ -52,7 +52,7 @@ impl fmt::Display for Id {
 pub(crate) struct Bindings {
     symbols: HashMap<Symbol, HashMap<Scopes, Symbol>>,
     scope_counter: ScopeId,
-    gen_sym_counter: u64,
+    gen_sym: GenSym,
 }
 
 impl Bindings {
@@ -79,11 +79,11 @@ impl Bindings {
 
     pub(crate) const Q_QUOTE_PRIMITIVES: &[&str] = &["cons", "list", "append", "list->vector"];
 
-    pub(crate) fn new() -> Self {
+    pub(crate) fn new(gen_sym: GenSym) -> Self {
         let mut bindings = Bindings {
             symbols: HashMap::new(),
             scope_counter: Self::TOP_LEVEL_SCOPE,
-            gen_sym_counter: 0,
+            gen_sym,
         };
         for symbol in Self::CORE_FORMS {
             bindings.add_binding(&Id::new(symbol, [Self::CORE_SCOPE]), &Symbol::new(symbol))
@@ -102,9 +102,8 @@ impl Bindings {
         self.scope_counter
     }
 
-    pub(crate) fn gen_sym(&mut self, hint: &Id) -> Symbol {
-        self.gen_sym_counter += 1;
-        Symbol(format!("{}:{}", hint, self.gen_sym_counter))
+    pub(crate) fn gen_sym(&self, hint: &Id) -> Symbol {
+        self.gen_sym.fresh(&hint.symbol.0)
     }
 
     pub(crate) fn add_binding(&mut self, id: &Id, symbol: &Symbol) {
@@ -155,13 +154,13 @@ mod tests {
 
     #[test]
     fn test_resolve_with_empty_bindings() {
-        let bindings = Bindings::new();
+        let bindings = Bindings::new(Default::default());
         assert_eq!(bindings.resolve_sym(&Id::new("a", [])), None);
     }
 
     #[test]
     fn test_resolve_with_single_bindings() {
-        let mut bindings = Bindings::new();
+        let mut bindings = Bindings::new(Default::default());
         bindings.add_binding(&Id::new("a", []), &Symbol::new("1"));
         assert_eq!(
             bindings.resolve_sym(&Id::new("a", [])),
@@ -172,7 +171,7 @@ mod tests {
 
     #[test]
     fn test_resolve_with_multiple_stacked_bindings() {
-        let mut bindings = Bindings::new();
+        let mut bindings = Bindings::new(Default::default());
         bindings.add_binding(&Id::new("a", [1, 2]), &Symbol::new("middle"));
         bindings.add_binding(&Id::new("a", [1, 2, 3]), &Symbol::new("inner"));
         bindings.add_binding(&Id::new("a", [1]), &Symbol::new("outer"));
@@ -190,7 +189,7 @@ mod tests {
 
     #[test]
     fn test_gen_sym() {
-        let mut bindings = Bindings::new();
+        let bindings = Bindings::new(Default::default());
         let gen_sym_1 = bindings.gen_sym(&Id::new("foo", [1]));
         let gen_sym_2 = bindings.gen_sym(&Id::new("bar", [1]));
         let gen_sym_3 = bindings.gen_sym(&Id::new("foo", [1, 2]));
@@ -201,7 +200,7 @@ mod tests {
 
     #[test]
     fn test_add_binding_overwrites_with_same_scopes() {
-        let mut bindings = Bindings::new();
+        let mut bindings = Bindings::new(Default::default());
         bindings.add_binding(&Id::new("a", [1, 2]), &Symbol::new("first"));
         assert_eq!(
             bindings.resolve_sym(&Id::new("a", [1, 2])),

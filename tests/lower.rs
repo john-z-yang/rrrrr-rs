@@ -1,7 +1,7 @@
 use rrrrr_rs::{
     Session,
     compile::{
-        core_expr::{Application, Begin, Expr, If, Lambda, Letrec, Set},
+        core_expr::{Application, Begin, Expr, If, Lambda, Set},
         ident::{Resolved, Symbol},
         sexpr::{Bool, Cons, Num, SExpr, Str},
         span::Span,
@@ -254,35 +254,96 @@ fn test_lower_begin() {
 
 #[test]
 fn test_lower_letrec() {
+    // (letrec ((x 1) (y 2)) x)
+    // →
+    // ((lambda (x y)
+    //    ((lambda (t1 t2) (begin (set! x t1) (set! y t2) x)) 1 2))
+    //  void void)
+    let s = Span { lo: 1, hi: 24 };
     assert_eq!(
         lower_source("(letrec ((x 1) (y 2)) x)"),
-        Expr::Letrec(
-            Letrec {
-                initializers: vec![
-                    (
-                        Symbol::new("x:1"),
-                        Expr::Literal(SExpr::Num(Num(1.0), Span { lo: 12, hi: 13 })),
-                    ),
-                    (
-                        Symbol::new("y:2"),
-                        Expr::Literal(SExpr::Num(Num(2.0), Span { lo: 18, hi: 19 })),
-                    ),
-                ],
-                body: Box::new(Expr::Var(
-                    Resolved::Bound {
-                        symbol: Symbol::new("x"),
-                        binding: Symbol::new("x:1"),
+        Expr::Application(
+            Application {
+                operand: Box::new(Expr::Lambda(
+                    Lambda {
+                        args: vec![Symbol::new("x:1"), Symbol::new("y:2")],
+                        var_arg: None,
+                        body: Box::new(Expr::Application(
+                            Application {
+                                operand: Box::new(Expr::Lambda(
+                                    Lambda {
+                                        args: vec![Symbol::new("temp:3"), Symbol::new("temp:4")],
+                                        var_arg: None,
+                                        body: Box::new(Expr::Begin(
+                                            Begin {
+                                                body: vec![
+                                                    Expr::Set(
+                                                        Set {
+                                                            var: Resolved::Bound {
+                                                                symbol: Symbol::new("x"),
+                                                                binding: Symbol::new("x:1"),
+                                                            },
+                                                            expr: Box::new(Expr::Var(
+                                                                Resolved::Bound {
+                                                                    symbol: Symbol::new("temp:3"),
+                                                                    binding: Symbol::new("temp:3"),
+                                                                },
+                                                                s,
+                                                            )),
+                                                        },
+                                                        s,
+                                                    ),
+                                                    Expr::Set(
+                                                        Set {
+                                                            var: Resolved::Bound {
+                                                                symbol: Symbol::new("y"),
+                                                                binding: Symbol::new("y:2"),
+                                                            },
+                                                            expr: Box::new(Expr::Var(
+                                                                Resolved::Bound {
+                                                                    symbol: Symbol::new("temp:4"),
+                                                                    binding: Symbol::new("temp:4"),
+                                                                },
+                                                                s,
+                                                            )),
+                                                        },
+                                                        s,
+                                                    ),
+                                                    Expr::Var(
+                                                        Resolved::Bound {
+                                                            symbol: Symbol::new("x"),
+                                                            binding: Symbol::new("x:1"),
+                                                        },
+                                                        Span { lo: 22, hi: 23 },
+                                                    ),
+                                                ],
+                                            },
+                                            s,
+                                        )),
+                                    },
+                                    s,
+                                )),
+                                args: vec![
+                                    Expr::Literal(SExpr::Num(Num(1.0), Span { lo: 12, hi: 13 })),
+                                    Expr::Literal(SExpr::Num(Num(2.0), Span { lo: 18, hi: 19 })),
+                                ],
+                            },
+                            s,
+                        )),
                     },
-                    Span { lo: 22, hi: 23 },
+                    s,
                 )),
+                args: vec![Expr::Literal(SExpr::Void(s)), Expr::Literal(SExpr::Void(s))],
             },
-            Span { lo: 1, hi: 24 },
+            s,
         )
     );
 }
 
 #[test]
 fn test_lower_lambda_with_internal_defines() {
+    // (lambda () (define x 1) (define y 2) (+ x y))
+    // Body's internal defines become letrec, which is lowered to lambda+set!
     let result = lower_source("(lambda () (define x 1) (define y 2) (+ x y))");
     let Expr::Lambda(
         Lambda {
@@ -297,53 +358,132 @@ fn test_lower_lambda_with_internal_defines() {
     };
     assert!(args.is_empty());
     assert!(var_arg.is_none());
-    let Expr::Letrec(Letrec { initializers, body }, _) = *body else {
-        panic!(
-            "Expected Lambda to be transformed into Letrec, got {:?}",
-            body
-        )
-    };
+
+    // Body should be an application (outer lambda applied to voids)
+    let s = Span { lo: 19, hi: 45 };
     assert_eq!(
-        initializers,
-        vec![
-            (
-                Symbol::new("x:1"),
-                Expr::Literal(SExpr::Num(Num(1.0), Span { lo: 21, hi: 22 }))
-            ),
-            (
-                Symbol::new("y:2"),
-                Expr::Literal(SExpr::Num(Num(2.0), Span { lo: 34, hi: 35 }))
-            )
-        ]
-    );
-    assert_eq!(
-        body,
-        Box::new(Expr::Application(
+        *body,
+        Expr::Application(
             Application {
-                operand: Box::new(Expr::Var(
-                    Resolved::Free {
-                        symbol: Symbol::new("+")
+                operand: Box::new(Expr::Lambda(
+                    Lambda {
+                        args: vec![Symbol::new("x:1"), Symbol::new("y:2")],
+                        var_arg: None,
+                        body: Box::new(Expr::Application(
+                            Application {
+                                operand: Box::new(Expr::Lambda(
+                                    Lambda {
+                                        args: vec![Symbol::new("temp:3"), Symbol::new("temp:4")],
+                                        var_arg: None,
+                                        body: Box::new(Expr::Begin(
+                                            Begin {
+                                                body: vec![
+                                                    Expr::Set(
+                                                        Set {
+                                                            var: Resolved::Bound {
+                                                                symbol: Symbol::new("x"),
+                                                                binding: Symbol::new("x:1"),
+                                                            },
+                                                            expr: Box::new(Expr::Var(
+                                                                Resolved::Bound {
+                                                                    symbol: Symbol::new("temp:3"),
+                                                                    binding: Symbol::new("temp:3"),
+                                                                },
+                                                                s,
+                                                            )),
+                                                        },
+                                                        s,
+                                                    ),
+                                                    Expr::Set(
+                                                        Set {
+                                                            var: Resolved::Bound {
+                                                                symbol: Symbol::new("y"),
+                                                                binding: Symbol::new("y:2"),
+                                                            },
+                                                            expr: Box::new(Expr::Var(
+                                                                Resolved::Bound {
+                                                                    symbol: Symbol::new("temp:4"),
+                                                                    binding: Symbol::new("temp:4"),
+                                                                },
+                                                                s,
+                                                            )),
+                                                        },
+                                                        s,
+                                                    ),
+                                                    Expr::Application(
+                                                        Application {
+                                                            operand: Box::new(Expr::Var(
+                                                                Resolved::Free {
+                                                                    symbol: Symbol::new("+"),
+                                                                },
+                                                                Span { lo: 38, hi: 39 },
+                                                            )),
+                                                            args: vec![
+                                                                Expr::Var(
+                                                                    Resolved::Bound {
+                                                                        symbol: Symbol::new("x"),
+                                                                        binding: Symbol::new("x:1",),
+                                                                    },
+                                                                    Span { lo: 40, hi: 41 },
+                                                                ),
+                                                                Expr::Var(
+                                                                    Resolved::Bound {
+                                                                        symbol: Symbol::new("y"),
+                                                                        binding: Symbol::new("y:2",),
+                                                                    },
+                                                                    Span { lo: 42, hi: 43 },
+                                                                ),
+                                                            ],
+                                                        },
+                                                        Span { lo: 38, hi: 44 },
+                                                    ),
+                                                ],
+                                            },
+                                            s,
+                                        )),
+                                    },
+                                    s,
+                                )),
+                                args: vec![
+                                    Expr::Literal(SExpr::Num(Num(1.0), Span { lo: 21, hi: 22 })),
+                                    Expr::Literal(SExpr::Num(Num(2.0), Span { lo: 34, hi: 35 })),
+                                ],
+                            },
+                            s,
+                        )),
                     },
-                    Span { lo: 38, hi: 39 }
+                    s,
                 )),
-                args: vec![
-                    Expr::Var(
-                        Resolved::Bound {
-                            symbol: Symbol::new("x"),
-                            binding: Symbol::new("x:1")
-                        },
-                        Span { lo: 40, hi: 41 },
-                    ),
-                    Expr::Var(
-                        Resolved::Bound {
-                            symbol: Symbol::new("y"),
-                            binding: Symbol::new("y:2")
-                        },
-                        Span { lo: 42, hi: 43 },
-                    )
-                ],
+                args: vec![Expr::Literal(SExpr::Void(s)), Expr::Literal(SExpr::Void(s))],
             },
-            Span { lo: 38, hi: 44 }
-        )),
-    )
+            s,
+        )
+    );
+}
+
+#[test]
+fn test_lower_letrec_no_binding() {
+    // (letrec () 1)
+    // →
+    // ((lambda () 1))
+    assert_eq!(
+        lower_source("(letrec () 1)"),
+        Expr::Application(
+            Application {
+                operand: Box::new(Expr::Lambda(
+                    Lambda {
+                        args: vec![],
+                        var_arg: None,
+                        body: Box::new(Expr::Literal(SExpr::Num(
+                            Num(1.0),
+                            Span { lo: 11, hi: 12 },
+                        )))
+                    },
+                    Span { lo: 1, hi: 13 },
+                )),
+                args: vec![],
+            },
+            Span { lo: 1, hi: 13 },
+        )
+    );
 }

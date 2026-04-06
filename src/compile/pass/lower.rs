@@ -1,6 +1,7 @@
 use crate::{
     compile::{
-        core_expr::{Application, Begin, Expr, If, Lambda, Letrec, Set},
+        core_expr::{Application, Begin, Expr, If, Lambda, Set},
+        gensym::GenSym,
         ident::Resolved,
         sexpr::SExpr,
         util::{first, for_each, len, rest, try_dotted_tail},
@@ -8,39 +9,39 @@ use crate::{
     if_let_sexpr,
 };
 
-pub(crate) fn lower(sexpr: SExpr<Resolved>) -> Expr {
+pub(crate) fn lower(gen_sym: &GenSym, sexpr: SExpr<Resolved>) -> Expr {
     if let SExpr::Var(resolved, span) = sexpr {
         return Expr::Var(resolved, span);
     }
     if_let_sexpr! {(SExpr::Var(..), ..) = &sexpr =>
-        return lower_id_application(sexpr);
+        return lower_id_application(gen_sym, sexpr);
     };
     if_let_sexpr! {(..) = sexpr =>
-        return lower_fn_application(sexpr);
+        return lower_fn_application(gen_sym, sexpr);
     };
     Expr::Literal(sexpr.map_var(&From::from))
 }
 
-fn lower_id_application(sexpr: SExpr<Resolved>) -> Expr {
+fn lower_id_application(gen_sym: &GenSym, sexpr: SExpr<Resolved>) -> Expr {
     let binding = match first(&sexpr) {
         SExpr::Var(Resolved::Bound { binding, .. }, _) => binding.clone(),
-        SExpr::Var(Resolved::Free { .. }, _) => return lower_fn_application(sexpr),
+        SExpr::Var(Resolved::Free { .. }, _) => return lower_fn_application(gen_sym, sexpr),
         _ => unreachable!("expand_id_application expected first element to be a bound/free ID"),
     };
 
     match binding.0.as_str() {
         "quote" => Expr::Literal(first(rest(sexpr)).map_var(&From::from)),
-        "lambda" => lower_lambda(sexpr),
-        "letrec" => lower_letrec(sexpr),
-        "if" => lower_if(sexpr),
-        "define" => lower_define(sexpr),
-        "set!" => lower_set(sexpr),
-        "begin" => lower_begin(sexpr),
-        _ => lower_fn_application(sexpr),
+        "lambda" => lower_lambda(gen_sym, sexpr),
+        "letrec" => lower_letrec(gen_sym, sexpr),
+        "if" => lower_if(gen_sym, sexpr),
+        "define" => lower_define(gen_sym, sexpr),
+        "set!" => lower_set(gen_sym, sexpr),
+        "begin" => lower_begin(gen_sym, sexpr),
+        _ => lower_fn_application(gen_sym, sexpr),
     }
 }
 
-fn lower_lambda(sexpr: SExpr<Resolved>) -> Expr {
+fn lower_lambda(gen_sym: &GenSym, sexpr: SExpr<Resolved>) -> Expr {
     let span = sexpr.get_span();
     if_let_sexpr! {(_, sexpr_arg, sexpr_body @ ..) = sexpr => {
         let mut args = vec![];
@@ -70,7 +71,7 @@ fn lower_lambda(sexpr: SExpr<Resolved>) -> Expr {
             Lambda {
                 args,
                 var_arg,
-                body: Box::new(lower_body(sexpr_body)),
+                body: Box::new(lower_body(gen_sym, sexpr_body)),
             },
             span,
         );
@@ -78,21 +79,90 @@ fn lower_lambda(sexpr: SExpr<Resolved>) -> Expr {
     unreachable!("Invalid lambda form")
 }
 
-fn lower_letrec(sexpr: SExpr<Resolved>) -> Expr {
+fn lower_letrec(gen_sym: &GenSym, sexpr: SExpr<Resolved>) -> Expr {
     let span = sexpr.get_span();
     if_let_sexpr! {(_, sexpr_initializers @ (..), sexpr_body @ ..) = sexpr => {
-        let mut initializers = vec![];
+        let mut vars = vec![];
+        let mut rhs_exprs = vec![];
+        let mut temps = vec![];
         for_each(sexpr_initializers, |initializer| {
-            if_let_sexpr! {(SExpr::Var(Resolved::Bound { binding, .. }, _), exp) = initializer => {
-                initializers.push((binding, lower(exp)));
+            if_let_sexpr! {(SExpr::Var(Resolved::Bound { symbol, binding }, _), exp) = initializer => {
+                vars.push((symbol, binding));
+                rhs_exprs.push(lower(gen_sym, exp));
+                temps.push(gen_sym.fresh("temp"));
                 return;
             }};
             unreachable!("Invalid letrec initializer")
         });
-        return Expr::Letrec(
-            Letrec {
-                initializers,
-                body: Box::new(lower_body(sexpr_body)),
+
+        if vars.is_empty() {
+            return Expr::Application(
+                Application {
+                    operand: Box::new(Expr::Lambda(
+                        Lambda {
+                            args: vec![],
+                            var_arg: None,
+                            body: Box::new(lower_body(gen_sym, sexpr_body)),
+                        },
+                        span,
+                    )),
+                    args: vec![],
+                },
+                span,
+            );
+        }
+
+        let mut body: Vec<Expr> = vars
+            .iter()
+            .cloned()
+            .zip(temps.iter().cloned())
+            .map(|((symbol, binding), temp)| {
+                Expr::Set(
+                    Set {
+                        var: Resolved::Bound { symbol, binding },
+                        expr: Box::new(Expr::Var(
+                            Resolved::Bound {
+                                symbol: temp.clone(),
+                                binding: temp,
+                            },
+                            span,
+                        )),
+                    },
+                    span,
+                )
+            })
+            .collect();
+
+        for_each(sexpr_body, |sexpr| {
+            body.push(lower(gen_sym, sexpr));
+        });
+
+        let inner_binding = Expr::Application(
+            Application {
+                operand: Box::new(Expr::Lambda(
+                    Lambda {
+                        args: temps,
+                        var_arg: None,
+                        body: Box::new(Expr::Begin(Begin { body }, span)),
+                    },
+                    span,
+                )),
+                args: rhs_exprs,
+            },
+            span,
+        );
+
+        return Expr::Application(
+            Application {
+                args: vec![Expr::Literal(SExpr::Void(span)); vars.len()],
+                operand: Box::new(Expr::Lambda(
+                    Lambda {
+                        args: vars.into_iter().map(|(_, binding)| binding).collect(),
+                        var_arg: None,
+                        body: Box::new(inner_binding),
+                    },
+                    span,
+                )),
             },
             span,
         );
@@ -100,26 +170,26 @@ fn lower_letrec(sexpr: SExpr<Resolved>) -> Expr {
     unreachable!("Invalid letrec form")
 }
 
-fn lower_body(sexpr: SExpr<Resolved>) -> Expr {
+fn lower_body(gen_sym: &GenSym, sexpr: SExpr<Resolved>) -> Expr {
     let span = sexpr.get_span();
     if len(&sexpr) > 1 {
         let mut body = vec![];
         for_each(sexpr, |sexpr| {
-            body.push(lower(sexpr));
+            body.push(lower(gen_sym, sexpr));
         });
         Expr::Begin(Begin { body }, span)
     } else {
-        lower(first(sexpr))
+        lower(gen_sym, first(sexpr))
     }
 }
 
-fn lower_fn_application(sexpr: SExpr<Resolved>) -> Expr {
+fn lower_fn_application(gen_sym: &GenSym, sexpr: SExpr<Resolved>) -> Expr {
     let span = sexpr.get_span();
     if_let_sexpr! {(first, rest @ ..) = sexpr => {
-        let operand = lower(first);
+        let operand = lower(gen_sym, first);
         let mut args = vec![];
         for_each(rest, |sexpr| {
-            args.push(lower(sexpr));
+            args.push(lower(gen_sym, sexpr));
         });
 
         return Expr::Application(
@@ -133,14 +203,14 @@ fn lower_fn_application(sexpr: SExpr<Resolved>) -> Expr {
     unreachable!("Invalid fn application form")
 }
 
-fn lower_if(sexpr: SExpr<Resolved>) -> Expr {
+fn lower_if(gen_sym: &GenSym, sexpr: SExpr<Resolved>) -> Expr {
     let span = sexpr.get_span();
     if_let_sexpr! {(_, test, consequent, alternate) = sexpr => {
         return Expr::If(
             If {
-                test: Box::new(lower(test)),
-                conseq: Box::new(lower(consequent)),
-                alt: Box::new(lower(alternate)),
+                test: Box::new(lower(gen_sym, test)),
+                conseq: Box::new(lower(gen_sym, consequent)),
+                alt: Box::new(lower(gen_sym, alternate)),
             },
             span,
         );
@@ -148,13 +218,13 @@ fn lower_if(sexpr: SExpr<Resolved>) -> Expr {
     unreachable!("Invalid if form")
 }
 
-fn lower_set(sexpr: SExpr<Resolved>) -> Expr {
+fn lower_set(gen_sym: &GenSym, sexpr: SExpr<Resolved>) -> Expr {
     let span = sexpr.get_span();
     if_let_sexpr! {(_, SExpr::Var(var, _), exp) = sexpr => {
         return Expr::Set(
             Set {
                 var,
-                expr: Box::new(lower(exp)),
+                expr: Box::new(lower(gen_sym, exp)),
             },
             span,
         );
@@ -162,14 +232,14 @@ fn lower_set(sexpr: SExpr<Resolved>) -> Expr {
     unreachable!("Invalid set form")
 }
 
-fn lower_define(sexpr: SExpr<Resolved>) -> Expr {
+fn lower_define(gen_sym: &GenSym, sexpr: SExpr<Resolved>) -> Expr {
     let span = sexpr.get_span();
     if_let_sexpr! {(_, SExpr::Var(var, _), exp) = sexpr => {
         assert!(matches!(var, Resolved::Free { .. }));
         return Expr::Set(
             Set {
                 var,
-                expr: Box::new(lower(exp)),
+                expr: Box::new(lower(gen_sym, exp)),
             },
             span,
         );
@@ -177,12 +247,12 @@ fn lower_define(sexpr: SExpr<Resolved>) -> Expr {
     unreachable!("Invalid define form")
 }
 
-fn lower_begin(sexpr: SExpr<Resolved>) -> Expr {
+fn lower_begin(gen_sym: &GenSym, sexpr: SExpr<Resolved>) -> Expr {
     let span = sexpr.get_span();
     if_let_sexpr! {(_,  rest @ ..) = sexpr => {
         let mut body = vec![];
         for_each(rest, |sexpr| {
-            body.push(lower(sexpr));
+            body.push(lower(gen_sym, sexpr));
         });
         return Expr::Begin(
             Begin { body },
