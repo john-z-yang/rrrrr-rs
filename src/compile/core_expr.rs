@@ -29,7 +29,7 @@ impl Display for Expr {
             Expr::Var(resolved, _) => write!(f, "{}", resolved),
             Expr::Lambda(lambda, _) => write!(f, "{}", lambda),
             Expr::Application(application, _) => write!(f, "{}", application),
-            Expr::If(iff, _) => write!(f, "{}", iff),
+            Expr::If(if_, _) => write!(f, "{}", if_),
             Expr::Set(set, _) => write!(f, "{}", set),
             Expr::Begin(begin, _) => write!(f, "{}", begin),
         }
