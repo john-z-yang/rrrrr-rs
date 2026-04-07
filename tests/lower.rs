@@ -285,7 +285,7 @@ fn test_lower_letrec() {
                                                             },
                                                             expr: Box::new(Expr::Var(
                                                                 Resolved::Bound {
-                                                                    symbol: Symbol::new("temp:3"),
+                                                                    symbol: Symbol::new("temp"),
                                                                     binding: Symbol::new("temp:3"),
                                                                 },
                                                                 s,
@@ -301,7 +301,7 @@ fn test_lower_letrec() {
                                                             },
                                                             expr: Box::new(Expr::Var(
                                                                 Resolved::Bound {
-                                                                    symbol: Symbol::new("temp:4"),
+                                                                    symbol: Symbol::new("temp"),
                                                                     binding: Symbol::new("temp:4"),
                                                                 },
                                                                 s,
@@ -386,7 +386,7 @@ fn test_lower_lambda_with_internal_defines() {
                                                             },
                                                             expr: Box::new(Expr::Var(
                                                                 Resolved::Bound {
-                                                                    symbol: Symbol::new("temp:3"),
+                                                                    symbol: Symbol::new("temp"),
                                                                     binding: Symbol::new("temp:3"),
                                                                 },
                                                                 s,
@@ -402,7 +402,7 @@ fn test_lower_lambda_with_internal_defines() {
                                                             },
                                                             expr: Box::new(Expr::Var(
                                                                 Resolved::Bound {
-                                                                    symbol: Symbol::new("temp:4"),
+                                                                    symbol: Symbol::new("temp"),
                                                                     binding: Symbol::new("temp:4"),
                                                                 },
                                                                 s,

@@ -2,7 +2,7 @@ use crate::{
     compile::{
         core_expr::{Application, Begin, Expr, If, Lambda, Set},
         gensym::GenSym,
-        ident::Resolved,
+        ident::{Resolved, Symbol},
         sexpr::SExpr,
         util::{first, for_each, len, rest, try_dotted_tail},
     },
@@ -122,7 +122,7 @@ fn lower_letrec(gen_sym: &GenSym, sexpr: SExpr<Resolved>) -> Expr {
                         var: Resolved::Bound { symbol, binding },
                         expr: Box::new(Expr::Var(
                             Resolved::Bound {
-                                symbol: temp.clone(),
+                                symbol: Symbol::new("temp"),
                                 binding: temp,
                             },
                             span,
