@@ -1,3 +1,4 @@
+pub mod anf;
 pub mod bindings;
 pub mod compilation_error;
 pub mod core_expr;

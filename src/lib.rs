@@ -8,8 +8,9 @@ use compile::{
 
 use crate::{
     compile::{
+        anf,
         bindings::Id,
-        core_expr::Expr,
+        core_expr,
         gensym::GenSym,
         ident::{Resolved, Symbol},
         pass::expand::introduce_scopes,
@@ -56,6 +57,10 @@ impl Session {
             .expect("Unable to load prelude");
     }
 
+    pub fn resolve_sym(&self, id: &Id) -> Option<Symbol> {
+        self.bindings.resolve_sym(id)
+    }
+
     pub fn tokenize(&self, source: &str) -> Result<Vec<Token>> {
         compile::pass::read::lex::tokenize(source)
     }
@@ -76,12 +81,12 @@ impl Session {
         compile::pass::alpha_convert::alpha_convert(form, &mut self.bindings)
     }
 
-    pub fn resolve_sym(&self, id: &Id) -> Option<Symbol> {
-        self.bindings.resolve_sym(id)
+    pub fn lower(&self, form: SExpr<Resolved>) -> core_expr::Expr {
+        compile::pass::lower::lower(&self.gen_sym, form)
     }
 
-    pub fn lower(&self, form: SExpr<Resolved>) -> Expr {
-        compile::pass::lower::lower(&self.gen_sym, form)
+    pub fn a_normalize(&self, form: core_expr::Expr) -> anf::Expr {
+        compile::pass::a_normalize::normalize(self.gen_sym.clone(), form)
     }
 }
 

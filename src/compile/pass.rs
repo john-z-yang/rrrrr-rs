@@ -1,3 +1,4 @@
+pub mod a_normalize;
 pub mod alpha_convert;
 pub mod expand;
 pub mod lower;
