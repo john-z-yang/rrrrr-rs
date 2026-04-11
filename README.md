@@ -14,7 +14,7 @@ These days it has grown into a collection of compiler passes that I yoinked from
 
 | Pass                                          | Reference                                                                                                                                                     |
 | --------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Tokenization / parsing                        | [*Crafting Interpreters* — Robert Nystrom](https://craftinginterpreters.com/)                                                                                 |
+| Tokenization + parsing                        | [*Crafting Interpreters* — Robert Nystrom](https://craftinginterpreters.com/)                                                                                 |
 | Hygienic macro expansion + binding resolution | [*Bindings as Sets of Scopes* — Matthew Flatt](docs/references/Binding%20as%20Sets%20of%20Scopes.pdf)                                                         |
 | Quasiquotation                                | [*Quasiquotation in Lisp* — Alan Bawden](docs/references/Quasiquotation%20in%20Lisp.pdf)                                                                      |
 | α-conversion                                  | [*Bindings as Sets of Scopes* — Matthew Flatt](docs/references/Binding%20as%20Sets%20of%20Scopes.pdf)                                                         |
