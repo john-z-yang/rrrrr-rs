@@ -2,7 +2,7 @@ use rrrrr_rs::{
     Session,
     compile::{
         anf::{AExpr, Application, CExpr, Expr, If, Lambda, Let, Rhs, Set},
-        ident::{Resolved, Symbol},
+        ident::{ResolvedVar, Symbol},
         sexpr::{Bool, Num, SExpr},
         span::Span,
     },
@@ -32,7 +32,7 @@ fn test_a_normalize_free_variable() {
     assert_eq!(
         a_normalize_source("x"),
         Expr::AExpr(AExpr::Var(
-            Resolved::Free {
+            ResolvedVar::Free {
                 symbol: Symbol::new("x"),
             },
             Span { lo: 0, hi: 1 },
@@ -49,7 +49,7 @@ fn test_a_normalize_lambda() {
                 args: vec![Symbol::new("x:1")],
                 var_arg: None,
                 body: Box::new(Expr::AExpr(AExpr::Var(
-                    Resolved::Bound {
+                    ResolvedVar::Bound {
                         symbol: Symbol::new("x"),
                         binding: Symbol::new("x:1"),
                     },
@@ -68,7 +68,7 @@ fn test_a_normalize_application() {
         Expr::CExpr(CExpr::Application(
             Application {
                 operand: Box::new(AExpr::Var(
-                    Resolved::Free {
+                    ResolvedVar::Free {
                         symbol: Symbol::new("f"),
                     },
                     Span { lo: 1, hi: 2 },
@@ -98,7 +98,7 @@ fn test_a_normalize_application_names_complex_arg() {
                     Rhs::CExpr(CExpr::Application(
                         Application {
                             operand: Box::new(AExpr::Var(
-                                Resolved::Free {
+                                ResolvedVar::Free {
                                     symbol: Symbol::new("g"),
                                 },
                                 Span { lo: 4, hi: 5 },
@@ -113,13 +113,13 @@ fn test_a_normalize_application_names_complex_arg() {
                 body: Box::new(Expr::CExpr(CExpr::Application(
                     Application {
                         operand: Box::new(AExpr::Var(
-                            Resolved::Free {
+                            ResolvedVar::Free {
                                 symbol: Symbol::new("f"),
                             },
                             Span { lo: 1, hi: 2 },
                         )),
                         args: vec![AExpr::Var(
-                            Resolved::Bound {
+                            ResolvedVar::Bound {
                                 symbol: Symbol::new("anf"),
                                 binding: Symbol::new("anf:1"),
                             },
@@ -164,7 +164,7 @@ fn test_a_normalize_set() {
         a_normalize_source("(set! x 1)"),
         Expr::CExpr(CExpr::Set(
             Set {
-                var: Resolved::Free {
+                var: ResolvedVar::Free {
                     symbol: Symbol::new("x"),
                 },
                 aexpr: AExpr::Literal(SExpr::Num(Num(1.0), Span { lo: 8, hi: 9 })),
@@ -200,7 +200,7 @@ fn test_a_normalize_begin_preserves_side_effects() {
                     Rhs::CExpr(CExpr::Application(
                         Application {
                             operand: Box::new(AExpr::Var(
-                                Resolved::Free {
+                                ResolvedVar::Free {
                                     symbol: Symbol::new("f"),
                                 },
                                 Span { lo: 8, hi: 9 },
@@ -255,7 +255,7 @@ fn test_a_normalize_nested_application_in_arg() {
                             Rhs::CExpr(CExpr::Application(
                                 Application {
                                     operand: Box::new(AExpr::Var(
-                                        Resolved::Bound {
+                                        ResolvedVar::Bound {
                                             symbol: Symbol::new("anf"),
                                             binding: Symbol::new("anf:1")
                                         },
@@ -269,13 +269,13 @@ fn test_a_normalize_nested_application_in_arg() {
                         body: Box::new(Expr::CExpr(CExpr::Application(
                             Application {
                                 operand: Box::new(AExpr::Var(
-                                    Resolved::Free {
+                                    ResolvedVar::Free {
                                         symbol: Symbol::new("+")
                                     },
                                     Span { lo: 1, hi: 2 }
                                 )),
                                 args: vec![AExpr::Var(
-                                    Resolved::Bound {
+                                    ResolvedVar::Bound {
                                         symbol: Symbol::new("anf"),
                                         binding: Symbol::new("anf:2")
                                     },

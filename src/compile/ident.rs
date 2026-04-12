@@ -9,12 +9,12 @@ impl Symbol {
     }
 }
 
-impl From<Resolved> for Symbol {
-    fn from(value: Resolved) -> Self {
+impl From<ResolvedSymbol> for Symbol {
+    fn from(value: ResolvedSymbol) -> Self {
         match value {
-            Resolved::Bound { symbol, .. } => symbol,
-            Resolved::Free { symbol } => symbol,
-            Resolved::Literal { symbol } => symbol,
+            ResolvedSymbol::Bound { symbol, .. } => symbol,
+            ResolvedSymbol::Free { symbol } => symbol,
+            ResolvedSymbol::Literal { symbol } => symbol,
         }
     }
 }
@@ -26,18 +26,45 @@ impl fmt::Display for Symbol {
 }
 
 #[derive(PartialEq, Clone, Eq, Hash, Debug)]
-pub enum Resolved {
+pub enum ResolvedSymbol {
     Bound { symbol: Symbol, binding: Symbol },
     Free { symbol: Symbol },
     Literal { symbol: Symbol },
 }
 
-impl fmt::Display for Resolved {
+impl fmt::Display for ResolvedSymbol {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
-            Resolved::Bound { binding, .. } => write!(f, "{}", binding),
-            Resolved::Free { symbol } => write!(f, "{}:free", symbol),
-            Resolved::Literal { symbol } => write!(f, "{}", symbol),
+            ResolvedSymbol::Bound { binding, .. } => write!(f, "{}", binding),
+            ResolvedSymbol::Free { symbol } => write!(f, "{}:free", symbol),
+            ResolvedSymbol::Literal { symbol } => write!(f, "{}", symbol),
+        }
+    }
+}
+
+#[derive(PartialEq, Clone, Eq, Hash, Debug)]
+pub enum ResolvedVar {
+    Bound { symbol: Symbol, binding: Symbol },
+    Free { symbol: Symbol },
+}
+
+impl TryFrom<ResolvedSymbol> for ResolvedVar {
+    type Error = ResolvedSymbol;
+
+    fn try_from(value: ResolvedSymbol) -> Result<Self, Self::Error> {
+        match value {
+            ResolvedSymbol::Bound { symbol, binding } => Ok(ResolvedVar::Bound { symbol, binding }),
+            ResolvedSymbol::Free { symbol } => Ok(ResolvedVar::Free { symbol }),
+            ResolvedSymbol::Literal { .. } => Err(value),
+        }
+    }
+}
+
+impl fmt::Display for ResolvedVar {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            ResolvedVar::Bound { binding, .. } => write!(f, "{}", binding),
+            ResolvedVar::Free { symbol } => write!(f, "{}:free", symbol),
         }
     }
 }

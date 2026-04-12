@@ -1,7 +1,7 @@
 use std::fmt::{Debug, Display};
 
 use crate::compile::{
-    ident::{Resolved, Symbol},
+    ident::{ResolvedVar, Symbol},
     sexpr::SExpr,
     span::Span,
 };
@@ -42,7 +42,7 @@ impl Display for Expr {
 #[derive(Clone, PartialEq)]
 pub enum AExpr {
     Literal(SExpr<Symbol>),
-    Var(Resolved, Span),
+    Var(ResolvedVar, Span),
     Lambda(Lambda, Span),
 }
 
@@ -81,7 +81,7 @@ pub enum Rhs {
 #[derive(Clone, PartialEq, Debug)]
 pub enum Value {
     Literal(SExpr<Symbol>),
-    Var(Resolved, Span),
+    Var(ResolvedVar, Span),
 }
 
 #[derive(Clone, PartialEq, Debug)]
@@ -117,7 +117,7 @@ pub struct If {
 
 #[derive(Clone, PartialEq, Debug)]
 pub struct Set {
-    pub var: Resolved,
+    pub var: ResolvedVar,
     pub aexpr: AExpr,
 }
 

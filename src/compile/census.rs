@@ -2,7 +2,7 @@ use std::collections::HashMap;
 
 use crate::compile::{
     anf::{AExpr, Application, CExpr, Expr, If, Lambda, Let, Rhs, Set},
-    ident::{Resolved, Symbol},
+    ident::{ResolvedVar, Symbol},
 };
 
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
@@ -35,7 +35,7 @@ impl Census {
 
     pub(crate) fn eliminate_aexpr(&mut self, aexpr: &AExpr) {
         match aexpr {
-            AExpr::Var(Resolved::Bound { binding, .. }, _) => {
+            AExpr::Var(ResolvedVar::Bound { binding, .. }, _) => {
                 self.data.get_mut(binding).unwrap().use_count -= 1;
             }
             AExpr::Lambda(Lambda { body, .. }, _) => {

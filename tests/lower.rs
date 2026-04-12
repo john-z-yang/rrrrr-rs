@@ -2,7 +2,7 @@ use rrrrr_rs::{
     Session,
     compile::{
         core_expr::{Application, Begin, Expr, If, Lambda, Set},
-        ident::{Resolved, Symbol},
+        ident::{ResolvedVar, Symbol},
         sexpr::{Bool, Cons, Num, SExpr, Str},
         span::Span,
     },
@@ -89,7 +89,7 @@ fn test_lower_free_variable() {
     assert_eq!(
         lower_source("x"),
         Expr::Var(
-            Resolved::Free {
+            ResolvedVar::Free {
                 symbol: Symbol::new("x")
             },
             Span { lo: 0, hi: 1 },
@@ -106,7 +106,7 @@ fn test_lower_lambda() {
                 args: vec![Symbol::new("x:1"), Symbol::new("y:2")],
                 var_arg: None,
                 body: Box::new(Expr::Var(
-                    Resolved::Bound {
+                    ResolvedVar::Bound {
                         symbol: Symbol::new("x"),
                         binding: Symbol::new("x:1"),
                     },
@@ -127,7 +127,7 @@ fn test_lower_lambda_rest_param() {
                 args: vec![Symbol::new("x:1")],
                 var_arg: Some(Symbol::new("rest:2")),
                 body: Box::new(Expr::Var(
-                    Resolved::Bound {
+                    ResolvedVar::Bound {
                         symbol: Symbol::new("x"),
                         binding: Symbol::new("x:1"),
                     },
@@ -148,7 +148,7 @@ fn test_lower_lambda_single_rest_param() {
                 args: vec![],
                 var_arg: Some(Symbol::new("args:1")),
                 body: Box::new(Expr::Var(
-                    Resolved::Bound {
+                    ResolvedVar::Bound {
                         symbol: Symbol::new("args"),
                         binding: Symbol::new("args:1"),
                     },
@@ -167,7 +167,7 @@ fn test_lower_application() {
         Expr::Application(
             Application {
                 operand: Box::new(Expr::Var(
-                    Resolved::Free {
+                    ResolvedVar::Free {
                         symbol: Symbol::new("f")
                     },
                     Span { lo: 1, hi: 2 },
@@ -206,7 +206,7 @@ fn test_lower_define() {
         lower_source("(define x 42)"),
         Expr::Set(
             Set {
-                var: Resolved::Free {
+                var: ResolvedVar::Free {
                     symbol: Symbol::new("x"),
                 },
                 expr: Box::new(Expr::Literal(SExpr::Num(
@@ -225,7 +225,7 @@ fn test_lower_set() {
         lower_source("(set! x 2)"),
         Expr::Set(
             Set {
-                var: Resolved::Free {
+                var: ResolvedVar::Free {
                     symbol: Symbol::new("x"),
                 },
                 expr: Box::new(Expr::Literal(SExpr::Num(Num(2.0), Span { lo: 8, hi: 9 }))),
@@ -279,12 +279,12 @@ fn test_lower_letrec() {
                                                 body: vec![
                                                     Expr::Set(
                                                         Set {
-                                                            var: Resolved::Bound {
+                                                            var: ResolvedVar::Bound {
                                                                 symbol: Symbol::new("x"),
                                                                 binding: Symbol::new("x:1"),
                                                             },
                                                             expr: Box::new(Expr::Var(
-                                                                Resolved::Bound {
+                                                                ResolvedVar::Bound {
                                                                     symbol: Symbol::new("temp"),
                                                                     binding: Symbol::new("temp:3"),
                                                                 },
@@ -295,12 +295,12 @@ fn test_lower_letrec() {
                                                     ),
                                                     Expr::Set(
                                                         Set {
-                                                            var: Resolved::Bound {
+                                                            var: ResolvedVar::Bound {
                                                                 symbol: Symbol::new("y"),
                                                                 binding: Symbol::new("y:2"),
                                                             },
                                                             expr: Box::new(Expr::Var(
-                                                                Resolved::Bound {
+                                                                ResolvedVar::Bound {
                                                                     symbol: Symbol::new("temp"),
                                                                     binding: Symbol::new("temp:4"),
                                                                 },
@@ -310,7 +310,7 @@ fn test_lower_letrec() {
                                                         s,
                                                     ),
                                                     Expr::Var(
-                                                        Resolved::Bound {
+                                                        ResolvedVar::Bound {
                                                             symbol: Symbol::new("x"),
                                                             binding: Symbol::new("x:1"),
                                                         },
@@ -380,12 +380,12 @@ fn test_lower_lambda_with_internal_defines() {
                                                 body: vec![
                                                     Expr::Set(
                                                         Set {
-                                                            var: Resolved::Bound {
+                                                            var: ResolvedVar::Bound {
                                                                 symbol: Symbol::new("x"),
                                                                 binding: Symbol::new("x:1"),
                                                             },
                                                             expr: Box::new(Expr::Var(
-                                                                Resolved::Bound {
+                                                                ResolvedVar::Bound {
                                                                     symbol: Symbol::new("temp"),
                                                                     binding: Symbol::new("temp:3"),
                                                                 },
@@ -396,12 +396,12 @@ fn test_lower_lambda_with_internal_defines() {
                                                     ),
                                                     Expr::Set(
                                                         Set {
-                                                            var: Resolved::Bound {
+                                                            var: ResolvedVar::Bound {
                                                                 symbol: Symbol::new("y"),
                                                                 binding: Symbol::new("y:2"),
                                                             },
                                                             expr: Box::new(Expr::Var(
-                                                                Resolved::Bound {
+                                                                ResolvedVar::Bound {
                                                                     symbol: Symbol::new("temp"),
                                                                     binding: Symbol::new("temp:4"),
                                                                 },
@@ -413,21 +413,21 @@ fn test_lower_lambda_with_internal_defines() {
                                                     Expr::Application(
                                                         Application {
                                                             operand: Box::new(Expr::Var(
-                                                                Resolved::Free {
+                                                                ResolvedVar::Free {
                                                                     symbol: Symbol::new("+"),
                                                                 },
                                                                 Span { lo: 38, hi: 39 },
                                                             )),
                                                             args: vec![
                                                                 Expr::Var(
-                                                                    Resolved::Bound {
+                                                                    ResolvedVar::Bound {
                                                                         symbol: Symbol::new("x"),
                                                                         binding: Symbol::new("x:1",),
                                                                     },
                                                                     Span { lo: 40, hi: 41 },
                                                                 ),
                                                                 Expr::Var(
-                                                                    Resolved::Bound {
+                                                                    ResolvedVar::Bound {
                                                                         symbol: Symbol::new("y"),
                                                                         binding: Symbol::new("y:2",),
                                                                     },

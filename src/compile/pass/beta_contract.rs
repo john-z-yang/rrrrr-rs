@@ -4,7 +4,7 @@ use crate::compile::{
     anf::{AExpr, Application, CExpr, Expr, If, Lambda, Let, Rhs, Set},
     census::Census,
     compilation_error::{CompilationError, Result},
-    ident::{Resolved, Symbol},
+    ident::{ResolvedVar, Symbol},
     span::Span,
 };
 
@@ -84,7 +84,7 @@ fn beta_contract_expr(
                 span,
             ),
         ) => {
-            if let AExpr::Var(Resolved::Bound { binding, .. }, _) = operand.as_ref()
+            if let AExpr::Var(ResolvedVar::Bound { binding, .. }, _) = operand.as_ref()
                 && let Some(lambda) = lambda_defintions.get(binding)
                 && lambda.var_arg.is_none()
                 && census.use_count(binding) == 1

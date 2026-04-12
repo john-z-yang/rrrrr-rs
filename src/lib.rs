@@ -13,7 +13,7 @@ use crate::{
         census::Census,
         core_expr,
         gensym::GenSym,
-        ident::{Resolved, Symbol},
+        ident::{ResolvedSymbol, Symbol},
         pass::expand::introduce_scopes,
     },
     prelude::DERIVED_FORMS,
@@ -78,11 +78,11 @@ impl Session {
         compile::pass::expand::expand(form, &mut self.bindings, &mut self.expander_env)
     }
 
-    pub fn alpha_convert(&mut self, form: SExpr<Id>) -> SExpr<Resolved> {
+    pub fn alpha_convert(&mut self, form: SExpr<Id>) -> SExpr<ResolvedSymbol> {
         compile::pass::alpha_convert::alpha_convert(form, &mut self.bindings)
     }
 
-    pub fn lower(&self, form: SExpr<Resolved>) -> core_expr::Expr {
+    pub fn lower(&self, form: SExpr<ResolvedSymbol>) -> core_expr::Expr {
         compile::pass::lower::lower(&self.gen_sym, form)
     }
 

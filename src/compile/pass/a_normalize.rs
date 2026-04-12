@@ -5,7 +5,7 @@ use crate::compile::{
     anf::{self, Rhs},
     core_expr,
     gensym::GenSym,
-    ident::{Resolved, Symbol},
+    ident::{ResolvedVar, Symbol},
 };
 
 type Continuation<T> = Box<dyn FnOnce(GenSym, T) -> anf::Expr>;
@@ -142,7 +142,7 @@ fn normalize_name(
                             body: Box::new(k(
                                 gen_sym,
                                 anf::Value::Var(
-                                    Resolved::Bound {
+                                    ResolvedVar::Bound {
                                         symbol: Symbol::new("anf"),
                                         binding: sym,
                                     },
@@ -161,7 +161,7 @@ fn normalize_name(
                             body: Box::new(k(
                                 gen_sym,
                                 anf::Value::Var(
-                                    Resolved::Bound {
+                                    ResolvedVar::Bound {
                                         symbol: Symbol::new("anf"),
                                         binding: sym,
                                     },

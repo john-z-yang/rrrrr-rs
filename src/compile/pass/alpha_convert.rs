@@ -3,13 +3,13 @@ use std::collections::BTreeSet;
 use crate::{
     compile::{
         bindings::{Bindings, Id},
-        ident::{Resolved, Symbol},
+        ident::{ResolvedSymbol, Symbol},
         sexpr::SExpr,
     },
     if_let_sexpr, make_sexpr, match_sexpr,
 };
 
-pub(crate) fn alpha_convert(sexpr: SExpr<Id>, bindings: &mut Bindings) -> SExpr<Resolved> {
+pub(crate) fn alpha_convert(sexpr: SExpr<Id>, bindings: &mut Bindings) -> SExpr<ResolvedSymbol> {
     match_sexpr! {
         &sexpr;
 
@@ -39,19 +39,19 @@ pub(crate) fn alpha_convert(sexpr: SExpr<Id>, bindings: &mut Bindings) -> SExpr<
     }
 }
 
-fn make_resolver(bindings: &Bindings) -> impl Fn(Id) -> Resolved {
+fn make_resolver(bindings: &Bindings) -> impl Fn(Id) -> ResolvedSymbol {
     |id| {
         let Some(Id {
             symbol: binding,
             scopes,
         }) = bindings.resolve(&id)
         else {
-            return Resolved::Free { symbol: id.symbol };
+            return ResolvedSymbol::Free { symbol: id.symbol };
         };
         if scopes == BTreeSet::from([Bindings::CORE_SCOPE, Bindings::TOP_LEVEL_SCOPE]) {
-            Resolved::Free { symbol: id.symbol }
+            ResolvedSymbol::Free { symbol: id.symbol }
         } else {
-            Resolved::Bound {
+            ResolvedSymbol::Bound {
                 symbol: id.symbol,
                 binding,
             }
@@ -59,12 +59,12 @@ fn make_resolver(bindings: &Bindings) -> impl Fn(Id) -> Resolved {
     }
 }
 
-fn alpha_convert_quote(sexpr: SExpr<Id>) -> SExpr<Resolved> {
+fn alpha_convert_quote(sexpr: SExpr<Id>) -> SExpr<ResolvedSymbol> {
     let span = sexpr.get_span();
     if_let_sexpr! {(_, sexpr) = sexpr => {
         return make_sexpr!(
             SExpr::Var(
-                Resolved::Bound {
+                ResolvedSymbol::Bound {
                     symbol: Symbol::new("quote"),
                     binding: Symbol::new("quote"),
                 },
@@ -72,7 +72,7 @@ fn alpha_convert_quote(sexpr: SExpr<Id>) -> SExpr<Resolved> {
             ),
             sexpr
                 .clone()
-                .map_var(&|id| Resolved::Literal { symbol: id.symbol }),
+                .map_var(&|id| ResolvedSymbol::Literal { symbol: id.symbol }),
         );
     }};
     unreachable!("Invalid quote form")
@@ -91,7 +91,7 @@ mod tests {
         make_sexpr,
     };
 
-    fn alpha_convert_source(source: &str) -> SExpr<Resolved> {
+    fn alpha_convert_source(source: &str) -> SExpr<ResolvedSymbol> {
         let mut bindings = Bindings::new(Default::default());
         let mut env = Env::default();
         let sexpr = parse(&tokenize(source).unwrap()).unwrap().pop().unwrap();
@@ -105,14 +105,14 @@ mod tests {
         let span = Span { lo: 0, hi: 0 };
         let expected = make_sexpr!(
             SExpr::Var(
-                Resolved::Bound {
+                ResolvedSymbol::Bound {
                     symbol: Symbol::new("quote"),
                     binding: Symbol::new("quote"),
                 },
                 span,
             ),
             SExpr::Var(
-                Resolved::Literal {
+                ResolvedSymbol::Literal {
                     symbol: Symbol::new("x"),
                 },
                 span,
@@ -128,7 +128,7 @@ mod tests {
         let span = Span { lo: 0, hi: 0 };
         let expected = make_sexpr!(
             SExpr::Var(
-                Resolved::Bound {
+                ResolvedSymbol::Bound {
                     symbol: Symbol::new("quote"),
                     binding: Symbol::new("quote"),
                 },
@@ -136,13 +136,13 @@ mod tests {
             ),
             (
                 SExpr::Var(
-                    Resolved::Literal {
+                    ResolvedSymbol::Literal {
                         symbol: Symbol::new("x"),
                     },
                     span,
                 ),
                 SExpr::Var(
-                    Resolved::Literal {
+                    ResolvedSymbol::Literal {
                         symbol: Symbol::new("y"),
                     },
                     span,
@@ -159,20 +159,20 @@ mod tests {
         let span = Span { lo: 0, hi: 0 };
         let expected = make_sexpr!(
             SExpr::Var(
-                Resolved::Bound {
+                ResolvedSymbol::Bound {
                     symbol: Symbol::new("define"),
                     binding: Symbol::new("define"),
                 },
                 span,
             ),
             SExpr::Var(
-                Resolved::Free {
+                ResolvedSymbol::Free {
                     symbol: Symbol::new("x"),
                 },
                 span,
             ),
             SExpr::Var(
-                Resolved::Free {
+                ResolvedSymbol::Free {
                     symbol: Symbol::new("x"),
                 },
                 span,
@@ -185,12 +185,12 @@ mod tests {
     fn test_alpha_convert_set_after_define_uses_same_binding() {
         let result = alpha_convert_source("(begin (define x 1) (set! x 2))");
         let span = Span { lo: 0, hi: 0 };
-        let x_binding = Resolved::Free {
+        let x_binding = ResolvedSymbol::Free {
             symbol: Symbol::new("x"),
         };
         let expected = make_sexpr!(
             SExpr::Var(
-                Resolved::Bound {
+                ResolvedSymbol::Bound {
                     symbol: Symbol::new("begin"),
                     binding: Symbol::new("begin"),
                 },
@@ -198,7 +198,7 @@ mod tests {
             ),
             (
                 SExpr::Var(
-                    Resolved::Bound {
+                    ResolvedSymbol::Bound {
                         symbol: Symbol::new("define"),
                         binding: Symbol::new("define"),
                     },
@@ -209,7 +209,7 @@ mod tests {
             ),
             (
                 SExpr::Var(
-                    Resolved::Bound {
+                    ResolvedSymbol::Bound {
                         symbol: Symbol::new("set!"),
                         binding: Symbol::new("set!"),
                     },
@@ -228,14 +228,14 @@ mod tests {
         let span = Span { lo: 0, hi: 0 };
         let expected = make_sexpr!(
             SExpr::Var(
-                Resolved::Bound {
+                ResolvedSymbol::Bound {
                     symbol: Symbol::new("lambda"),
                     binding: Symbol::new("lambda"),
                 },
                 span,
             ),
             (SExpr::Var(
-                Resolved::Bound {
+                ResolvedSymbol::Bound {
                     symbol: Symbol::new("quote"),
                     binding: Symbol::new("quote:1"),
                 },
@@ -243,14 +243,14 @@ mod tests {
             )),
             (
                 SExpr::Var(
-                    Resolved::Bound {
+                    ResolvedSymbol::Bound {
                         symbol: Symbol::new("quote"),
                         binding: Symbol::new("quote:1"),
                     },
                     span,
                 ),
                 SExpr::Var(
-                    Resolved::Free {
+                    ResolvedSymbol::Free {
                         symbol: Symbol::new("x"),
                     },
                     span,
@@ -267,7 +267,7 @@ mod tests {
         let span = Span { lo: 0, hi: 0 };
         let expected = make_sexpr!(
             SExpr::Var(
-                Resolved::Bound {
+                ResolvedSymbol::Bound {
                     symbol: Symbol::new("begin"),
                     binding: Symbol::new("begin"),
                 },
@@ -275,14 +275,14 @@ mod tests {
             ),
             (
                 SExpr::Var(
-                    Resolved::Bound {
+                    ResolvedSymbol::Bound {
                         symbol: Symbol::new("define"),
                         binding: Symbol::new("define"),
                     },
                     span,
                 ),
                 SExpr::Var(
-                    Resolved::Free {
+                    ResolvedSymbol::Free {
                         symbol: Symbol::new("lambda")
                     },
                     span,
@@ -291,21 +291,21 @@ mod tests {
             ),
             (
                 SExpr::Var(
-                    Resolved::Bound {
+                    ResolvedSymbol::Bound {
                         symbol: Symbol::new("define"),
                         binding: Symbol::new("define"),
                     },
                     span,
                 ),
                 SExpr::Var(
-                    Resolved::Free {
+                    ResolvedSymbol::Free {
                         symbol: Symbol::new("x"),
                     },
                     span,
                 ),
                 (
                     SExpr::Var(
-                        Resolved::Bound {
+                        ResolvedSymbol::Bound {
                             symbol: Symbol::new("lambda"),
                             binding: Symbol::new("lambda"),
                         },
@@ -326,7 +326,7 @@ mod tests {
         let span = Span { lo: 0, hi: 0 };
         let expected = make_sexpr!(
             SExpr::Var(
-                Resolved::Bound {
+                ResolvedSymbol::Bound {
                     symbol: Symbol::new("begin"),
                     binding: Symbol::new("begin"),
                 },
@@ -334,7 +334,7 @@ mod tests {
             ),
             (
                 SExpr::Var(
-                    Resolved::Bound {
+                    ResolvedSymbol::Bound {
                         symbol: Symbol::new("lambda"),
                         binding: Symbol::new("lambda"),
                     },
@@ -345,14 +345,14 @@ mod tests {
             ),
             (
                 SExpr::Var(
-                    Resolved::Bound {
+                    ResolvedSymbol::Bound {
                         symbol: Symbol::new("define"),
                         binding: Symbol::new("define"),
                     },
                     span,
                 ),
                 SExpr::Var(
-                    Resolved::Free {
+                    ResolvedSymbol::Free {
                         symbol: Symbol::new("lambda"),
                     },
                     span,
@@ -360,7 +360,7 @@ mod tests {
                 SExpr::Num(Num(1.0), span),
             ),
             SExpr::Var(
-                Resolved::Free {
+                ResolvedSymbol::Free {
                     symbol: Symbol::new("lambda"),
                 },
                 span,
