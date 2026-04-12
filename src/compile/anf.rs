@@ -55,7 +55,6 @@ impl From<Value> for AExpr {
     }
 }
 
-
 impl Debug for AExpr {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
@@ -73,13 +72,11 @@ pub enum CExpr {
     Set(Set, Span),
 }
 
-
 #[derive(Clone, PartialEq, Debug)]
 pub enum Rhs {
     AExpr(AExpr),
     CExpr(CExpr),
 }
-
 
 #[derive(Clone, PartialEq, Debug)]
 pub enum Value {
@@ -93,12 +90,10 @@ pub struct Let {
     pub body: Box<Expr>,
 }
 
-
 #[derive(Clone, PartialEq, Debug)]
 pub struct Begin {
     pub body: Vec<Expr>,
 }
-
 
 #[derive(Clone, PartialEq, Debug)]
 pub struct Lambda {
@@ -107,13 +102,11 @@ pub struct Lambda {
     pub body: Box<Expr>,
 }
 
-
 #[derive(Clone, PartialEq, Debug)]
 pub struct Application {
     pub operand: Box<AExpr>,
     pub args: Vec<AExpr>,
 }
-
 
 #[derive(Clone, PartialEq, Debug)]
 pub struct If {
@@ -122,13 +115,11 @@ pub struct If {
     pub alt: Box<Expr>,
 }
 
-
 #[derive(Clone, PartialEq, Debug)]
 pub struct Set {
     pub var: Resolved,
     pub aexpr: AExpr,
 }
-
 
 struct ExprPrettyPrinter<'a>(&'a Expr);
 
