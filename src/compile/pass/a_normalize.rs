@@ -10,11 +10,15 @@ use crate::compile::{
 
 type Continuation<T> = Box<dyn FnOnce(GenSym, T) -> anf::Expr>;
 
-pub(crate) fn normalize(gen_sym: GenSym, expr: core_expr::Expr) -> anf::Expr {
-    normalize_expr(gen_sym, expr, Box::new(|_, expr| expr))
+pub(crate) fn a_normalize(gen_sym: GenSym, expr: core_expr::Expr) -> anf::Expr {
+    a_normalize_expr(gen_sym, expr, Box::new(|_, expr| expr))
 }
 
-fn normalize_expr(gen_sym: GenSym, expr: core_expr::Expr, k: Continuation<anf::Expr>) -> anf::Expr {
+fn a_normalize_expr(
+    gen_sym: GenSym,
+    expr: core_expr::Expr,
+    k: Continuation<anf::Expr>,
+) -> anf::Expr {
     match expr {
         core_expr::Expr::Literal(sexpr) => k(gen_sym, anf::Expr::AExpr(anf::AExpr::Literal(sexpr))),
         core_expr::Expr::Var(resolved, span) => {
@@ -33,17 +37,17 @@ fn normalize_expr(gen_sym: GenSym, expr: core_expr::Expr, k: Continuation<anf::E
                 anf::Lambda {
                     args,
                     var_arg,
-                    body: Box::new(normalize(gen_sym, *body)),
+                    body: Box::new(a_normalize(gen_sym, *body)),
                 },
                 span,
             )),
         ),
         core_expr::Expr::Application(core_expr::Application { operand, args }, span) => {
-            normalize_name(
+            a_normalize_name(
                 gen_sym,
                 *operand,
                 Box::new(move |gen_sym, normalized_operand| {
-                    normalize_names(
+                    a_normalize_names(
                         gen_sym.clone(),
                         Vec::with_capacity(args.len()),
                         Rc::new(args),
@@ -66,7 +70,7 @@ fn normalize_expr(gen_sym: GenSym, expr: core_expr::Expr, k: Continuation<anf::E
                 }),
             )
         }
-        core_expr::Expr::If(core_expr::If { test, conseq, alt }, span) => normalize_name(
+        core_expr::Expr::If(core_expr::If { test, conseq, alt }, span) => a_normalize_name(
             gen_sym,
             *test,
             Box::new(move |gen_sym, normalized_test| {
@@ -75,15 +79,15 @@ fn normalize_expr(gen_sym: GenSym, expr: core_expr::Expr, k: Continuation<anf::E
                     anf::Expr::CExpr(anf::CExpr::If(
                         anf::If {
                             test: Box::new(normalized_test.into()),
-                            conseq: Box::new(normalize(gen_sym.clone(), *conseq)),
-                            alt: Box::new(normalize(gen_sym, *alt)),
+                            conseq: Box::new(a_normalize(gen_sym.clone(), *conseq)),
+                            alt: Box::new(a_normalize(gen_sym, *alt)),
                         },
                         span,
                     )),
                 )
             }),
         ),
-        core_expr::Expr::Set(core_expr::Set { var, expr }, span) => normalize_name(
+        core_expr::Expr::Set(core_expr::Set { var, expr }, span) => a_normalize_name(
             gen_sym,
             *expr,
             Box::new(move |gen_sym, normalized| {
@@ -99,7 +103,7 @@ fn normalize_expr(gen_sym: GenSym, expr: core_expr::Expr, k: Continuation<anf::E
                 )
             }),
         ),
-        core_expr::Expr::Begin(core_expr::Begin { body }, _) => normalize_names(
+        core_expr::Expr::Begin(core_expr::Begin { body }, _) => a_normalize_names(
             gen_sym,
             Vec::with_capacity(body.len()),
             Rc::new(body),
@@ -117,12 +121,12 @@ fn normalize_expr(gen_sym: GenSym, expr: core_expr::Expr, k: Continuation<anf::E
     }
 }
 
-fn normalize_name(
+fn a_normalize_name(
     gen_sym: GenSym,
     expr: core_expr::Expr,
     k: Continuation<anf::Value>,
 ) -> anf::Expr {
-    normalize_expr(
+    a_normalize_expr(
         gen_sym,
         expr,
         Box::new(move |gen_sym, normalized| {
@@ -178,7 +182,7 @@ fn normalize_name(
     )
 }
 
-fn normalize_names(
+fn a_normalize_names(
     gen_sym: GenSym,
     mut acc: Vec<anf::Value>,
     exprs: Rc<Vec<core_expr::Expr>>,
@@ -187,7 +191,7 @@ fn normalize_names(
     if exprs.is_empty() {
         k(gen_sym, acc)
     } else {
-        normalize_name(
+        a_normalize_name(
             gen_sym,
             exprs[acc.len()].clone(),
             Box::new(move |gen_sym, normalized| {
@@ -195,7 +199,7 @@ fn normalize_names(
                 if acc.len() == exprs.len() {
                     k(gen_sym, acc)
                 } else {
-                    normalize_names(gen_sym, acc, exprs, k)
+                    a_normalize_names(gen_sym, acc, exprs, k)
                 }
             }),
         )

@@ -1,10 +1,12 @@
 use crate::compile::{
     anf::{AExpr, Application, CExpr, Expr, If, Lambda, Let, Rhs, Set},
     census::Census,
+    pass::collect_census::collect_census,
 };
 
-pub(crate) fn dce(expr: Expr, census: &mut Census) -> Expr {
-    dce_expr(expr, census)
+pub(crate) fn dce(expr: Expr) -> Expr {
+    let mut census = collect_census(&expr);
+    dce_expr(expr, &mut census)
 }
 
 fn dce_expr(expr: Expr, census: &mut Census) -> Expr {

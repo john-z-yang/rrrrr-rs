@@ -10,7 +10,6 @@ use crate::{
     compile::{
         anf,
         bindings::Id,
-        census::Census,
         core_expr,
         gensym::GenSym,
         ident::{ResolvedSymbol, Symbol},
@@ -87,19 +86,15 @@ impl Session {
     }
 
     pub fn a_normalize(&self, form: core_expr::Expr) -> anf::Expr {
-        compile::pass::a_normalize::normalize(self.gen_sym.clone(), form)
+        compile::pass::a_normalize::a_normalize(self.gen_sym.clone(), form)
     }
 
     pub fn beta_contract(&self, form: anf::Expr) -> Result<anf::Expr> {
-        let mut census = Census::default();
-        compile::pass::collect_census::collect(&form, &mut census);
-        compile::pass::beta_contract::beta_contract(form, &census)
+        compile::pass::beta_contract::beta_contract(form)
     }
 
     pub fn dce(&self, form: anf::Expr) -> anf::Expr {
-        let mut census = Census::default();
-        compile::pass::collect_census::collect(&form, &mut census);
-        compile::pass::dce::dce(form, &mut census)
+        compile::pass::dce::dce(form)
     }
 }
 
