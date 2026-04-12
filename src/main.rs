@@ -27,6 +27,7 @@ fn main() {
                                         .map(|expanded| session.alpha_convert(expanded))
                                         .map(|converted| session.lower(converted))
                                         .map(|lowered| session.a_normalize(lowered))
+                                        .and_then(|normalized| session.beta_contract(normalized))
                                 })
                                 .collect::<Result<Vec<_>, CompilationError>>()
                         });

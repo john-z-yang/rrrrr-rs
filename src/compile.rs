@@ -1,5 +1,6 @@
 pub mod anf;
 pub mod bindings;
+pub mod census;
 pub mod compilation_error;
 pub mod core_expr;
 pub mod ident;

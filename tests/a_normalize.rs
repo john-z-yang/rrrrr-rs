@@ -300,7 +300,8 @@ fn test_pretty_print() {
             "{}",
             a_normalize_source("(define (f x y) (if (= x 0) y (f (- x 1) (* x y))))")
         ),
-        r#"(let ((anf:7
+        r#"
+(let ((anf:7
        (λ (x:1 y:2)
          (let ((anf:4 (=:free x:1 0)))
            (if anf:4
@@ -308,6 +309,8 @@ fn test_pretty_print() {
                (let ((anf:5 (-:free x:1 1)))
                  (let ((anf:6 (*:free x:1 y:2)))
                    (f:free anf:5 anf:6))))))))
-  (set! f:free anf:7))"#
+  (set! f:free anf:7))
+        "#
+        .trim()
     );
 }
