@@ -15,51 +15,51 @@ impl Census {
         self.data.entry(symbol.clone()).or_default().use_count += 1;
     }
 
-    pub(crate) fn decrement_use(&mut self, rhs: &Rhs) {
+    pub(crate) fn eliminate(&mut self, rhs: &Rhs) {
         match rhs {
-            Rhs::AExpr(aexpr) => self.decrement_use_aexpr(aexpr),
-            Rhs::CExpr(cexpr) => self.decrement_use_cexpr(cexpr),
+            Rhs::AExpr(aexpr) => self.eliminate_aexpr(aexpr),
+            Rhs::CExpr(cexpr) => self.eliminate_cexpr(cexpr),
         }
     }
 
-    pub(crate) fn decrement_use_expr(&mut self, expr: &Expr) {
+    pub(crate) fn eliminate_expr(&mut self, expr: &Expr) {
         match expr {
-            Expr::AExpr(aexpr) => self.decrement_use_aexpr(aexpr),
-            Expr::CExpr(cexpr) => self.decrement_use_cexpr(cexpr),
+            Expr::AExpr(aexpr) => self.eliminate_aexpr(aexpr),
+            Expr::CExpr(cexpr) => self.eliminate_cexpr(cexpr),
             Expr::Let(Let { initializer, body }, _) => {
-                self.decrement_use(&initializer.1);
-                self.decrement_use_expr(body);
+                self.eliminate(&initializer.1);
+                self.eliminate_expr(body);
             }
         }
     }
 
-    pub(crate) fn decrement_use_aexpr(&mut self, aexpr: &AExpr) {
+    pub(crate) fn eliminate_aexpr(&mut self, aexpr: &AExpr) {
         match aexpr {
             AExpr::Var(Resolved::Bound { binding, .. }, _) => {
                 self.data.get_mut(binding).unwrap().use_count -= 1;
             }
             AExpr::Lambda(Lambda { body, .. }, _) => {
-                self.decrement_use_expr(body);
+                self.eliminate_expr(body);
             }
             _ => {}
         }
     }
 
-    pub(crate) fn decrement_use_cexpr(&mut self, cexpr: &CExpr) {
+    pub(crate) fn eliminate_cexpr(&mut self, cexpr: &CExpr) {
         match cexpr {
             CExpr::Application(Application { operand, args }, _) => {
-                self.decrement_use_aexpr(operand);
+                self.eliminate_aexpr(operand);
                 for arg in args {
-                    self.decrement_use_aexpr(arg);
+                    self.eliminate_aexpr(arg);
                 }
             }
             CExpr::If(If { test, conseq, alt }, _) => {
-                self.decrement_use_aexpr(test);
-                self.decrement_use_expr(conseq);
-                self.decrement_use_expr(alt);
+                self.eliminate_aexpr(test);
+                self.eliminate_expr(conseq);
+                self.eliminate_expr(alt);
             }
             CExpr::Set(Set { aexpr, .. }, _) => {
-                self.decrement_use_aexpr(aexpr);
+                self.eliminate_aexpr(aexpr);
             }
         }
     }

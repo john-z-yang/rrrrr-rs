@@ -11,19 +11,17 @@ fn dce_expr(expr: Expr, census: &mut Census) -> Expr {
     match expr {
         Expr::Let(Let { initializer, body }, span) => {
             let (symbol, rhs) = *initializer;
-            {
-                if census.use_count(&symbol) == 0 && matches!(rhs, Rhs::AExpr(..)) {
-                    census.decrement_use(&rhs);
-                    return dce_expr(*body, census);
-                }
+            if census.use_count(&symbol) == 0 && matches!(rhs, Rhs::AExpr(..)) {
+                census.eliminate(&rhs);
+                return dce_expr(*body, census);
             }
+
             let body = dce_expr(*body, census);
-            {
-                if census.use_count(&symbol) == 0 && matches!(rhs, Rhs::AExpr(..)) {
-                    census.decrement_use(&rhs);
-                    return body;
-                }
+            if census.use_count(&symbol) == 0 && matches!(rhs, Rhs::AExpr(..)) {
+                census.eliminate(&rhs);
+                return body;
             }
+
             let rhs = match rhs {
                 Rhs::AExpr(aexpr) => Rhs::AExpr(dce_aexpr(aexpr, census)),
                 Rhs::CExpr(cexpr) => Rhs::CExpr(dce_cexpr(cexpr, census)),
