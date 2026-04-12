@@ -19,7 +19,7 @@ These days it has grown into a collection of compiler passes that I yoinked from
 | Lowering & `letrec` transformation            | [Revised(5) Scheme](https://conservatory.scheme.org/schemers/Documents/Standards/R5RS/HTML/)                                                                  |
 | A-normalization                               | [*The Essence of Compiling with Continuations* — Flanagan, Sabry, Duba, Felleisen](docs/references/The%20Essence%20of%20Compiling%20with%20Continuations.pdf) |
 | β-contraction                                 | [*The Essence of Compiling with Continuations* — Flanagan, Sabry, Duba, Felleisen](docs/references/The%20Essence%20of%20Compiling%20with%20Continuations.pdf) |
-
+| Dead code elimination                         |                                                                                                                                                               |
 ## Building and Testing
 
 The standard cargo incantations are available.
@@ -34,19 +34,17 @@ lisp> (let loop ((n 10) (acc 1))
   ...
 (let ((anf:18
        (λ (loop:8)
-         (let ((anf:13
-                (λ (temp:11)
-                  (let ((anf:12 (set! loop:8 temp:11)))
-                    loop:8))))
-           (let ((anf:17
-                  (λ (n:9 acc:10)
-                    (let ((anf:14 (=:free n:9 0)))
-                      (if anf:14
-                          acc:10
-                          (let ((anf:15 (-:free n:9 1)))
-                            (let ((anf:16 (*:free acc:10 n:9)))
-                              (loop:8 anf:15 anf:16))))))))
-             (anf:13 anf:17))))))
+         (let ((anf:17
+                (λ (n:9 acc:10)
+                  (let ((anf:14 (=:free n:9 0)))
+                    (if anf:14
+                        acc:10
+                        (let ((anf:15 (-:free n:9 1)))
+                          (let ((anf:16 (*:free acc:10 n:9)))
+                            (loop:8 anf:15 anf:16))))))))
+           (let ((temp:11 anf:17))
+             (let ((anf:12 (set! loop:8 temp:11)))
+               loop:8))))))
   (let ((anf:19 (anf:18 #<void>)))
     (anf:19 10 1)))
 lisp>

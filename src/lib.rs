@@ -24,7 +24,6 @@ pub struct Session {
     gen_sym: GenSym,
     bindings: Bindings,
     expander_env: Env,
-    census: Census,
 }
 
 impl Session {
@@ -34,7 +33,6 @@ impl Session {
             bindings: Bindings::new(gen_sym.clone()),
             gen_sym,
             expander_env: Env::default(),
-            census: Census::default(),
         }
     }
 
@@ -88,16 +86,20 @@ impl Session {
         compile::pass::lower::lower(&self.gen_sym, form)
     }
 
-    pub fn a_normalize(&mut self, form: core_expr::Expr) -> anf::Expr {
-        let normalized = compile::pass::a_normalize::normalize(self.gen_sym.clone(), form);
-        compile::pass::collect_census::collect(&normalized, &mut self.census);
-        normalized
+    pub fn a_normalize(&self, form: core_expr::Expr) -> anf::Expr {
+        compile::pass::a_normalize::normalize(self.gen_sym.clone(), form)
     }
 
-    pub fn beta_contract(&mut self, form: anf::Expr) -> Result<anf::Expr> {
-        let contracted = compile::pass::beta_contract::beta_contract(form, &self.census)?;
-        compile::pass::collect_census::collect(&contracted, &mut self.census);
-        Ok(contracted)
+    pub fn beta_contract(&self, form: anf::Expr) -> Result<anf::Expr> {
+        let mut census = Census::default();
+        compile::pass::collect_census::collect(&form, &mut census);
+        compile::pass::beta_contract::beta_contract(form, &census)
+    }
+
+    pub fn dce(&self, form: anf::Expr) -> anf::Expr {
+        let mut census = Census::default();
+        compile::pass::collect_census::collect(&form, &mut census);
+        compile::pass::dce::dce(form, &mut census)
     }
 }
 

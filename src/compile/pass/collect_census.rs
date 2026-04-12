@@ -52,6 +52,7 @@ fn collect_cexpr(cexpr: &CExpr, census: &mut Census) {
             let Resolved::Bound { binding, .. } = var else {
                 return collect_aexpr(aexpr, census);
             };
+            census.track_use(binding);
             census.track_rebound(binding);
             collect_aexpr(aexpr, census)
         }
