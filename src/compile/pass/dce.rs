@@ -1,5 +1,5 @@
 use crate::compile::{
-    anf::{AExpr, Application, CExpr, Expr, If, Lambda, Let, Rhs, Set},
+    anf::{AExpr, CExpr, Expr, If, Lambda, Let, Rhs},
     census::Census,
     pass::census_collection::collect_census,
 };
@@ -64,13 +64,7 @@ fn dce_aexpr(aexpr: AExpr, census: &mut Census) -> AExpr {
 
 fn dce_cexpr(cexpr: CExpr, census: &mut Census) -> CExpr {
     match cexpr {
-        CExpr::Application(Application { operand, args }, span) => CExpr::Application(
-            Application {
-                operand,
-                args: args.into_iter().map(|arg| dce_aexpr(arg, census)).collect(),
-            },
-            span,
-        ),
+        CExpr::Application(application, span) => CExpr::Application(application, span),
         CExpr::If(If { test, conseq, alt }, span) => CExpr::If(
             If {
                 test,
@@ -79,12 +73,6 @@ fn dce_cexpr(cexpr: CExpr, census: &mut Census) -> CExpr {
             },
             span,
         ),
-        CExpr::Set(Set { var, aexpr }, span) => CExpr::Set(
-            Set {
-                var,
-                aexpr: dce_aexpr(aexpr, census),
-            },
-            span,
-        ),
+        CExpr::Set(set, span) => CExpr::Set(set, span),
     }
 }

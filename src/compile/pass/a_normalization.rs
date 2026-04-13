@@ -56,11 +56,8 @@ fn a_normalize_expr(
                                 gen_sym,
                                 compile::anf::Expr::CExpr(anf::CExpr::Application(
                                     anf::Application {
-                                        operand: Box::new(normalized_operand.into()),
-                                        args: normalized_args
-                                            .into_iter()
-                                            .map(anf::AExpr::from)
-                                            .collect(),
+                                        operand: Box::new(normalized_operand),
+                                        args: normalized_args,
                                     },
                                     span,
                                 )),
@@ -78,7 +75,7 @@ fn a_normalize_expr(
                     gen_sym.clone(),
                     anf::Expr::CExpr(anf::CExpr::If(
                         anf::If {
-                            test: Box::new(normalized_test.into()),
+                            test: Box::new(normalized_test),
                             conseq: Box::new(a_normalize(gen_sym.clone(), *conseq)),
                             alt: Box::new(a_normalize(gen_sym, *alt)),
                         },
@@ -96,7 +93,7 @@ fn a_normalize_expr(
                     anf::Expr::CExpr(anf::CExpr::Set(
                         anf::Set {
                             var,
-                            aexpr: normalized.into(),
+                            aexpr: normalized,
                         },
                         span,
                     )),

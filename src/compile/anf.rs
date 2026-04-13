@@ -104,13 +104,13 @@ pub struct Lambda {
 
 #[derive(Clone, PartialEq, Debug)]
 pub struct Application {
-    pub operand: Box<AExpr>,
-    pub args: Vec<AExpr>,
+    pub operand: Box<Value>,
+    pub args: Vec<Value>,
 }
 
 #[derive(Clone, PartialEq, Debug)]
 pub struct If {
-    pub test: Box<AExpr>,
+    pub test: Box<Value>,
     pub conseq: Box<Expr>,
     pub alt: Box<Expr>,
 }
@@ -118,7 +118,7 @@ pub struct If {
 #[derive(Clone, PartialEq, Debug)]
 pub struct Set {
     pub var: ResolvedVar,
-    pub aexpr: AExpr,
+    pub aexpr: Value,
 }
 
 struct ExprPrettyPrinter<'a>(&'a Expr);
@@ -130,13 +130,10 @@ impl<'a> ExprPrettyPrinter<'a> {
 
     fn is_multilined_cexpr(cexpr: &CExpr) -> bool {
         match cexpr {
-            CExpr::Application(Application { args, .. }, _) => {
-                args.iter().any(Self::is_multilined_aexpr)
-            }
+            CExpr::Application(..) | CExpr::Set(..) => false,
             CExpr::If(If { conseq, alt, .. }, _) => {
                 Self::is_multilined_expr(conseq) || Self::is_multilined_expr(alt)
             }
-            CExpr::Set(Set { aexpr, .. }, _) => Self::is_multilined_aexpr(aexpr),
         }
     }
 
@@ -188,6 +185,23 @@ impl<'a> ExprPrettyPrinter<'a> {
                 Self::fmt_expr(body, f, indent_level + 2)?;
                 write!(f, ")")
             }
+        }
+    }
+
+    fn fmt_value(
+        value: &Value,
+        f: &mut std::fmt::Formatter<'_>,
+        indent_level: usize,
+    ) -> std::fmt::Result {
+        Self::write_indent(f, indent_level)?;
+        match value {
+            Value::Literal(sexpr) => {
+                if matches!(sexpr, SExpr::Var(..) | SExpr::Cons(..) | SExpr::Nil(..)) {
+                    write!(f, "'")?;
+                }
+                write!(f, "{}", sexpr)
+            }
+            Value::Var(resolved, _) => write!(f, "{}", resolved),
         }
     }
 
@@ -253,20 +267,17 @@ impl<'a> ExprPrettyPrinter<'a> {
         match cexpr {
             CExpr::Application(Application { operand, args }, _) => {
                 write!(f, "(")?;
-                Self::fmt_aexpr(operand, f, 0)?;
+                Self::fmt_value(operand, f, 0)?;
                 for arg in args.iter() {
                     write!(f, " ")?;
-                    Self::fmt_aexpr(arg, f, 0)?;
+                    Self::fmt_value(arg, f, 0)?;
                 }
                 write!(f, ")")
             }
             CExpr::If(If { test, conseq, alt }, _) => {
-                if Self::is_multilined_aexpr(test)
-                    || Self::is_multilined_expr(conseq)
-                    || Self::is_multilined_expr(alt)
-                {
+                if Self::is_multilined_expr(conseq) || Self::is_multilined_expr(alt) {
                     write!(f, "(if ")?;
-                    Self::fmt_aexpr(test, f, 0)?;
+                    Self::fmt_value(test, f, 0)?;
                     writeln!(f)?;
                     Self::fmt_expr(conseq, f, indent_level + 4)?;
                     writeln!(f)?;
@@ -274,7 +285,7 @@ impl<'a> ExprPrettyPrinter<'a> {
                     write!(f, ")")
                 } else {
                     write!(f, "(if ")?;
-                    Self::fmt_aexpr(test, f, 0)?;
+                    Self::fmt_value(test, f, 0)?;
                     write!(f, " ")?;
                     Self::fmt_expr(conseq, f, 0)?;
                     write!(f, " ")?;
@@ -284,13 +295,8 @@ impl<'a> ExprPrettyPrinter<'a> {
             }
             CExpr::Set(Set { var, aexpr }, _) => {
                 write!(f, "(set! {}", var)?;
-                if Self::is_multilined_aexpr(aexpr) {
-                    writeln!(f)?;
-                    Self::fmt_aexpr(aexpr, f, indent_level + 6)?;
-                } else {
-                    write!(f, " ")?;
-                    Self::fmt_aexpr(aexpr, f, 0)?;
-                }
+                write!(f, " ")?;
+                Self::fmt_value(aexpr, f, 0)?;
                 write!(f, ")")
             }
         }

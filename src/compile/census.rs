@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 
 use crate::compile::{
-    anf::{AExpr, Application, CExpr, Expr, If, Lambda, Let, Rhs, Set},
+    anf::{AExpr, Application, CExpr, Expr, If, Lambda, Let, Rhs, Set, Value},
     ident::{ResolvedVar, Symbol},
 };
 
@@ -45,21 +45,27 @@ impl Census {
         }
     }
 
+    pub(crate) fn eliminate_value(&mut self, value: &Value) {
+        if let Value::Var(ResolvedVar::Bound { binding, .. }, _) = value {
+            self.data.get_mut(binding).unwrap().use_count -= 1;
+        }
+    }
+
     pub(crate) fn eliminate_cexpr(&mut self, cexpr: &CExpr) {
         match cexpr {
             CExpr::Application(Application { operand, args }, _) => {
-                self.eliminate_aexpr(operand);
+                self.eliminate_value(operand);
                 for arg in args {
-                    self.eliminate_aexpr(arg);
+                    self.eliminate_value(arg);
                 }
             }
             CExpr::If(If { test, conseq, alt }, _) => {
-                self.eliminate_aexpr(test);
+                self.eliminate_value(test);
                 self.eliminate_expr(conseq);
                 self.eliminate_expr(alt);
             }
             CExpr::Set(Set { aexpr, .. }, _) => {
-                self.eliminate_aexpr(aexpr);
+                self.eliminate_value(aexpr);
             }
         }
     }

@@ -97,3 +97,49 @@ fn test_let_form() {
         .trim()
     );
 }
+
+#[test]
+fn test_contraction_inside_if_conseq() {
+    assert_eq!(
+        pp(beta_contract_source("(if #t ((lambda (x) x) 1) 2)")),
+        r#"
+(if #t
+    (let ((x:1 1))
+      x:1)
+    2)
+        "#
+        .trim()
+    );
+}
+
+#[test]
+fn test_contraction_inside_if_alt() {
+    assert_eq!(
+        pp(beta_contract_source("(if #f 1 ((lambda (x) x) 2))")),
+        r#"
+(if #f
+    1
+    (let ((x:1 2))
+      x:1))
+        "#
+        .trim()
+    );
+}
+
+#[test]
+fn test_contraction_inside_nested_if() {
+    assert_eq!(
+        pp(beta_contract_source(
+            "(if #t (if #t ((lambda (x) x) 1) 2) 3)"
+        )),
+        r#"
+(if #t
+    (if #t
+        (let ((x:1 1))
+          x:1)
+        2)
+    3)
+        "#
+        .trim()
+    );
+}

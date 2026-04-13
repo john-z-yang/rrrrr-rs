@@ -1,7 +1,7 @@
 use std::collections::{HashMap, VecDeque};
 
 use crate::compile::{
-    anf::{AExpr, Application, CExpr, Expr, If, Lambda, Let, Rhs, Set},
+    anf::{AExpr, Application, CExpr, Expr, If, Lambda, Let, Rhs, Value},
     census::Census,
     compilation_error::{CompilationError, Result},
     ident::{ResolvedVar, Symbol},
@@ -15,20 +15,20 @@ pub(crate) fn beta_contract(expr: Expr) -> Result<Expr> {
     Ok(dce::dce(expr))
 }
 
-fn build_let(body: Expr, args: &mut VecDeque<(Symbol, AExpr)>, span: Span) -> Expr {
+fn build_let(body: Expr, args: &mut VecDeque<(Symbol, Value)>, span: Span) -> Expr {
     let Some((sym, val)) = args.pop_front() else {
         return body;
     };
     Expr::Let(
         Let {
-            initializer: Box::new((sym, Rhs::AExpr(val))),
+            initializer: Box::new((sym, Rhs::AExpr(val.into()))),
             body: Box::new(build_let(body, args, span)),
         },
         span,
     )
 }
 
-fn beta_contract_lambda_app(lambda: Lambda, args: Vec<AExpr>, span: Span) -> Result<Expr> {
+fn beta_contract_lambda_app(lambda: Lambda, args: Vec<Value>, span: Span) -> Result<Expr> {
     let Lambda {
         args: arg_syms,
         body,
@@ -87,7 +87,7 @@ fn beta_contract_expr(
                 span,
             ),
         ) => {
-            if let AExpr::Var(ResolvedVar::Bound { binding, .. }, _) = operand.as_ref()
+            if let Value::Var(ResolvedVar::Bound { binding, .. }, _) = operand.as_ref()
                 && let Some(lambda) = lambda_definitions.get(binding)
                 && lambda.var_arg.is_none()
                 && census.use_count(binding) == 1
@@ -150,16 +150,7 @@ fn beta_contract_cexpr(
     lambda_definitions: &mut HashMap<Symbol, Lambda>,
 ) -> Result<CExpr> {
     match cexpr {
-        CExpr::Application(Application { operand, args }, span) => Ok(CExpr::Application(
-            Application {
-                operand,
-                args: args
-                    .into_iter()
-                    .map(|arg| beta_contract_aexpr(arg, census, lambda_definitions))
-                    .collect::<Result<Vec<_>>>()?,
-            },
-            span,
-        )),
+        CExpr::Application(application, span) => Ok(CExpr::Application(application, span)),
         CExpr::If(If { test, conseq, alt }, span) => Ok(CExpr::If(
             If {
                 test,
@@ -168,12 +159,6 @@ fn beta_contract_cexpr(
             },
             span,
         )),
-        CExpr::Set(Set { var, aexpr }, span) => Ok(CExpr::Set(
-            Set {
-                var,
-                aexpr: beta_contract_aexpr(aexpr, census, lambda_definitions)?,
-            },
-            span,
-        )),
+        CExpr::Set(set, span) => Ok(CExpr::Set(set, span)),
     }
 }
