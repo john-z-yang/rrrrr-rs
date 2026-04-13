@@ -54,26 +54,26 @@ fn beta_contract_lambda_app(lambda: Lambda, args: Vec<AExpr>, span: Span) -> Res
 fn beta_contract_expr(
     expr: Expr,
     census: &Census,
-    lambda_defintions: &mut HashMap<Symbol, Lambda>,
+    lambda_definitions: &mut HashMap<Symbol, Lambda>,
 ) -> Result<Expr> {
     match expr {
         Expr::Let(Let { initializer, body }, span) => {
             let (symbol, rhs) = *initializer;
             if let Rhs::AExpr(AExpr::Lambda(lambda, _)) = &rhs {
-                lambda_defintions.insert(symbol.clone(), lambda.clone());
+                lambda_definitions.insert(symbol.clone(), lambda.clone());
             }
             let rhs = match rhs {
                 Rhs::AExpr(aexpr) => {
-                    Rhs::AExpr(beta_contract_aexpr(aexpr, census, lambda_defintions)?)
+                    Rhs::AExpr(beta_contract_aexpr(aexpr, census, lambda_definitions)?)
                 }
                 Rhs::CExpr(cexpr) => {
-                    Rhs::CExpr(beta_contract_cexpr(cexpr, census, lambda_defintions)?)
+                    Rhs::CExpr(beta_contract_cexpr(cexpr, census, lambda_definitions)?)
                 }
             };
             Ok(Expr::Let(
                 Let {
                     initializer: Box::new((symbol, rhs)),
-                    body: Box::new(beta_contract_expr(*body, census, lambda_defintions)?),
+                    body: Box::new(beta_contract_expr(*body, census, lambda_definitions)?),
                 },
                 span,
             ))
@@ -88,7 +88,7 @@ fn beta_contract_expr(
             ),
         ) => {
             if let AExpr::Var(ResolvedVar::Bound { binding, .. }, _) = operand.as_ref()
-                && let Some(lambda) = lambda_defintions.get(binding)
+                && let Some(lambda) = lambda_definitions.get(binding)
                 && lambda.var_arg.is_none()
                 && census.use_count(binding) == 1
                 && !census.is_rebound(binding)
@@ -96,25 +96,25 @@ fn beta_contract_expr(
                 beta_contract_expr(
                     beta_contract_lambda_app(lambda.clone(), args.clone(), span)?,
                     census,
-                    lambda_defintions,
+                    lambda_definitions,
                 )
             } else {
                 Ok(Expr::CExpr(beta_contract_cexpr(
                     cexpr.clone(),
                     census,
-                    lambda_defintions,
+                    lambda_definitions,
                 )?))
             }
         }
         Expr::AExpr(aexpr) => Ok(Expr::AExpr(beta_contract_aexpr(
             aexpr,
             census,
-            lambda_defintions,
+            lambda_definitions,
         )?)),
         Expr::CExpr(cexpr) => Ok(Expr::CExpr(beta_contract_cexpr(
             cexpr,
             census,
-            lambda_defintions,
+            lambda_definitions,
         )?)),
     }
 }
@@ -122,7 +122,7 @@ fn beta_contract_expr(
 fn beta_contract_aexpr(
     aexpr: AExpr,
     census: &Census,
-    lambda_defintions: &mut HashMap<Symbol, Lambda>,
+    lambda_definitions: &mut HashMap<Symbol, Lambda>,
 ) -> Result<AExpr> {
     match aexpr {
         AExpr::Literal(..) | AExpr::Var(..) => Ok(aexpr),
@@ -137,7 +137,7 @@ fn beta_contract_aexpr(
             Lambda {
                 args,
                 var_arg,
-                body: Box::new(beta_contract_expr(*body, census, lambda_defintions)?),
+                body: Box::new(beta_contract_expr(*body, census, lambda_definitions)?),
             },
             span,
         )),
@@ -147,7 +147,7 @@ fn beta_contract_aexpr(
 fn beta_contract_cexpr(
     cexpr: CExpr,
     census: &Census,
-    lambda_defintions: &mut HashMap<Symbol, Lambda>,
+    lambda_definitions: &mut HashMap<Symbol, Lambda>,
 ) -> Result<CExpr> {
     match cexpr {
         CExpr::Application(Application { operand, args }, span) => Ok(CExpr::Application(
@@ -155,7 +155,7 @@ fn beta_contract_cexpr(
                 operand,
                 args: args
                     .into_iter()
-                    .map(|arg| beta_contract_aexpr(arg, census, lambda_defintions))
+                    .map(|arg| beta_contract_aexpr(arg, census, lambda_definitions))
                     .collect::<Result<Vec<_>>>()?,
             },
             span,
@@ -163,15 +163,15 @@ fn beta_contract_cexpr(
         CExpr::If(If { test, conseq, alt }, span) => Ok(CExpr::If(
             If {
                 test,
-                conseq: Box::new(beta_contract_expr(*conseq, census, lambda_defintions)?),
-                alt: Box::new(beta_contract_expr(*alt, census, lambda_defintions)?),
+                conseq: Box::new(beta_contract_expr(*conseq, census, lambda_definitions)?),
+                alt: Box::new(beta_contract_expr(*alt, census, lambda_definitions)?),
             },
             span,
         )),
         CExpr::Set(Set { var, aexpr }, span) => Ok(CExpr::Set(
             Set {
                 var,
-                aexpr: beta_contract_aexpr(aexpr, census, lambda_defintions)?,
+                aexpr: beta_contract_aexpr(aexpr, census, lambda_definitions)?,
             },
             span,
         )),
