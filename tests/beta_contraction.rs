@@ -37,10 +37,7 @@ fn test_no_contraction() {
 fn test_zero_arg_contraction() {
     assert_eq!(
         pp(beta_contract_source("((lambda () 42))")),
-        r#"
-(let ((anf:1
-       (λ () 42)))
-  42)
+        r#"42
         "#
         .trim()
     );
@@ -51,10 +48,8 @@ fn test_single_arg_contraction() {
     assert_eq!(
         pp(beta_contract_source("((lambda (x) (+ x 1)) 1)")),
         r#"
-(let ((anf:2
-       (λ (x:1) (+:free x:1 1))))
-  (let ((x:1 1))
-    (+:free x:1 1)))
+(let ((x:1 1))
+  (+:free x:1 1))
         "#
         .trim()
     );
@@ -65,11 +60,9 @@ fn test_multi_arg_contraction() {
     assert_eq!(
         pp(beta_contract_source("((lambda (x y) (+ x y)) 1 2)")),
         r#"
-(let ((anf:3
-       (λ (x:1 y:2) (+:free x:1 y:2))))
-  (let ((x:1 1))
-    (let ((y:2 2))
-      (+:free x:1 y:2))))
+(let ((x:1 1))
+  (let ((y:2 2))
+    (+:free x:1 y:2)))
         "#
         .trim()
     );
@@ -82,17 +75,9 @@ fn test_nested_contraction() {
             "((lambda (x) ((lambda (y) (+ x y)) 2)) 1)"
         )),
         r#"
-(let ((anf:4
-       (λ (x:1)
-         (let ((anf:3
-                (λ (y:2) (+:free x:1 y:2))))
-           (let ((y:2 2))
-             (+:free x:1 y:2))))))
-  (let ((x:1 1))
-    (let ((anf:3
-           (λ (y:2) (+:free x:1 y:2))))
-      (let ((y:2 2))
-        (+:free x:1 y:2)))))
+(let ((x:1 1))
+  (let ((y:2 2))
+    (+:free x:1 y:2)))
         "#
         .trim()
     );
@@ -105,11 +90,9 @@ fn test_let_form() {
             "(let ((x 1) (y 2)) (+ x y))"
         )),
         r#"
-(let ((anf:10
-       (λ (x:8 y:9) (+:free x:8 y:9))))
-  (let ((x:8 1))
-    (let ((y:9 2))
-      (+:free x:8 y:9))))
+(let ((x:8 1))
+  (let ((y:9 2))
+    (+:free x:8 y:9)))
         "#
         .trim()
     );

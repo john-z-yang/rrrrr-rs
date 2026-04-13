@@ -5,13 +5,14 @@ use crate::compile::{
     census::Census,
     compilation_error::{CompilationError, Result},
     ident::{ResolvedVar, Symbol},
-    pass::census_collection,
+    pass::{census_collection, dce},
     span::Span,
 };
 
 pub(crate) fn beta_contract(expr: Expr) -> Result<Expr> {
     let census = census_collection::collect_census(&expr);
-    beta_contract_expr(expr, &census, &mut HashMap::new())
+    let expr = beta_contract_expr(expr, &census, &mut HashMap::new())?;
+    Ok(dce::dce(expr))
 }
 
 fn build_let(body: Expr, args: &mut VecDeque<(Symbol, AExpr)>, span: Span) -> Expr {
