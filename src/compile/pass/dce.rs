@@ -1,7 +1,7 @@
 use crate::compile::{
     anf::{AExpr, Application, CExpr, Expr, If, Lambda, Let, Rhs, Set},
     census::Census,
-    pass::collect_census::collect_census,
+    pass::census_collection::collect_census,
 };
 
 pub(crate) fn dce(expr: Expr) -> Expr {

@@ -5,12 +5,12 @@ use crate::compile::{
     census::Census,
     compilation_error::{CompilationError, Result},
     ident::{ResolvedVar, Symbol},
-    pass::collect_census,
+    pass::census_collection,
     span::Span,
 };
 
 pub(crate) fn beta_contract(expr: Expr) -> Result<Expr> {
-    let census = collect_census::collect_census(&expr);
+    let census = census_collection::collect_census(&expr);
     beta_contract_expr(expr, &census, &mut HashMap::new())
 }
 

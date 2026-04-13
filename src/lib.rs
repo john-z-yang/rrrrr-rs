@@ -78,7 +78,7 @@ impl Session {
     }
 
     pub fn alpha_convert(&mut self, form: SExpr<Id>) -> SExpr<ResolvedSymbol> {
-        compile::pass::alpha_convert::alpha_convert(form, &mut self.bindings)
+        compile::pass::alpha_conversion::alpha_convert(form, &mut self.bindings)
     }
 
     pub fn lower(&self, form: SExpr<ResolvedSymbol>) -> core_expr::Expr {
@@ -86,11 +86,11 @@ impl Session {
     }
 
     pub fn a_normalize(&self, form: core_expr::Expr) -> anf::Expr {
-        compile::pass::a_normalize::a_normalize(self.gen_sym.clone(), form)
+        compile::pass::a_normalization::a_normalize(self.gen_sym.clone(), form)
     }
 
     pub fn beta_contract(&self, form: anf::Expr) -> Result<anf::Expr> {
-        compile::pass::beta_contract::beta_contract(form)
+        compile::pass::beta_contraction::beta_contract(form)
     }
 
     pub fn dce(&self, form: anf::Expr) -> anf::Expr {
