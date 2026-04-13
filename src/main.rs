@@ -24,11 +24,12 @@ fn main() {
                                 .map(|sexpr| {
                                     session
                                         .expand(session.introduce(sexpr))
-                                        .map(|expanded| session.alpha_convert(expanded))
-                                        .map(|converted| session.lower(converted))
-                                        .map(|lowered| session.a_normalize(lowered))
-                                        .and_then(|normalized| session.beta_contract(normalized))
-                                        .map(|contracted| session.dce(contracted))
+                                        .map(|sexpr| session.alpha_convert(sexpr))
+                                        .map(|form| session.lower(form))
+                                        .map(|form| session.a_normalize(form))
+                                        .and_then(|form| session.beta_contract(form))
+                                        .map(|form| session.propagate_copies(form))
+                                        .map(|form| session.dce(form))
                                 })
                                 .collect::<Result<Vec<_>, CompilationError>>()
                         });

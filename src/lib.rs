@@ -89,6 +89,10 @@ impl Session {
         compile::pass::a_normalization::a_normalize(self.gen_sym.clone(), form)
     }
 
+    pub fn propagate_copies(&self, form: anf::Expr) -> anf::Expr {
+        compile::pass::copy_propagation::propagate_copies(form)
+    }
+
     pub fn beta_contract(&self, form: anf::Expr) -> Result<anf::Expr> {
         compile::pass::beta_contraction::beta_contract(form)
     }

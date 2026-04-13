@@ -1,7 +1,7 @@
 # RRRRR-RS &middot; [![Rust](https://github.com/john-z-yang/rrrrr-rs/actions/workflows/rust.yml/badge.svg)](https://github.com/john-z-yang/rrrrr-rs/actions/workflows/rust.yml)
 
 
-A compiler front end and middle end for [Revised(5) Scheme](https://conservatory.scheme.org/schemers/Documents/Standards/R5RS/HTML/). Next step: convince future me to write the backend.
+A compiler front-end and middle-end for [Revised(5) Scheme](https://conservatory.scheme.org/schemers/Documents/Standards/R5RS/HTML/). Next step: convince future me to write the back-end.
 
 This repository started as an excuse to learn Rust by implementing Flatt’s *Bindings as Sets of Scopes* algorithm from his [paper](docs/references/Binding%20as%20Sets%20of%20Scopes.pdf) and [Strange Loop 2016 talk](https://youtu.be/Or_yKiI3Ha4).
 
@@ -19,6 +19,7 @@ These days it has grown into a collection of compiler passes that I yoinked from
 | Lowering & `letrec` transformation            | [Revised(5) Scheme](https://conservatory.scheme.org/schemers/Documents/Standards/R5RS/HTML/)                                                                  |
 | A-normalization                               | [*The Essence of Compiling with Continuations* — Flanagan, Sabry, Duba, Felleisen](docs/references/The%20Essence%20of%20Compiling%20with%20Continuations.pdf) |
 | β-contraction                                 | [*The Essence of Compiling with Continuations* — Flanagan, Sabry, Duba, Felleisen](docs/references/The%20Essence%20of%20Compiling%20with%20Continuations.pdf) |
+| Copy propagation                              |                                                                                                                                                               |
 | Dead code elimination                         |                                                                                                                                                               |
 ## Building and Testing
 
@@ -42,9 +43,8 @@ lisp> (let loop ((n 10) (acc 1))
                         (let ((anf:15 (-:free n:9 1)))
                           (let ((anf:16 (*:free acc:10 n:9)))
                             (loop:8 anf:15 anf:16))))))))
-           (let ((temp:11 anf:17))
-             (let ((anf:12 (set! loop:8 temp:11)))
-               loop:8))))))
+           (let ((anf:12 (set! loop:8 anf:17)))
+             loop:8)))))
   (let ((anf:19 (anf:18 #<void>)))
     (anf:19 10 1)))
 lisp>
