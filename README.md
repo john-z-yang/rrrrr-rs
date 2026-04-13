@@ -1,7 +1,7 @@
 # RRRRR-RS &middot; [![Rust](https://github.com/john-z-yang/rrrrr-rs/actions/workflows/rust.yml/badge.svg)](https://github.com/john-z-yang/rrrrr-rs/actions/workflows/rust.yml)
 
 
-A compiler front-end and middle-end for [Revised(5) Scheme](https://conservatory.scheme.org/schemers/Documents/Standards/R5RS/HTML/). Next step: convince future me to write the back-end.
+A compiler front-end and middle-end for [Revised(5) Scheme](https://conservatory.scheme.org/schemers/Documents/Standards/R5RS/HTML/). Back-end and VM implementation are left as an exercise for my future self.
 
 This repository started as an excuse to learn Rust by implementing Flatt’s *Bindings as Sets of Scopes* algorithm from his [paper](docs/references/Binding%20as%20Sets%20of%20Scopes.pdf) and [Strange Loop 2016 talk](https://youtu.be/Or_yKiI3Ha4).
 
@@ -10,17 +10,19 @@ These days it has grown into a collection of compiler passes that I yoinked from
 
 ## The pipeline so far
 
-| Pass                                          | Reference                                                                                                                                                     |
-| --------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Tokenization & parsing                        | [*Crafting Interpreters* — Robert Nystrom](https://craftinginterpreters.com/)                                                                                 |
-| Hygienic macro expansion & binding resolution | [*Bindings as Sets of Scopes* — Matthew Flatt](docs/references/Binding%20as%20Sets%20of%20Scopes.pdf)                                                         |
-| Quasiquotation                                | [*Quasiquotation in Lisp* — Alan Bawden](docs/references/Quasiquotation%20in%20Lisp.pdf)                                                                      |
-| α-conversion                                  | [*Bindings as Sets of Scopes* — Matthew Flatt](docs/references/Binding%20as%20Sets%20of%20Scopes.pdf)                                                         |
-| Lowering & `letrec` transformation            | [Revised(5) Scheme](https://conservatory.scheme.org/schemers/Documents/Standards/R5RS/HTML/)                                                                  |
-| A-normalization                               | [*The Essence of Compiling with Continuations* — Flanagan, Sabry, Duba, Felleisen](docs/references/The%20Essence%20of%20Compiling%20with%20Continuations.pdf) |
-| β-contraction                                 | [*The Essence of Compiling with Continuations* — Flanagan, Sabry, Duba, Felleisen](docs/references/The%20Essence%20of%20Compiling%20with%20Continuations.pdf) |
-| Copy propagation                              |                                                                                                                                                               |
-| Dead code elimination                         |                                                                                                                                                               |
+| Pass                                          | References                                                                                                                                                                                                                              |
+| --------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Tokenization & parsing                        | [*Crafting Interpreters* — Robert Nystrom](https://craftinginterpreters.com/)                                                                                                                                                           |
+| Hygienic macro expansion & binding resolution | [*Bindings as Sets of Scopes* — Matthew Flatt](docs/references/Binding%20as%20Sets%20of%20Scopes.pdf)                                                                                                                                   |
+| Quasiquotation                                | [*Quasiquotation in Lisp* — Alan Bawden](docs/references/Quasiquotation%20in%20Lisp.pdf)                                                                                                                                                |
+| α-conversion                                  | [*Bindings as Sets of Scopes* — Matthew Flatt](docs/references/Binding%20as%20Sets%20of%20Scopes.pdf)                                                                                                                                   |
+| Lowering & `letrec` transformation            | [Revised(5) Scheme](https://conservatory.scheme.org/schemers/Documents/Standards/R5RS/HTML/)                                                                                                                                            |
+| A-normalization                               | [*The Essence of Compiling with Continuations* — Flanagan, Sabry, Duba, Felleisen](docs/references/The%20Essence%20of%20Compiling%20with%20Continuations.pdf) <br> [A-Normalization: Why and How — Matt Might](https://matt.might.net/) |
+| β-contraction                                 | [*The Essence of Compiling with Continuations* — Flanagan, Sabry, Duba, Felleisen](docs/references/The%20Essence%20of%20Compiling%20with%20Continuations.pdf)                                                                           |
+| Copy propagation                              |                                                                                                                                                                                                                                         |
+| Dead code elimination                         |                                                                                                                                                                                                                                         |
+
+
 ## Building and Testing
 
 The standard cargo incantations are available.
@@ -55,14 +57,14 @@ Run the tests with `cargo test`
 
 Run the benchmarks with `cargo bench`
 
+
 ## AI use
 
-For this project I intentionally try to keep AI / coding assistant usage minimal. However, Claude Code has been very useful when I get stuck, since I don’t have many people to talk to about esoteric programming language papers from the 90s.
+For this project I intentionally try to keep AI / coding assistant usage minimal. However, Claude Code has been very useful when I get stuck, since I don’t have anyone to talk to about esoteric programming language papers from the 90s.
 
 Here are the parts AI helped with:
 
 - Partial expansion algorithm for `lambda` / syntax binding bodies
 - `MatchedSExprs` trick for tracking cardinality during `...` pattern/template expansion
 - Code and documentation reviews
-- Migration from a binary project to a library project
-- Migration from unit tests to integration tests
+- Code refactoring
