@@ -93,6 +93,10 @@ impl Session {
         compile::pass::copy_propagation::propagate_copies(form)
     }
 
+    pub fn propagate_consts(&self, form: anf::Expr) -> anf::Expr {
+        compile::pass::const_propagation::propagate_consts(form)
+    }
+
     pub fn beta_contract(&self, form: anf::Expr) -> Result<anf::Expr> {
         compile::pass::beta_contraction::beta_contract(form)
     }
@@ -107,6 +111,7 @@ impl Session {
             let optimized_form = self
                 .beta_contract(form)
                 .map(|form| self.propagate_copies(form))
+                .map(|form| self.propagate_consts(form))
                 .map(|form| self.dce(form))?;
             let optimized_hash = optimized_form.calculate_hash();
             if hash == optimized_hash {

@@ -80,6 +80,10 @@ impl<T> SExpr<T> {
             SExpr::Void(span) => SExpr::Void(span),
         }
     }
+
+    pub fn is_atomic(&self) -> bool {
+        !matches!(self, SExpr::Cons(..) | SExpr::Vector(..) | SExpr::Str(..))
+    }
 }
 
 impl SExpr<Id> {

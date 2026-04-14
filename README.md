@@ -1,31 +1,30 @@
 # RRRRR-RS &middot; [![Rust](https://github.com/john-z-yang/rrrrr-rs/actions/workflows/rust.yml/badge.svg)](https://github.com/john-z-yang/rrrrr-rs/actions/workflows/rust.yml)
 
 
-A compiler front-end and middle-end for [Revised(5) Scheme](https://conservatory.scheme.org/schemers/Documents/Standards/R5RS/HTML/). Back-end and VM implementation are left as an exercise for my future self.
+A compiler front-end and middle-end for [Revised(5) Scheme](https://conservatory.scheme.org/schemers/Documents/Standards/R5RS/HTML/). The back-end and VM are left as an exercise for my future self.
 
-This repository started as an excuse to learn Rust by implementing Flatt’s *Bindings as Sets of Scopes* algorithm from his [paper](docs/references/Binding%20as%20Sets%20of%20Scopes.pdf) and [Strange Loop 2016 talk](https://youtu.be/Or_yKiI3Ha4).
+This repository started as an excuse to learn Rust by implementing Flatt’s *Bindings as Sets of Scopes* algorithm from his [paper](docs/references/Binding%20as%20Sets%20of%20Scopes.pdf)
+and [Strange Loop 2016 talk](https://youtu.be/Or_yKiI3Ha4).
 
-These days it has grown into a collection of compiler passes that I yoinked from papers, books, and articles I found interesting.
-
+These days it has grown into a small collection of compiler passes I yoinked from papers, books, and articles I found interesting.
 
 ## The pipeline so far
 
-| Pass(es)                                                       |                                                                          References                                                                           |
-| :------------------------------------------------------------- | :-----------------------------------------------------------------------------------------------------------------------------------------------------------: |
-| Tokenization <br> parsing                                      |                                         [*Crafting Interpreters* — Robert Nystrom](https://craftinginterpreters.com/)                                         |
-| Hygienic macro expansion & binding resolution                  |                             [*Bindings as Sets of Scopes* — Matthew Flatt](docs/references/Binding%20as%20Sets%20of%20Scopes.pdf)                             |
-| Quasiquotation                                                 |                                   [*Quasiquotation in Lisp* — Alan Bawden](docs/references/Quasiquotation%20in%20Lisp.pdf)                                    |
-| α-conversion                                                   |                             [*Bindings as Sets of Scopes* — Matthew Flatt](docs/references/Binding%20as%20Sets%20of%20Scopes.pdf)                             |
-| Lowering & `letrec` transformation                             |                                 [Revised(5) Scheme](https://conservatory.scheme.org/schemers/Documents/Standards/R5RS/HTML/)                                  |
-| A-normalization                                                |                                            [*A-Normalization: Why and How* — Matt Might](https://matt.might.net/)                                             |
-| β-contraction <br> Copy propagation <br> Dead code elimination | [*The Essence of Compiling with Continuations* — Flanagan, Sabry, Duba, Felleisen](docs/references/The%20Essence%20of%20Compiling%20with%20Continuations.pdf) |
-
+| Pass(es)                                                                           |                                                                  References                                                                  |
+| :--------------------------------------------------------------------------------- | :------------------------------------------------------------------------------------------------------------------------------------------: |
+| Tokenization,<br>Parsing                                                           |                                [*Crafting Interpreters* — Robert Nystrom](https://craftinginterpreters.com/)                                 |
+| Hygienic macro expansion & binding resolution                                      |                    [*Bindings as Sets of Scopes* — Matthew Flatt](docs/references/Binding%20as%20Sets%20of%20Scopes.pdf)                     |
+| Quasiquotation                                                                     |                           [*Quasiquotation in Lisp* — Alan Bawden](docs/references/Quasiquotation%20in%20Lisp.pdf)                           |
+| α-conversion                                                                       |                    [*Bindings as Sets of Scopes* — Matthew Flatt](docs/references/Binding%20as%20Sets%20of%20Scopes.pdf)                     |
+| Lowering & `letrec` transformation                                                 |                         [Revised(5) Scheme](https://conservatory.scheme.org/schemers/Documents/Standards/R5RS/HTML/)                         |
+| A-normalization                                                                    |                                    [*A-Normalization: Why and How* — Matt Might](https://matt.might.net/)                                    |
+| β-contraction,<br>Copy propagation,<br>Const propagation,<br>Dead code elimination | [*The Essence of Compiling with Continuations* — Flanagan et al.](docs/references/The%20Essence%20of%20Compiling%20with%20Continuations.pdf) |
 
 ## Building and Testing
 
 The standard cargo incantations are available.
 
-There is a REPL with `cargo run`, where it shows the ANF-lowered representation after running through the entire pipeline:
+There is a REPL available via `cargo run`. It prints the ANF-lowered representation after the full pipeline runs:
 
 ```scheme
 lisp> (let loop ((n 10) (acc 1))
