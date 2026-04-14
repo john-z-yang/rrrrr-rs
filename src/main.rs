@@ -5,6 +5,7 @@ use rustyline::error::ReadlineError;
 
 fn main() {
     let mut session = Session::with_prelude();
+    const MAX_OPT_PASSES: usize = 4;
 
     let mut rl = DefaultEditor::new().expect("Unable to open interactive terminal");
     let _ = rl.load_history("history.txt");
@@ -27,9 +28,7 @@ fn main() {
                                         .map(|sexpr| session.alpha_convert(sexpr))
                                         .map(|form| session.lower(form))
                                         .map(|form| session.a_normalize(form))
-                                        .and_then(|form| session.beta_contract(form))
-                                        .map(|form| session.propagate_copies(form))
-                                        .map(|form| session.dce(form))
+                                        .and_then(|form| session.optimize(form, MAX_OPT_PASSES))
                                 })
                                 .collect::<Result<Vec<_>, CompilationError>>()
                         });

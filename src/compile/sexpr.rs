@@ -1,4 +1,4 @@
-use std::fmt;
+use std::{fmt, hash::Hash};
 
 use crate::compile::bindings::Id;
 
@@ -7,7 +7,7 @@ use super::{
     span::Span,
 };
 
-#[derive(PartialEq, Clone, Debug)]
+#[derive(PartialEq, Clone, Debug, Hash)]
 pub enum SExpr<T> {
     Var(T, Span),
     Cons(Cons<T>, Span),
@@ -262,7 +262,7 @@ impl<T: fmt::Debug> fmt::Debug for SExprWithoutSpans<'_, T> {
     }
 }
 
-#[derive(PartialEq, Clone, Debug)]
+#[derive(PartialEq, Clone, Debug, Hash)]
 pub struct Cons<T> {
     pub car: Box<SExpr<T>>,
     pub cdr: Box<SExpr<T>>,
@@ -328,7 +328,7 @@ impl<T: fmt::Display> fmt::Display for Cons<T> {
     }
 }
 
-#[derive(Debug, PartialEq, Clone)]
+#[derive(Debug, PartialEq, Clone, Hash)]
 pub struct Bool(pub bool);
 
 impl fmt::Display for Bool {
@@ -340,13 +340,19 @@ impl fmt::Display for Bool {
 #[derive(Debug, PartialEq, Clone)]
 pub struct Num(pub f64);
 
+impl Hash for Num {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        self.0.to_bits().hash(state);
+    }
+}
+
 impl fmt::Display for Num {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "{}", self.0)
     }
 }
 
-#[derive(Debug, PartialEq, Clone)]
+#[derive(Debug, PartialEq, Clone, Hash)]
 pub struct Char(pub char);
 
 impl fmt::Display for Char {
@@ -361,7 +367,7 @@ impl fmt::Display for Char {
     }
 }
 
-#[derive(Debug, PartialEq, Clone)]
+#[derive(Debug, PartialEq, Clone, Hash)]
 pub struct Str(pub String);
 
 impl fmt::Display for Str {
@@ -370,7 +376,7 @@ impl fmt::Display for Str {
     }
 }
 
-#[derive(Debug, PartialEq, Clone)]
+#[derive(Debug, PartialEq, Clone, Hash)]
 pub struct Vector<T>(pub Vec<SExpr<T>>);
 
 impl<T> Vector<T> {

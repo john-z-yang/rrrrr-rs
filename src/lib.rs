@@ -100,6 +100,23 @@ impl Session {
     pub fn dce(&self, form: anf::Expr) -> anf::Expr {
         compile::pass::dce::dce(form)
     }
+
+    pub fn optimize(&self, mut form: anf::Expr, max_passes: usize) -> Result<anf::Expr> {
+        let mut hash = form.calculate_hash();
+        for _ in 0..max_passes {
+            let optimized_form = self
+                .beta_contract(form)
+                .map(|form| self.propagate_copies(form))
+                .map(|form| self.dce(form))?;
+            let optimized_hash = optimized_form.calculate_hash();
+            if hash == optimized_hash {
+                return Ok(optimized_form);
+            }
+            hash = optimized_hash;
+            form = optimized_form;
+        }
+        Ok(form)
+    }
 }
 
 impl Default for Session {

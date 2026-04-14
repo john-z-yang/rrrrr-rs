@@ -1,4 +1,7 @@
-use std::fmt::{Debug, Display};
+use std::{
+    fmt::{Debug, Display},
+    hash::{DefaultHasher, Hash, Hasher},
+};
 
 use crate::compile::{
     ident::{ResolvedVar, Symbol},
@@ -6,7 +9,7 @@ use crate::compile::{
     span::Span,
 };
 
-#[derive(Clone, PartialEq, Debug)]
+#[derive(Clone, PartialEq, Debug, Hash)]
 pub enum Expr {
     AExpr(AExpr),
     CExpr(CExpr),
@@ -25,6 +28,12 @@ impl Expr {
             Expr::Let(_, span) => *span,
         }
     }
+
+    pub fn calculate_hash(&self) -> u64 {
+        let mut s = DefaultHasher::new();
+        self.hash(&mut s);
+        s.finish()
+    }
 }
 
 impl From<Value> for Expr {
@@ -39,7 +48,7 @@ impl Display for Expr {
     }
 }
 
-#[derive(Clone, PartialEq)]
+#[derive(Clone, PartialEq, Hash)]
 pub enum AExpr {
     Literal(SExpr<Symbol>),
     Var(ResolvedVar, Span),
@@ -65,57 +74,57 @@ impl Debug for AExpr {
     }
 }
 
-#[derive(Clone, PartialEq, Debug)]
+#[derive(Clone, PartialEq, Debug, Hash)]
 pub enum CExpr {
     Application(Application, Span),
     If(If, Span),
     Set(Set, Span),
 }
 
-#[derive(Clone, PartialEq, Debug)]
+#[derive(Clone, PartialEq, Debug, Hash)]
 pub enum Rhs {
     AExpr(AExpr),
     CExpr(CExpr),
 }
 
-#[derive(Clone, PartialEq, Debug)]
+#[derive(Clone, PartialEq, Debug, Hash)]
 pub enum Value {
     Literal(SExpr<Symbol>),
     Var(ResolvedVar, Span),
 }
 
-#[derive(Clone, PartialEq, Debug)]
+#[derive(Clone, PartialEq, Debug, Hash)]
 pub struct Let {
     pub initializer: Box<(Symbol, Rhs)>,
     pub body: Box<Expr>,
 }
 
-#[derive(Clone, PartialEq, Debug)]
+#[derive(Clone, PartialEq, Debug, Hash)]
 pub struct Begin {
     pub body: Vec<Expr>,
 }
 
-#[derive(Clone, PartialEq, Debug)]
+#[derive(Clone, PartialEq, Debug, Hash)]
 pub struct Lambda {
     pub args: Vec<Symbol>,
     pub var_arg: Option<Symbol>,
     pub body: Box<Expr>,
 }
 
-#[derive(Clone, PartialEq, Debug)]
+#[derive(Clone, PartialEq, Debug, Hash)]
 pub struct Application {
     pub operand: Box<Value>,
     pub args: Vec<Value>,
 }
 
-#[derive(Clone, PartialEq, Debug)]
+#[derive(Clone, PartialEq, Debug, Hash)]
 pub struct If {
     pub test: Box<Value>,
     pub conseq: Box<Expr>,
     pub alt: Box<Expr>,
 }
 
-#[derive(Clone, PartialEq, Debug)]
+#[derive(Clone, PartialEq, Debug, Hash)]
 pub struct Set {
     pub var: ResolvedVar,
     pub aexpr: Value,
