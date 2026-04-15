@@ -34,7 +34,7 @@ fn main() {
                         });
                     match res {
                         Ok(res) => res.into_iter().for_each(|res| println!("{}", res)),
-                        Err(err) => err.pprint_with_source(&lines),
+                        Err(err) => eprintln!("{}", err.pprint_with_source(&lines)),
                     };
                     lines.clear();
                 } else {
