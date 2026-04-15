@@ -10,15 +10,14 @@ These days it has grown into a small collection of compiler passes I yoinked fro
 
 ## The pipeline so far
 
-| Pass(es)                                                                           |                                                                  References                                                                  |
-| :--------------------------------------------------------------------------------- | :------------------------------------------------------------------------------------------------------------------------------------------: |
-| Tokenization,<br>Parsing                                                           |                                [*Crafting Interpreters* — Robert Nystrom](https://craftinginterpreters.com/)                                 |
-| Hygienic macro expansion & binding resolution                                      |                    [*Bindings as Sets of Scopes* — Matthew Flatt](docs/references/Binding%20as%20Sets%20of%20Scopes.pdf)                     |
-| Quasiquotation                                                                     |                           [*Quasiquotation in Lisp* — Alan Bawden](docs/references/Quasiquotation%20in%20Lisp.pdf)                           |
-| α-conversion                                                                       |                    [*Bindings as Sets of Scopes* — Matthew Flatt](docs/references/Binding%20as%20Sets%20of%20Scopes.pdf)                     |
-| Lowering & `letrec` transformation                                                 |                         [Revised(5) Scheme](https://conservatory.scheme.org/schemers/Documents/Standards/R5RS/HTML/)                         |
-| A-normalization                                                                    |                                    [*A-Normalization: Why and How* — Matt Might](https://matt.might.net/)                                    |
-| β-contraction,<br>Copy propagation,<br>Const propagation,<br>Dead code elimination | [*The Essence of Compiling with Continuations* — Flanagan et al.](docs/references/The%20Essence%20of%20Compiling%20with%20Continuations.pdf) |
+| Pass(es)                                                                                |                                                                                            References                                                                                             |
+| :-------------------------------------------------------------------------------------- | :-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------: |
+| • Tokenization<br>• Parsing                                                             |                                                           [*Crafting Interpreters* — Robert Nystrom](https://craftinginterpreters.com/)                                                           |
+| • Hygienic macro & quasiquotation expansion                                             | [*Bindings as Sets of Scopes* — Matthew Flatt](docs/references/Binding%20as%20Sets%20of%20Scopes.pdf)<br>[*Quasiquotation in Lisp* — Alan Bawden](docs/references/Quasiquotation%20in%20Lisp.pdf) |
+| • α-conversion                                                                          |                                               [*Bindings as Sets of Scopes* — Matthew Flatt](docs/references/Binding%20as%20Sets%20of%20Scopes.pdf)                                               |
+| • Lowering & `letrec` transformation                                                    |                                                   [Revised(5) Scheme](https://conservatory.scheme.org/schemers/Documents/Standards/R5RS/HTML/)                                                    |
+| • A-normalization                                                                       |                                                  [*A-Normalization: Why and How* — Matt Might](https://matt.might.net/articles/a-normalization/)                                                  |
+| • β-contraction<br>• Copy propagation<br>• Const propagation<br>• Dead code elimination |                           [*The Essence of Compiling with Continuations* — Flanagan et al.](docs/references/The%20Essence%20of%20Compiling%20with%20Continuations.pdf)                            |
 
 ## Building and Testing
 
@@ -65,3 +64,10 @@ Here are the parts AI helped with:
 - `MatchedSExprs` trick for tracking cardinality during `...` pattern/template expansion
 - Code and documentation reviews
 - Code refactoring
+
+##
+
+
+> I hope the field of computer science never loses its sense of fun. Above all, I hope we don’t become missionaries. Don’t feel as if you’re Bible salesmen. The world has too many of those already.
+>
+> — Alan J. Perlis, *Structure and Interpretation of Computer Programs*, Dedication

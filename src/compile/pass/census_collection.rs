@@ -55,7 +55,7 @@ fn collect_census_cexpr(cexpr: &CExpr, census: &mut Census) {
             collect_census_expr(conseq, census);
             collect_census_expr(alt, census);
         }
-        CExpr::Set(Set { var, aexpr }, _) => {
+        CExpr::Set(Set { var, value: aexpr }, _) => {
             let ResolvedVar::Bound { binding, .. } = var else {
                 return collect_census_value(aexpr, census);
             };

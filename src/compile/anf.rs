@@ -4,6 +4,7 @@ use std::{
 };
 
 use crate::compile::{
+    compilation_error::Result,
     ident::{ResolvedVar, Symbol},
     sexpr::SExpr,
     span::Span,
@@ -48,6 +49,119 @@ impl Display for Expr {
     }
 }
 
+pub trait Folder {
+    fn fold_expr(&mut self, expr: Expr) -> Result<Expr> {
+        Ok(match expr {
+            Expr::AExpr(aexpr) => Expr::AExpr(self.fold_aexpr(aexpr)?),
+            Expr::CExpr(cexpr) => Expr::CExpr(self.fold_cexpr(cexpr)?),
+            Expr::Let(let_, span) => Expr::Let(self.fold_let(let_)?, span),
+        })
+    }
+
+    fn fold_aexpr(&mut self, aexpr: AExpr) -> Result<AExpr> {
+        Ok(match aexpr {
+            AExpr::Literal(sexpr) => AExpr::Literal(self.fold_sexpr(sexpr)?),
+            AExpr::Var(resolved_var, span) => {
+                AExpr::Var(self.fold_resolved_var(resolved_var)?, span)
+            }
+            AExpr::Lambda(lambda, span) => AExpr::Lambda(self.fold_lambda(lambda)?, span),
+        })
+    }
+
+    fn fold_cexpr(&mut self, cexpr: CExpr) -> Result<CExpr> {
+        Ok(match cexpr {
+            CExpr::Application(application, span) => {
+                CExpr::Application(self.fold_application(application)?, span)
+            }
+            CExpr::If(if_, span) => CExpr::If(self.fold_if(if_)?, span),
+            CExpr::Set(set, span) => CExpr::Set(self.fold_set(set)?, span),
+        })
+    }
+
+    fn fold_value(&mut self, value: Value) -> Result<Value> {
+        Ok(match value {
+            Value::Literal(sexpr) => Value::Literal(self.fold_sexpr(sexpr)?),
+            Value::Var(resolved_var, span) => {
+                Value::Var(self.fold_resolved_var(resolved_var)?, span)
+            }
+        })
+    }
+
+    fn fold_rhs(&mut self, rhs: Rhs) -> Result<Rhs> {
+        Ok(match rhs {
+            Rhs::AExpr(aexpr) => Rhs::AExpr(self.fold_aexpr(aexpr)?),
+            Rhs::CExpr(cexpr) => Rhs::CExpr(self.fold_cexpr(cexpr)?),
+        })
+    }
+
+    fn fold_let(&mut self, let_: Let) -> Result<Let> {
+        let Let { initializer, body } = let_;
+        let (symbol, rhs) = *initializer;
+        Ok(Let {
+            initializer: Box::new((self.fold_symbol(symbol)?, self.fold_rhs(rhs)?)),
+            body: Box::new(self.fold_expr(*body)?),
+        })
+    }
+
+    fn fold_lambda(&mut self, lambda: Lambda) -> Result<Lambda> {
+        let Lambda {
+            args,
+            var_arg,
+            body,
+        } = lambda;
+        Ok(Lambda {
+            args: args
+                .into_iter()
+                .map(|symbol| self.fold_symbol(symbol))
+                .collect::<Result<Vec<_>>>()?,
+            var_arg: var_arg
+                .map(|var_arg| self.fold_symbol(var_arg))
+                .transpose()?,
+            body: Box::new(self.fold_expr(*body)?),
+        })
+    }
+
+    fn fold_application(&mut self, application: Application) -> Result<Application> {
+        let Application { operand, args } = application;
+        Ok(Application {
+            operand: Box::new(self.fold_value(*operand)?),
+            args: args
+                .into_iter()
+                .map(|value| self.fold_value(value))
+                .collect::<Result<Vec<_>>>()?,
+        })
+    }
+
+    fn fold_if(&mut self, if_: If) -> Result<If> {
+        let If { test, conseq, alt } = if_;
+        Ok(If {
+            test: Box::new(self.fold_value(*test)?),
+            conseq: Box::new(self.fold_expr(*conseq)?),
+            alt: Box::new(self.fold_expr(*alt)?),
+        })
+    }
+
+    fn fold_set(&mut self, set: Set) -> Result<Set> {
+        let Set { var, value } = set;
+        Ok(Set {
+            var: self.fold_resolved_var(var)?,
+            value: self.fold_value(value)?,
+        })
+    }
+
+    fn fold_sexpr(&mut self, sexpr: SExpr<Symbol>) -> Result<SExpr<Symbol>> {
+        Ok(sexpr)
+    }
+
+    fn fold_resolved_var(&mut self, resolved_var: ResolvedVar) -> Result<ResolvedVar> {
+        Ok(resolved_var)
+    }
+
+    fn fold_symbol(&mut self, symbol: Symbol) -> Result<Symbol> {
+        Ok(symbol)
+    }
+}
+
 #[derive(Clone, PartialEq, Hash)]
 pub enum AExpr {
     Literal(SExpr<Symbol>),
@@ -82,26 +196,21 @@ pub enum CExpr {
 }
 
 #[derive(Clone, PartialEq, Debug, Hash)]
-pub enum Rhs {
-    AExpr(AExpr),
-    CExpr(CExpr),
-}
-
-#[derive(Clone, PartialEq, Debug, Hash)]
 pub enum Value {
     Literal(SExpr<Symbol>),
     Var(ResolvedVar, Span),
 }
 
 #[derive(Clone, PartialEq, Debug, Hash)]
-pub struct Let {
-    pub initializer: Box<(Symbol, Rhs)>,
-    pub body: Box<Expr>,
+pub enum Rhs {
+    AExpr(AExpr),
+    CExpr(CExpr),
 }
 
 #[derive(Clone, PartialEq, Debug, Hash)]
-pub struct Begin {
-    pub body: Vec<Expr>,
+pub struct Let {
+    pub initializer: Box<(Symbol, Rhs)>,
+    pub body: Box<Expr>,
 }
 
 #[derive(Clone, PartialEq, Debug, Hash)]
@@ -127,7 +236,7 @@ pub struct If {
 #[derive(Clone, PartialEq, Debug, Hash)]
 pub struct Set {
     pub var: ResolvedVar,
-    pub aexpr: Value,
+    pub value: Value,
 }
 
 struct ExprPrettyPrinter<'a>(&'a Expr);
@@ -302,7 +411,7 @@ impl<'a> ExprPrettyPrinter<'a> {
                     write!(f, ")")
                 }
             }
-            CExpr::Set(Set { var, aexpr }, _) => {
+            CExpr::Set(Set { var, value: aexpr }, _) => {
                 write!(f, "(set! {}", var)?;
                 write!(f, " ")?;
                 Self::fmt_value(aexpr, f, 0)?;

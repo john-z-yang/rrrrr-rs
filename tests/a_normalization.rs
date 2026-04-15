@@ -167,7 +167,7 @@ fn test_a_normalize_set() {
                 var: ResolvedVar::Free {
                     symbol: Symbol::new("x"),
                 },
-                aexpr: Value::Literal(SExpr::Num(Num(1.0), Span { lo: 8, hi: 9 })),
+                value: Value::Literal(SExpr::Num(Num(1.0), Span { lo: 8, hi: 9 })),
             },
             Span { lo: 1, hi: 10 },
         ))

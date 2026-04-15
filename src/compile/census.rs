@@ -64,7 +64,7 @@ impl Census {
                 self.eliminate_expr(conseq);
                 self.eliminate_expr(alt);
             }
-            CExpr::Set(Set { aexpr, .. }, _) => {
+            CExpr::Set(Set { value: aexpr, .. }, _) => {
                 self.eliminate_value(aexpr);
             }
         }

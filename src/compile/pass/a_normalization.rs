@@ -93,7 +93,7 @@ fn a_normalize_expr(
                     anf::Expr::CExpr(anf::CExpr::Set(
                         anf::Set {
                             var,
-                            aexpr: normalized,
+                            value: normalized,
                         },
                         span,
                     )),

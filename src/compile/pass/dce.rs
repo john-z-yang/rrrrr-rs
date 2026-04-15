@@ -1,78 +1,47 @@
 use crate::compile::{
-    anf::{AExpr, CExpr, Expr, If, Lambda, Let, Rhs},
+    anf::{Expr, Folder, Let, Rhs},
     census::Census,
+    compilation_error::Result,
     pass::census_collection::collect_census,
 };
 
 pub(crate) fn dce(expr: Expr) -> Expr {
-    let mut census = collect_census(&expr);
-    dce_expr(expr, &mut census)
-}
-
-fn dce_expr(expr: Expr, census: &mut Census) -> Expr {
-    match expr {
-        Expr::Let(Let { initializer, body }, span) => {
-            let (symbol, rhs) = *initializer;
-            if census.use_count(&symbol) == 0 && matches!(rhs, Rhs::AExpr(..)) {
-                census.eliminate(&rhs);
-                return dce_expr(*body, census);
-            }
-
-            let body = dce_expr(*body, census);
-            if census.use_count(&symbol) == 0 && matches!(rhs, Rhs::AExpr(..)) {
-                census.eliminate(&rhs);
-                return body;
-            }
-
-            let rhs = match rhs {
-                Rhs::AExpr(aexpr) => Rhs::AExpr(dce_aexpr(aexpr, census)),
-                Rhs::CExpr(cexpr) => Rhs::CExpr(dce_cexpr(cexpr, census)),
-            };
-            Expr::Let(
-                Let {
-                    initializer: Box::new((symbol, rhs)),
-                    body: Box::new(body),
-                },
-                span,
-            )
-        }
-        Expr::AExpr(aexpr) => Expr::AExpr(dce_aexpr(aexpr, census)),
-        Expr::CExpr(cexpr) => Expr::CExpr(dce_cexpr(cexpr, census)),
+    DceOptimizer {
+        census: collect_census(&expr),
     }
+    .fold_expr(expr)
+    .expect("no override produces Err")
 }
 
-fn dce_aexpr(aexpr: AExpr, census: &mut Census) -> AExpr {
-    match aexpr {
-        AExpr::Literal(..) | AExpr::Var(..) => aexpr,
-        AExpr::Lambda(
-            Lambda {
-                args,
-                var_arg,
-                body,
-            },
-            span,
-        ) => AExpr::Lambda(
-            Lambda {
-                args,
-                var_arg,
-                body: Box::new(dce_expr(*body, census)),
-            },
-            span,
-        ),
-    }
+struct DceOptimizer {
+    census: Census,
 }
 
-fn dce_cexpr(cexpr: CExpr, census: &mut Census) -> CExpr {
-    match cexpr {
-        CExpr::Application(application, span) => CExpr::Application(application, span),
-        CExpr::If(If { test, conseq, alt }, span) => CExpr::If(
-            If {
-                test,
-                conseq: Box::new(dce_expr(*conseq, census)),
-                alt: Box::new(dce_expr(*alt, census)),
-            },
-            span,
-        ),
-        CExpr::Set(set, span) => CExpr::Set(set, span),
+impl Folder for DceOptimizer {
+    fn fold_expr(&mut self, expr: Expr) -> Result<Expr> {
+        Ok(match expr {
+            Expr::Let(Let { initializer, body }, span) => {
+                let (symbol, rhs) = *initializer;
+                if self.census.use_count(&symbol) == 0 && matches!(rhs, Rhs::AExpr(..)) {
+                    self.census.eliminate(&rhs);
+                    return self.fold_expr(*body);
+                }
+                let body = self.fold_expr(*body)?;
+                if self.census.use_count(&symbol) == 0 && matches!(rhs, Rhs::AExpr(..)) {
+                    self.census.eliminate(&rhs);
+                    return Ok(body);
+                }
+                let rhs = self.fold_rhs(rhs)?;
+                Expr::Let(
+                    Let {
+                        initializer: Box::new((symbol, rhs)),
+                        body: Box::new(body),
+                    },
+                    span,
+                )
+            }
+            Expr::AExpr(aexpr) => Expr::AExpr(self.fold_aexpr(aexpr)?),
+            Expr::CExpr(cexpr) => Expr::CExpr(self.fold_cexpr(cexpr)?),
+        })
     }
 }
