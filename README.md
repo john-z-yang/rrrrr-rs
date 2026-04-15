@@ -1,6 +1,11 @@
 # RRRRR-RS &middot; [![Rust](https://github.com/john-z-yang/rrrrr-rs/actions/workflows/rust.yml/badge.svg)](https://github.com/john-z-yang/rrrrr-rs/actions/workflows/rust.yml)
 
 
+> I hope the field of computer science never loses its sense of fun. Above all, I hope we don’t become missionaries. Don’t feel as if you’re Bible salesmen. The world has too many of those already.
+>
+> — Alan J. Perlis, *Structure and Interpretation of Computer Programs*, Dedication
+
+
 A compiler front-end and middle-end for [Revised(5) Scheme](https://conservatory.scheme.org/schemers/Documents/Standards/R5RS/HTML/). The back-end and VM are left as an exercise for my future self.
 
 This repository started as an excuse to learn Rust by implementing Flatt’s *Bindings as Sets of Scopes* algorithm from his [paper](docs/references/Binding%20as%20Sets%20of%20Scopes.pdf)
@@ -64,9 +69,3 @@ Here are the parts AI helped with:
 - `MatchedSExprs` trick for tracking cardinality during `...` pattern/template expansion
 - Code and documentation reviews
 - Code refactoring
-
-##
-
-> I hope the field of computer science never loses its sense of fun. Above all, I hope we don’t become missionaries. Don’t feel as if you’re Bible salesmen. The world has too many of those already.
->
-> — Alan J. Perlis, *Structure and Interpretation of Computer Programs*, Dedication
