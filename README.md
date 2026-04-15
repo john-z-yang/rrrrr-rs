@@ -14,7 +14,7 @@ These days it has grown into a small collection of compiler passes I yoinked fro
 | :-------------------------------------------------------------------------------------- | :-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------: |
 | • Tokenization<br>• Parsing                                                             |                                                           [*Crafting Interpreters* — Robert Nystrom](https://craftinginterpreters.com/)                                                           |
 | • Hygienic macro & quasiquotation expansion                                             | [*Bindings as Sets of Scopes* — Matthew Flatt](docs/references/Binding%20as%20Sets%20of%20Scopes.pdf)<br>[*Quasiquotation in Lisp* — Alan Bawden](docs/references/Quasiquotation%20in%20Lisp.pdf) |
-| • α-conversion                                                                          |                                               [*Bindings as Sets of Scopes* — Matthew Flatt](docs/references/Binding%20as%20Sets%20of%20Scopes.pdf)                                               |
+| • α-conversion                                                                          |                                                     [*Alpha Conversion* — Kevin Sookocheff](https://sookocheff.com/post/fp/alpha-conversion/)                                                     |
 | • Lowering & `letrec` transformation                                                    |                                                   [Revised(5) Scheme](https://conservatory.scheme.org/schemers/Documents/Standards/R5RS/HTML/)                                                    |
 | • A-normalization                                                                       |                                                  [*A-Normalization: Why and How* — Matt Might](https://matt.might.net/articles/a-normalization/)                                                  |
 | • β-contraction<br>• Copy propagation<br>• Const propagation<br>• Dead code elimination |                           [*The Essence of Compiling with Continuations* — Flanagan et al.](docs/references/The%20Essence%20of%20Compiling%20with%20Continuations.pdf)                            |
@@ -66,7 +66,6 @@ Here are the parts AI helped with:
 - Code refactoring
 
 ##
-
 
 > I hope the field of computer science never loses its sense of fun. Above all, I hope we don’t become missionaries. Don’t feel as if you’re Bible salesmen. The world has too many of those already.
 >
