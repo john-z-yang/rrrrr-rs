@@ -48,7 +48,6 @@ Yes, God had a deadline. So he wrote it all in Lisp.
     |
  32 | Yes, God had a deadline. So he wrote it all in Lisp.
     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-
 "
     )
 }

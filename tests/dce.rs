@@ -77,9 +77,7 @@ fn test_cascading_through_dead_lambda() {
 #[test]
 fn test_live_conditional_initializer_is_folded() {
     assert_eq!(
-        pp(dce_source(
-            "((lambda (f) f) (if #t ((lambda (x) 1) 2) 3))"
-        )),
+        pp(dce_source("((lambda (f) f) (if #t ((lambda (x) 1) 2) 3))")),
         r#"
 (let ((anf:5 (if #t 1 3)))
   (let ((f:1 anf:5))
