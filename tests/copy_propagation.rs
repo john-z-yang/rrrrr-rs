@@ -9,9 +9,8 @@ fn propagate_copies_source(source: &str) -> Expr {
     let converted = session.alpha_convert(expanded);
     let lowered = session.lower(converted);
     let normalized = session.a_normalize(lowered);
-    let contracted = session.beta_contract(normalized).unwrap();
-    let cleaned = session.dce(contracted);
-    session.propagate_copies(cleaned)
+    let reduced = session.beta_reduce(normalized).unwrap();
+    session.propagate_copies(reduced)
 }
 
 fn propagate_copies_source_with_prelude(source: &str) -> Expr {
@@ -23,9 +22,8 @@ fn propagate_copies_source_with_prelude(source: &str) -> Expr {
     let converted = session.alpha_convert(expanded);
     let lowered = session.lower(converted);
     let normalized = session.a_normalize(lowered);
-    let contracted = session.beta_contract(normalized).unwrap();
-    let cleaned = session.dce(contracted);
-    session.propagate_copies(cleaned)
+    let reduced = session.beta_reduce(normalized).unwrap();
+    session.propagate_copies(reduced)
 }
 
 fn pp(expr: Expr) -> String {

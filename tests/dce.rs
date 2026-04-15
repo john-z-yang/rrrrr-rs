@@ -9,8 +9,8 @@ fn dce_source(source: &str) -> Expr {
     let converted = session.alpha_convert(expanded);
     let lowered = session.lower(converted);
     let normalized = session.a_normalize(lowered);
-    let contracted = session.beta_contract(normalized).unwrap();
-    session.dce(contracted)
+    let reduced = session.beta_reduce(normalized).unwrap();
+    session.dce(reduced)
 }
 
 fn pp(expr: Expr) -> String {
@@ -28,7 +28,7 @@ fn test_dead_pure_binding() {
 }
 
 #[test]
-fn test_dead_binding_after_contraction() {
+fn test_dead_binding_after_reduction() {
     assert_eq!(
         pp(dce_source("((lambda (x) (+ x 1)) 1)")),
         r#"

@@ -9,8 +9,8 @@ use crate::compile::{
     span::Span,
 };
 
-pub(crate) fn beta_contract(expr: Expr) -> Result<Expr> {
-    let expr = BetaContractOptimizer {
+pub(crate) fn beta_reduce(expr: Expr) -> Result<Expr> {
+    let expr = BetaReduceOptimizer {
         census: census_collection::collect_census(&expr),
         lambda_definitions: HashMap::new(),
     }
@@ -18,12 +18,12 @@ pub(crate) fn beta_contract(expr: Expr) -> Result<Expr> {
     Ok(dce::dce(expr))
 }
 
-struct BetaContractOptimizer {
+struct BetaReduceOptimizer {
     census: Census,
     lambda_definitions: HashMap<Symbol, Lambda>,
 }
 
-impl BetaContractOptimizer {
+impl BetaReduceOptimizer {
     fn build_let(body: Expr, args: &mut VecDeque<(Symbol, Value)>, span: Span) -> Expr {
         let Some((sym, val)) = args.pop_front() else {
             return body;
@@ -61,7 +61,7 @@ impl BetaContractOptimizer {
     }
 }
 
-impl Folder for BetaContractOptimizer {
+impl Folder for BetaReduceOptimizer {
     fn fold_expr(&mut self, expr: Expr) -> Result<Expr> {
         match expr {
             Expr::Let(Let { initializer, body }, span) => {

@@ -1,6 +1,6 @@
 pub mod a_normalization;
 pub mod alpha_conversion;
-pub mod beta_contraction;
+pub mod beta_reduction;
 pub mod census_collection;
 pub mod const_propagation;
 pub mod copy_propagation;

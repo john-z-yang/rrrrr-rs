@@ -1,6 +1,6 @@
 use rrrrr_rs::{Session, compile::anf::Expr};
 
-fn beta_contract_source(source: &str) -> Expr {
+fn beta_reduce_source(source: &str) -> Expr {
     let mut session = Session::new();
     let tokens = session.tokenize(source).unwrap();
     let parsed = session.parse(&tokens).unwrap().pop().unwrap();
@@ -9,10 +9,10 @@ fn beta_contract_source(source: &str) -> Expr {
     let converted = session.alpha_convert(expanded);
     let lowered = session.lower(converted);
     let normalized = session.a_normalize(lowered);
-    session.beta_contract(normalized).unwrap()
+    session.beta_reduce(normalized).unwrap()
 }
 
-fn beta_contract_source_with_prelude(source: &str) -> Expr {
+fn beta_reduce_source_with_prelude(source: &str) -> Expr {
     let mut session = Session::with_prelude();
     let tokens = session.tokenize(source).unwrap();
     let parsed = session.parse(&tokens).unwrap().pop().unwrap();
@@ -21,7 +21,7 @@ fn beta_contract_source_with_prelude(source: &str) -> Expr {
     let converted = session.alpha_convert(expanded);
     let lowered = session.lower(converted);
     let normalized = session.a_normalize(lowered);
-    session.beta_contract(normalized).unwrap()
+    session.beta_reduce(normalized).unwrap()
 }
 
 fn pp(expr: Expr) -> String {
@@ -29,14 +29,14 @@ fn pp(expr: Expr) -> String {
 }
 
 #[test]
-fn test_no_contraction() {
-    assert_eq!(pp(beta_contract_source("(f 1)")), "(f:free 1)");
+fn test_no_reduction() {
+    assert_eq!(pp(beta_reduce_source("(f 1)")), "(f:free 1)");
 }
 
 #[test]
-fn test_zero_arg_contraction() {
+fn test_zero_arg_reduction() {
     assert_eq!(
-        pp(beta_contract_source("((lambda () 42))")),
+        pp(beta_reduce_source("((lambda () 42))")),
         r#"42
         "#
         .trim()
@@ -44,9 +44,9 @@ fn test_zero_arg_contraction() {
 }
 
 #[test]
-fn test_single_arg_contraction() {
+fn test_single_arg_reduction() {
     assert_eq!(
-        pp(beta_contract_source("((lambda (x) (+ x 1)) 1)")),
+        pp(beta_reduce_source("((lambda (x) (+ x 1)) 1)")),
         r#"
 (let ((x:1 1))
   (+:free x:1 1))
@@ -56,9 +56,9 @@ fn test_single_arg_contraction() {
 }
 
 #[test]
-fn test_multi_arg_contraction() {
+fn test_multi_arg_reduction() {
     assert_eq!(
-        pp(beta_contract_source("((lambda (x y) (+ x y)) 1 2)")),
+        pp(beta_reduce_source("((lambda (x y) (+ x y)) 1 2)")),
         r#"
 (let ((x:1 1))
   (let ((y:2 2))
@@ -69,9 +69,9 @@ fn test_multi_arg_contraction() {
 }
 
 #[test]
-fn test_nested_contraction() {
+fn test_nested_reduction() {
     assert_eq!(
-        pp(beta_contract_source(
+        pp(beta_reduce_source(
             "((lambda (x) ((lambda (y) (+ x y)) 2)) 1)"
         )),
         r#"
@@ -86,7 +86,7 @@ fn test_nested_contraction() {
 #[test]
 fn test_let_form() {
     assert_eq!(
-        pp(beta_contract_source_with_prelude(
+        pp(beta_reduce_source_with_prelude(
             "(let ((x 1) (y 2)) (+ x y))"
         )),
         r#"
@@ -99,9 +99,9 @@ fn test_let_form() {
 }
 
 #[test]
-fn test_contraction_inside_if_conseq() {
+fn test_reduction_inside_if_conseq() {
     assert_eq!(
-        pp(beta_contract_source("(if #t ((lambda (x) x) 1) 2)")),
+        pp(beta_reduce_source("(if #t ((lambda (x) x) 1) 2)")),
         r#"
 (if #t
     (let ((x:1 1))
@@ -113,9 +113,9 @@ fn test_contraction_inside_if_conseq() {
 }
 
 #[test]
-fn test_contraction_inside_if_alt() {
+fn test_reduction_inside_if_alt() {
     assert_eq!(
-        pp(beta_contract_source("(if #f 1 ((lambda (x) x) 2))")),
+        pp(beta_reduce_source("(if #f 1 ((lambda (x) x) 2))")),
         r#"
 (if #f
     1
@@ -127,11 +127,9 @@ fn test_contraction_inside_if_alt() {
 }
 
 #[test]
-fn test_contraction_inside_nested_if() {
+fn test_reduction_inside_nested_if() {
     assert_eq!(
-        pp(beta_contract_source(
-            "(if #t (if #t ((lambda (x) x) 1) 2) 3)"
-        )),
+        pp(beta_reduce_source("(if #t (if #t ((lambda (x) x) 1) 2) 3)")),
         r#"
 (if #t
     (if #t

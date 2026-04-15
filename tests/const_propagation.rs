@@ -9,8 +9,8 @@ fn propagate_consts_source(source: &str) -> Expr {
     let converted = session.alpha_convert(expanded);
     let lowered = session.lower(converted);
     let normalized = session.a_normalize(lowered);
-    let contracted = session.beta_contract(normalized).unwrap();
-    let cleaned = session.dce(contracted);
+    let reduced = session.beta_reduce(normalized).unwrap();
+    let cleaned = session.dce(reduced);
     session.propagate_consts(cleaned)
 }
 
@@ -23,8 +23,8 @@ fn propagate_consts_source_with_prelude(source: &str) -> Expr {
     let converted = session.alpha_convert(expanded);
     let lowered = session.lower(converted);
     let normalized = session.a_normalize(lowered);
-    let contracted = session.beta_contract(normalized).unwrap();
-    let cleaned = session.dce(contracted);
+    let reduced = session.beta_reduce(normalized).unwrap();
+    let cleaned = session.dce(reduced);
     session.propagate_consts(cleaned)
 }
 
