@@ -101,6 +101,10 @@ impl Session {
         compile::pass::beta_reduction::beta_reduce(form)
     }
 
+    pub fn eta_reduce(&self, form: anf::Expr) -> anf::Expr {
+        compile::pass::eta_reduction::eta_reduce(form)
+    }
+
     pub fn dce(&self, form: anf::Expr) -> anf::Expr {
         compile::pass::dce::dce(form)
     }
@@ -110,6 +114,7 @@ impl Session {
         for _ in 0..max_passes {
             let optimized_form = self
                 .beta_reduce(form)
+                .map(|form| self.eta_reduce(form))
                 .map(|form| self.propagate_copies(form))
                 .map(|form| self.propagate_consts(form))
                 .map(|form| self.dce(form))?;

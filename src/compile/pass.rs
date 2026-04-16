@@ -5,6 +5,7 @@ pub mod census_collection;
 pub mod const_propagation;
 pub mod copy_propagation;
 pub mod dce;
+pub mod eta_reduction;
 pub mod expand;
 pub mod lower;
 pub mod read;
