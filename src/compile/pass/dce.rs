@@ -1,8 +1,9 @@
 use crate::compile::{
-    anf::{Expr, Folder, Let, Rhs},
+    anf::{CExpr, Expr, Folder, If, Let, Rhs, Value},
     census::Census,
     compilation_error::Result,
     pass::census_collection::collect_census,
+    sexpr::{Bool, SExpr},
 };
 
 pub(crate) fn dce(expr: Expr) -> Expr {
@@ -39,6 +40,18 @@ impl Folder for DceOptimizer {
                     },
                     span,
                 )
+            }
+            Expr::CExpr(CExpr::If(If { test, conseq, alt }, _))
+                if matches!(*test, Value::Literal(SExpr::Bool(Bool(false), _))) =>
+            {
+                self.census.eliminate_expr(conseq.as_ref());
+                self.fold_expr(*alt)?
+            }
+            Expr::CExpr(CExpr::If(If { test, conseq, alt }, _))
+                if matches!(*test, Value::Literal(_)) =>
+            {
+                self.census.eliminate_expr(alt.as_ref());
+                self.fold_expr(*conseq)?
             }
             Expr::AExpr(aexpr) => Expr::AExpr(self.fold_aexpr(aexpr)?),
             Expr::CExpr(cexpr) => Expr::CExpr(self.fold_cexpr(cexpr)?),

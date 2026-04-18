@@ -105,7 +105,7 @@ Quasiquotation is expanded with the algorithm taken from Bawden’s [*Quasiquota
 
 The A-normalization algorithm is similarly yoinked from [*The Essence of Compiling with Continuations*](docs/references/The%20Essence%20of%20Compiling%20with%20Continuations.pdf) by Flanagan et al. It reduces the core scheme language, which by now is just 7 forms, into A-normal form, where all non-trivial expressions (function call, mutation, etc) are `let`-bound.
 
-A lot of optimizations become simple λ-calculus reductions, which the optimizer applies over and over again.
+This turns a lot of optimizations into simple λ-calculus reductions, which the compiler applies over and over again.
 
 ```scheme
 (let ((c 1))
@@ -128,6 +128,7 @@ A lot of optimizations become simple λ-calculus reductions, which the optimizer
              (anf:15 anf:16))))))
   (anf:17 1))
 
+; First optimization pass:
 ; βη-reduction + DCE
 (let ((c:8 1))
   (let ((anf:16
@@ -153,7 +154,8 @@ A lot of optimizations become simple λ-calculus reductions, which the optimizer
        (λ (x:12) (+:free x:12 1))))
   (anf:16 42))
 
-; βη-reduction + const propagation + DCE
+; Second optimization pass:
+; βη-reduction + DCE + Copy + Const propagation + DCE
 (+:free 42 1)
 ```
 

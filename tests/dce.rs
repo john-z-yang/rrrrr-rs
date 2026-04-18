@@ -86,3 +86,25 @@ fn test_live_conditional_initializer_is_folded() {
         .trim()
     );
 }
+
+#[test]
+fn test_if_branch_is_eliminated() {
+    assert_eq!(
+        pp(dce_source("((lambda () (if 1 (if #f 0 1))))")),
+        r#"
+1
+        "#
+        .trim()
+    );
+}
+
+#[test]
+fn test_if_branch_elimination_truthy_values() {
+    assert_eq!(
+        pp(dce_source("(if '() 1 2)")),
+        r#"
+1
+        "#
+        .trim()
+    );
+}

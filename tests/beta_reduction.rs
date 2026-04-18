@@ -101,9 +101,9 @@ fn test_let_form() {
 #[test]
 fn test_reduction_inside_if_conseq() {
     assert_eq!(
-        pp(beta_reduce_source("(if #t ((lambda (x) x) 1) 2)")),
+        pp(beta_reduce_source("(if x ((lambda (x) x) 1) 2)")),
         r#"
-(if #t
+(if x:free
     (let ((x:1 1))
       x:1)
     2)
@@ -115,9 +115,9 @@ fn test_reduction_inside_if_conseq() {
 #[test]
 fn test_reduction_inside_if_alt() {
     assert_eq!(
-        pp(beta_reduce_source("(if #f 1 ((lambda (x) x) 2))")),
+        pp(beta_reduce_source("(if x 1 ((lambda (x) x) 2))")),
         r#"
-(if #f
+(if x:free
     1
     (let ((x:1 2))
       x:1))
@@ -129,10 +129,10 @@ fn test_reduction_inside_if_alt() {
 #[test]
 fn test_reduction_inside_nested_if() {
     assert_eq!(
-        pp(beta_reduce_source("(if #t (if #t ((lambda (x) x) 1) 2) 3)")),
+        pp(beta_reduce_source("(if x (if y ((lambda (x) x) 1) 2) 3)")),
         r#"
-(if #t
-    (if #t
+(if x:free
+    (if y:free
         (let ((x:1 1))
           x:1)
         2)
