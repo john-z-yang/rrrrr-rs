@@ -141,3 +141,31 @@ fn test_reduction_inside_nested_if() {
         .trim()
     );
 }
+
+#[test]
+fn test_zero_arg_call_in_let_initializer() {
+    assert_eq!(
+        pp(beta_reduce_source("((lambda (x) x) ((lambda () 42)))")),
+        r#"
+(let ((anf:4 42))
+  (let ((x:1 anf:4))
+    x:1))
+        "#
+        .trim()
+    );
+}
+
+#[test]
+fn test_zero_arg_calls_inlined_into_multiple_initializers() {
+    assert_eq!(
+        pp(beta_reduce_source_with_prelude(
+            "(+ ((lambda () 1)) ((lambda () 2)))"
+        )),
+        r#"
+(let ((anf:9 1))
+  (let ((anf:11 2))
+    (+:free anf:9 anf:11)))
+        "#
+        .trim()
+    );
+}
