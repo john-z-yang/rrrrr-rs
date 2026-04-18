@@ -108,10 +108,10 @@ The A-normalization algorithm is similarly yoinked from [*The Essence of Compili
 This turns a lot of optimizations into simple λ-calculus reductions, which the compiler applies over and over again.
 
 ```scheme
-(let ((c 1))
-  (let ((f (lambda (x) (+ x c))))
-    (let ((g (lambda (y) (f y))))
-      (g 42))))
+(let* ((c 1)
+       (f (lambda (x) (+ x c)))
+       (g (lambda (y) (f y))))
+  (g 42))
 
 ; A-normalization
 (let ((anf:17
